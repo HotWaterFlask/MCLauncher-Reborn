@@ -1,0 +1,7 @@
+# 编译输出
+bin/
+obj/
+
+# Visual Studio 本地文件
+.vs/
+*.user
