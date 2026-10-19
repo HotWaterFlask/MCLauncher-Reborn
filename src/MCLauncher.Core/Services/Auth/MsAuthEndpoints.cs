@@ -20,12 +20,6 @@ public static class MsAuthEndpoints
     /// <summary>验证页根地址（服务端未返回时兜底）。</summary>
     public const string VerificationPage = "https://microsoft.com/devicelogin";
 
-    /// <summary>
-    /// 免输入短码的直达链接前缀：<c>https://www.microsoft.com/link?otc=&lt;user_code&gt;</c>。
-    /// 打开后验证码已经填好，用户只需登录并点「继续」。
-    /// </summary>
-    public const string LinkPage = "https://www.microsoft.com/link";
-
     /// <summary>Xbox Live 的 <c>RpsTicket</c> 与 XSTS 的 RelyingParty。</summary>
     public const string XboxLiveRelyingParty = "http://auth.xboxlive.com";
 
@@ -36,8 +30,4 @@ public static class MsAuthEndpoints
     public const string MinecraftProfileUrl = "https://api.minecraftservices.com/minecraft/profile";
 
     public const string MinecraftEntitlementsUrl = "https://api.minecraftservices.com/entitlements/mcstore";
-
-    /// <summary>拼出免输入的验证链接。</summary>
-    public static string BuildLinkUri(string userCode) =>
-        $"{LinkPage}?otc={Uri.EscapeDataString(userCode)}";
 }

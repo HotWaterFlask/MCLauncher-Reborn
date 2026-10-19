@@ -65,7 +65,7 @@ public sealed class MsAuthProgress
 
 /// <summary>
 /// 设备码登录时要在界面上展示给用户的信息。
-/// 正常情况下浏览器会直接打开 <see cref="LinkUri"/>（验证码已预填），用户不需要手动输入。
+/// 浏览器会打开 <see cref="LinkUri"/>，用户在页面上粘贴短码完成授权。
 /// </summary>
 public sealed class MsDeviceCodePrompt
 {
@@ -76,8 +76,8 @@ public sealed class MsDeviceCodePrompt
     public required string VerificationUri { get; init; }
 
     /// <summary>
-    /// 免输入直达链接：<c>https://www.microsoft.com/link?otc=&lt;user_code&gt;</c>。
-    /// 打开后验证码已填好，用户只需登录并点「继续」。
+    /// 浏览器要打开的验证页地址（服务端返回的 <c>verification_uri</c> 或其完整形式）。
+    /// 不要自己附加 <c>?otc=</c>：微软会按第一方应用处理并拒绝普通应用。
     /// </summary>
     public required string LinkUri { get; init; }
 
@@ -171,8 +171,8 @@ public sealed class MsDeviceCodeResponse
     public string? VerificationUri { get; set; }
 
     /// <summary>
-    /// 带验证码的完整验证地址。RFC 8628 里的可选字段，微软通常不返回，
-    /// 此时由启动器自行拼 <c>https://www.microsoft.com/link?otc=...</c>。
+    /// 带验证码的完整验证地址。RFC 8628 里的可选字段，微软通常不返回；
+    /// 不返回时使用 <see cref="VerificationUri"/>，由用户手动粘贴短码。
     /// </summary>
     [JsonPropertyName("verification_uri_complete")]
     public string? VerificationUriComplete { get; set; }

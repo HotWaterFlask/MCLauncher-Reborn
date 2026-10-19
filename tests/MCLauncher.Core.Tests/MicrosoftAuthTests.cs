@@ -28,26 +28,6 @@ public sealed class MicrosoftAuthTests
         return new MicrosoftAuthService(downloader, config, log);
     }
 
-    /// <summary>
-    /// 与 Prism / MultiMC 相同的做法：把短码拼进 <c>www.microsoft.com/link?otc=</c>，
-    /// 浏览器打开后验证码已预填，用户不需要手抄。
-    /// </summary>
-    [Fact]
-    public void 免输入链接携带预填验证码()
-    {
-        var uri = MsAuthEndpoints.BuildLinkUri("N5LWRN7E");
-
-        Assert.Equal("https://www.microsoft.com/link?otc=N5LWRN7E", uri);
-    }
-
-    [Fact]
-    public void 免输入链接对短码做转义()
-    {
-        var uri = MsAuthEndpoints.BuildLinkUri("AB CD&X");
-
-        Assert.Equal("https://www.microsoft.com/link?otc=AB%20CD%26X", uri);
-    }
-
     [Fact]
     public void 未配置客户端ID时给出引导而不是崩溃()
     {
@@ -107,7 +87,7 @@ public sealed class MicrosoftAuthTests
             // 1. 申请设备码
             (HttpStatusCode.OK, """
             {"device_code":"dev-code","user_code":"ABCD-EFGH",
-             "verification_uri":"https://microsoft.com/devicelogin","expires_in":60,"interval":1,
+             "verification_uri":"https://www.microsoft.com/link","expires_in":60,"interval":1,
              "message":"请在浏览器中输入代码"}
             """),
             // 2. 第一次轮询：用户还没授权
@@ -136,11 +116,12 @@ public sealed class MicrosoftAuthTests
             null,
             cts.Token);
 
-        // 短码必须被展示出来，并且同时给出免输入链接
+        // 短码必须被展示出来；链接只用服务端给的验证页，不能附带 otc 参数
         Assert.NotNull(shown);
         Assert.Equal("ABCD-EFGH", shown!.UserCode);
-        Assert.Equal("https://microsoft.com/devicelogin", shown.VerificationUri);
-        Assert.Equal("https://www.microsoft.com/link?otc=ABCD-EFGH", shown.LinkUri);
+        Assert.Equal("https://www.microsoft.com/link", shown.VerificationUri);
+        Assert.Equal("https://www.microsoft.com/link", shown.LinkUri);
+        Assert.DoesNotContain("otc=", shown.LinkUri);
 
         Assert.Equal(AccountKind.Microsoft, account.Kind);
         Assert.Equal("Steve", account.Name);
