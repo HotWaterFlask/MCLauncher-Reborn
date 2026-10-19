@@ -38,7 +38,7 @@ internal static class LocalSecrets
     /// 注意：
     ///  - 「支持的账户类型」必须包含**个人 Microsoft 账户**；
     ///  - 「身份验证 → 允许公共客户端流」必须为**是**（设备码登录需要）；
-    ///  - 回调地址填 http://localhost（不带端口、不带路径）。
+    ///  - 设备码登录不需要注册任何回调地址。
     /// </para>
     /// <para>
     /// 另外：新注册的应用还必须提交 Mojang AppID 审核

@@ -184,27 +184,7 @@ public sealed class SettingsViewModel : ViewModelBase
         ? "尚未配置：微软正版登录将不可用。需在 Azure 注册应用后把客户端 ID 填到此处。"
         : "已配置，可用于微软正版登录。";
 
-    /// <summary>
-    /// 登录回调地址。留空时自动用随机端口的 http://localhost —— 前提是 Azure 里注册的是「移动和桌面应用程序」
-    /// 平台的 http://localhost（不带端口、不带路径）。
-    /// </summary>
-    public string MsRedirectUri
-    {
-        get => _stack.Config.Settings.MsRedirectUri ?? string.Empty;
-        set
-        {
-            var normalized = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-            if (string.Equals(_stack.Config.Settings.MsRedirectUri, normalized, StringComparison.Ordinal))
-            {
-                return;
-            }
-
-            _stack.Config.Settings.MsRedirectUri = normalized;
-            OnPropertyChanged();
-        }
-    }
-
-    public string MsRedirectHint => _stack.MicrosoftAuth.DescribeRedirectSetup();
+    public string MsSetupHint => _stack.MicrosoftAuth.DescribeSetup();
 
     public string CurseForgeApiKey
     {
