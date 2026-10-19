@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Windows;
 using System.Windows.Input;
 using MCLauncher.App.ViewModels.Mvvm;
 using MCLauncher.Core.Models;
@@ -28,15 +29,14 @@ public sealed class AccountItem : ViewModelBase
 public sealed class AccountsViewModel : ViewModelBase
 {
     private readonly LauncherStack _stack;
-    private readonly AsyncRelayCommand _loginMsCommand;
-    private readonly AsyncRelayCommand _loginDeviceCodeCommand;
+    private readonly AsyncRelayCommand _loginCommand;
 
     private string _newAccountName = string.Empty;
     private string _statusText = "离线账号无需密码，UUID 由玩家名按协议派生。";
     private bool _isBusy;
     private CancellationTokenSource? _loginCts;
     private string? _deviceCodeText;
-    private string? _deviceCodeUri;
+    private string? _deviceCodeLink;
 
     public AccountsViewModel(LauncherStack stack)
     {
@@ -48,12 +48,10 @@ public sealed class AccountsViewModel : ViewModelBase
         RefreshCommand = new RelayCommand(Refresh);
         CancelLoginCommand = new RelayCommand(() => _loginCts?.Cancel());
         OpenDeviceCodePageCommand = new RelayCommand(OpenDeviceCodePage);
+        CopyDeviceCodeCommand = new RelayCommand(CopyDeviceCode);
 
-        _loginMsCommand = new AsyncRelayCommand(LoginMicrosoftAsync, () => !IsBusy && HasMsClientId);
-        LoginMicrosoftCommand = _loginMsCommand;
-
-        _loginDeviceCodeCommand = new AsyncRelayCommand(LoginByDeviceCodeAsync, () => !IsBusy && HasMsClientId);
-        LoginByDeviceCodeCommand = _loginDeviceCodeCommand;
+        _loginCommand = new AsyncRelayCommand(LoginMicrosoftAsync, () => !IsBusy && HasMsClientId);
+        LoginMicrosoftCommand = _loginCommand;
 
         _stack.Changed += (_, _) => UiThread.Post(Refresh);
         Refresh();
@@ -80,13 +78,12 @@ public sealed class AccountsViewModel : ViewModelBase
         {
             if (SetProperty(ref _isBusy, value))
             {
-                _loginMsCommand.RaiseCanExecuteChanged();
-                _loginDeviceCodeCommand.RaiseCanExecuteChanged();
+                _loginCommand.RaiseCanExecuteChanged();
             }
         }
     }
 
-    /// <summary>设备码登录时展示给用户的短码；未在设备码流程中时为空。</summary>
+    /// <summary>设备码登录时展示给用户的短码；未在登录流程中时为空。</summary>
     public string DeviceCodeText
     {
         get => _deviceCodeText ?? string.Empty;
@@ -98,12 +95,13 @@ public sealed class AccountsViewModel : ViewModelBase
         }
     }
 
-    public string DeviceCodeUri
+    /// <summary>免输入直达链接（验证码已预填）。</summary>
+    public string DeviceCodeLink
     {
-        get => _deviceCodeUri ?? string.Empty;
+        get => _deviceCodeLink ?? string.Empty;
         private set
         {
-            _deviceCodeUri = string.IsNullOrWhiteSpace(value) ? null : value;
+            _deviceCodeLink = string.IsNullOrWhiteSpace(value) ? null : value;
             OnPropertyChanged();
         }
     }
@@ -117,8 +115,7 @@ public sealed class AccountsViewModel : ViewModelBase
         ? "已配置客户端 ID，可进行微软正版登录。"
         : "尚未配置微软客户端 ID：请到「设置」页填入 Azure 应用客户端 ID 后再登录。";
 
-    /// <summary>回调地址的注册指引。登录报 redirect_uri 错误时，问题几乎都出在这里。</summary>
-    public string MsRedirectHint => _stack.MicrosoftAuth.DescribeRedirectSetup();
+    public string MsSetupHint => _stack.MicrosoftAuth.DescribeSetup();
 
     public string SelectedAccountText => _stack.Accounts.Selected is { } account
         ? $"当前账号：{account}"
@@ -134,10 +131,10 @@ public sealed class AccountsViewModel : ViewModelBase
 
     public ICommand LoginMicrosoftCommand { get; }
 
-    /// <summary>设备码登录：不需要注册任何回调地址，适合 Azure 回调地址配不对的情况。</summary>
-    public ICommand LoginByDeviceCodeCommand { get; }
-
     public ICommand OpenDeviceCodePageCommand { get; }
+
+    /// <summary>复制短码（浏览器没自动打开时，用户可以手贴或用它手动输入）。</summary>
+    public ICommand CopyDeviceCodeCommand { get; }
 
     public ICommand CancelLoginCommand { get; }
 
@@ -157,9 +154,9 @@ public sealed class AccountsViewModel : ViewModelBase
 
         OnPropertyChanged(nameof(HasMsClientId));
         OnPropertyChanged(nameof(MsClientIdHint));
-        OnPropertyChanged(nameof(MsRedirectHint));
+        OnPropertyChanged(nameof(MsSetupHint));
         OnPropertyChanged(nameof(SelectedAccountText));
-        _loginMsCommand.RaiseCanExecuteChanged();
+        _loginCommand.RaiseCanExecuteChanged();
     }
 
     private void AddOffline()
@@ -209,21 +206,26 @@ public sealed class AccountsViewModel : ViewModelBase
         _stack.RaiseChanged();
     }
 
-    /// <summary>微软正版登录：打开系统浏览器完成授权，回调由本地回环服务器接收。</summary>
+    /// <summary>
+    /// 微软正版登录：申请设备码后直接打开免输入链接（<c>www.microsoft.com/link?otc=...</c>），
+    /// 验证码已预填，用户只需登录并确认，不需要手抄短码。
+    /// </summary>
     private async Task LoginMicrosoftAsync()
     {
         IsBusy = true;
-        StatusText = "正在发起微软登录…";
+        StatusText = "正在申请登录码…";
         _loginCts = new CancellationTokenSource();
 
         try
         {
-            var account = await _stack.MicrosoftAuth.LoginAsync(
-                url =>
+            var account = await _stack.MicrosoftAuth.LoginWithDeviceCodeAsync(
+                new Progress<MsDeviceCodePrompt>(p =>
                 {
-                    Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
-                    return Task.CompletedTask;
-                },
+                    DeviceCodeText = p.UserCode;
+                    DeviceCodeLink = p.LinkUri;
+                    StatusText = "浏览器已打开登录页，验证码已自动填好；请登录并确认授权";
+                    OpenDeviceCodePage();
+                }),
                 new Progress<MsAuthProgress>(p => StatusText = p.Stage),
                 _loginCts.Token);
 
@@ -245,55 +247,8 @@ public sealed class AccountsViewModel : ViewModelBase
         }
         finally
         {
-            _loginCts?.Dispose();
-            _loginCts = null;
-            IsBusy = false;
-        }
-    }
-
-    /// <summary>
-    /// 设备码登录：不碰 redirect_uri，给用户一个短码让他到 microsoft.com/devicelogin 输入。
-    /// 这是绕开 Azure 回调地址配置问题的可靠办法。
-    /// </summary>
-    private async Task LoginByDeviceCodeAsync()
-    {
-        IsBusy = true;
-        StatusText = "正在申请设备码…";
-        _loginCts = new CancellationTokenSource();
-
-        try
-        {
-            var account = await _stack.MicrosoftAuth.LoginWithDeviceCodeAsync(
-                new Progress<MsDeviceCodePrompt>(p =>
-                {
-                    DeviceCodeText = p.UserCode;
-                    DeviceCodeUri = p.VerificationUri;
-                    StatusText = $"请打开 {p.VerificationUri}，输入代码 {p.UserCode} 并授权（已自动打开浏览器）";
-                    OpenDeviceCodePage();
-                }),
-                new Progress<MsAuthProgress>(p => StatusText = p.Stage),
-                _loginCts.Token);
-
-            ApplySignedIn(account);
-        }
-        catch (MsAuthException ex)
-        {
-            _stack.Log.Warn($"设备码登录失败（{ex.Failure}）", ex);
-            StatusText = ex.ToUserMessage();
-        }
-        catch (OperationCanceledException)
-        {
-            StatusText = "已取消登录。";
-        }
-        catch (Exception ex)
-        {
-            _stack.Log.Error("设备码登录异常", ex);
-            StatusText = "登录失败：" + ex.Message;
-        }
-        finally
-        {
             DeviceCodeText = string.Empty;
-            DeviceCodeUri = string.Empty;
+            DeviceCodeLink = string.Empty;
             _loginCts?.Dispose();
             _loginCts = null;
             IsBusy = false;
@@ -309,9 +264,28 @@ public sealed class AccountsViewModel : ViewModelBase
         _stack.RaiseChanged();
     }
 
+    private void CopyDeviceCode()
+    {
+        if (string.IsNullOrWhiteSpace(_deviceCodeText))
+        {
+            return;
+        }
+
+        try
+        {
+            Clipboard.SetText(_deviceCodeText!);
+            StatusText = "验证码已复制到剪贴板。";
+        }
+        catch (Exception ex)
+        {
+            _stack.Log.Warn("复制验证码失败", ex);
+            StatusText = "复制失败：" + ex.Message;
+        }
+    }
+
     private void OpenDeviceCodePage()
     {
-        var uri = _deviceCodeUri;
+        var uri = _deviceCodeLink;
         if (string.IsNullOrWhiteSpace(uri))
         {
             return;
@@ -323,7 +297,7 @@ public sealed class AccountsViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
-            _stack.Log.Warn($"打开设备码验证页失败：{uri}", ex);
+            _stack.Log.Warn($"打开验证页失败：{uri}", ex);
         }
     }
 }

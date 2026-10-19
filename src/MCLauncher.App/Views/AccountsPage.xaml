@@ -64,38 +64,39 @@
                 BorderBrush="{StaticResource ContentBorderBrush}" BorderThickness="1">
             <StackPanel>
                 <TextBlock Style="{StaticResource BodyText}" Text="{Binding MsClientIdHint}"/>
-                <TextBlock Margin="0,6,0,0" Style="{StaticResource BodyText}" Text="{Binding MsRedirectHint}"/>
+                <TextBlock Margin="0,6,0,0" Style="{StaticResource BodyText}" Text="{Binding MsSetupHint}"/>
                 <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
                     <Button Style="{StaticResource SkinButton}"
                             Command="{Binding LoginMicrosoftCommand}"
-                            Content="浏览器登录"
-                            Width="110" Height="28" FontSize="13"
-                            ToolTip="打开系统浏览器授权，需要 Azure 应用注册 http://localhost 回调地址"/>
-                    <Button Style="{StaticResource SkinButton}"
-                            Command="{Binding LoginByDeviceCodeCommand}"
-                            Content="设备码登录"
-                            Width="120" Height="28" FontSize="13" Margin="8,0,0,0"
-                            ToolTip="不需要注册任何回调地址：在浏览器里输入一个短码即可"/>
+                            Content="微软登录"
+                            Width="100" Height="28" FontSize="13"
+                            ToolTip="打开浏览器并自动填好验证码，登录后确认授权即可"/>
                     <Button Style="{StaticResource SkinButton}"
                             Command="{Binding CancelLoginCommand}"
                             Content="取消登录"
                             Width="88" Height="28" FontSize="13" Margin="8,0,0,0"/>
                 </StackPanel>
 
-                <!-- 设备码：大字显示短码，方便对照着输入 -->
+                <!-- 验证码：可选中复制；浏览器通常已自动填好，无需手动输入 -->
                 <Border Margin="0,10,0,0" Padding="12,10" CornerRadius="6"
                         Background="#FFF8E6" BorderBrush="#E8D9A8" BorderThickness="1"
                         Visibility="{Binding HasDeviceCode, Converter={StaticResource BoolToVis}}">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="验证码" VerticalAlignment="Center" FontSize="13" Foreground="#6B5B1E"/>
-                        <TextBlock Text="{Binding DeviceCodeText}" Margin="12,0,0,0"
-                                   VerticalAlignment="Center"
-                                   FontFamily="Consolas, Courier New" FontSize="24" FontWeight="Bold"
-                                   Foreground="#1A1A1A"/>
+                        <TextBox Text="{Binding DeviceCodeText, Mode=OneWay}" IsReadOnly="True"
+                                 IsReadOnlyCaretVisible="False" BorderThickness="0" Background="Transparent"
+                                 Margin="12,0,0,0" Padding="0" VerticalContentAlignment="Center"
+                                 FontFamily="Consolas, Courier New" FontSize="24" FontWeight="Bold"
+                                 Foreground="#1A1A1A"
+                                 ToolTip="可直接选中复制"/>
+                        <Button Style="{StaticResource SkinButton}"
+                                Command="{Binding CopyDeviceCodeCommand}"
+                                Content="复制"
+                                Width="64" Height="28" FontSize="13" Margin="12,0,0,0"/>
                         <Button Style="{StaticResource SkinButton}"
                                 Command="{Binding OpenDeviceCodePageCommand}"
-                                Content="打开验证页"
-                                Width="96" Height="28" FontSize="13" Margin="16,0,0,0"/>
+                                Content="重新打开登录页"
+                                Width="112" Height="28" FontSize="13" Margin="8,0,0,0"/>
                     </StackPanel>
                 </Border>
 

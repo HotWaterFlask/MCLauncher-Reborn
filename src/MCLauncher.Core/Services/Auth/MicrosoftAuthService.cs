@@ -8,10 +8,10 @@ using MCLauncher.Core.Utils;
 namespace MCLauncher.Core.Services.Auth;
 
 /// <summary>
-/// 微软正版登录。
+/// 微软正版登录（设备码流程）。
 /// <para>链路（缺一不可，顺序也不能乱）：</para>
 /// <list type="number">
-/// <item>授权码 + PKCE(S256) 换 MSA 令牌（本地回环回调，校验 state）</item>
+/// <item>申请设备码 → 用户在浏览器确认授权 → 轮询拿到 MSA 令牌（无需回调地址）</item>
 /// <item>MSA 令牌 → Xbox Live 令牌（user.auth.xboxlive.com）</item>
 /// <item>Xbox Live → XSTS 令牌（xsts.auth.xboxlive.com，拿 uhs）</item>
 /// <item>XSTS → Minecraft 访问令牌（login_with_xbox）</item>
@@ -26,8 +26,6 @@ namespace MCLauncher.Core.Services.Auth;
 /// </summary>
 public sealed class MicrosoftAuthService
 {
-    private static readonly TimeSpan CallbackTimeout = TimeSpan.FromMinutes(3);
-
     private const long XErrBanned = 2148916227;
     private const long XErrNoXboxAccount = 2148916233;
     private const long XErrRegionBlocked = 2148916235;
@@ -49,66 +47,6 @@ public sealed class MicrosoftAuthService
 
     /// <summary>没有客户端 ID 时登录不可用，界面应引导而不是崩溃。</summary>
     public bool IsConfigured => ClientId is not null;
-
-    /// <summary>使用的端点集合，可在设置里切换到 Live 端点兜底。</summary>
-    public MsAuthEndpoints Endpoints { get; set; } = MsAuthEndpoints.Default;
-
-    /// <summary>
-    /// 交互式登录：起本地回环服务器 → 打开浏览器 → 等回调 → 换取令牌链。
-    /// </summary>
-    /// <param name="openBrowser">打开授权页（界面层用默认浏览器打开）。</param>
-    public async Task<Account> LoginAsync(
-        Func<string, Task> openBrowser,
-        IProgress<MsAuthProgress>? progress = null,
-        CancellationToken ct = default)
-    {
-        var clientId = ClientId
-                       ?? throw new MsAuthException(MsAuthFailure.NotConfigured, "尚未配置微软客户端 ID");
-
-        var (port, redirectOverride) = ResolveRedirectTarget();
-        using var listener = new LoopbackAuthListener(port, _log, redirectOverride);
-        listener.Start();
-
-        var verifier = PkceUtil.CreateVerifier();
-        var challenge = PkceUtil.CreateChallenge(verifier);
-        var state = PkceUtil.CreateState();
-        var authorizeUrl = Endpoints.BuildAuthorizeUrl(clientId, listener.RedirectUri, challenge, state);
-
-        _log.Info($"发起微软登录（{Endpoints.Name}，回调 {listener.RedirectUri}）");
-        Report(progress, "打开浏览器", "请在弹出的页面里登录微软账号并授权");
-
-        await openBrowser(authorizeUrl).ConfigureAwait(false);
-
-        Report(progress, "等待授权", "完成授权后浏览器会提示可以返回启动器");
-
-        string code;
-        try
-        {
-            code = await listener.WaitForCodeAsync(state, CallbackTimeout, ct).ConfigureAwait(false);
-        }
-        catch (TimeoutException ex)
-        {
-            throw new MsAuthException(
-                MsAuthFailure.Timeout,
-                $"{ex.Message}（本次实际使用的回调地址：{listener.RedirectUri}）",
-                ex);
-        }
-
-        Report(progress, "换取令牌", "正在交换微软账号令牌");
-        var token = await RequestTokenAsync(
-            new Dictionary<string, string>
-            {
-                ["client_id"] = clientId,
-                ["code"] = code,
-                ["grant_type"] = "authorization_code",
-                ["redirect_uri"] = listener.RedirectUri,
-                ["code_verifier"] = verifier,
-                ["scope"] = Endpoints.Scope,
-            },
-            ct).ConfigureAwait(false);
-
-        return await WalkChainAsync(token, clientId, progress, ct).ConfigureAwait(false);
-    }
 
     /// <summary>用刷新令牌重新走一遍换链（令牌过期时调用，用户无感）。</summary>
     public async Task<Account> RefreshAsync(
@@ -132,7 +70,7 @@ public sealed class MicrosoftAuthService
                 ["client_id"] = clientId,
                 ["refresh_token"] = account.RefreshToken!,
                 ["grant_type"] = "refresh_token",
-                ["scope"] = Endpoints.Scope,
+                ["scope"] = MsAuthEndpoints.Scope,
             },
             ct).ConfigureAwait(false);
 
@@ -159,61 +97,21 @@ public sealed class MicrosoftAuthService
     }
 
     /// <summary>
-    /// 决定回环回调用的端口与地址。
-    /// <para>
-    /// 默认走 Azure 桌面应用的约定：注册 <c>http://localhost</c>（**不带端口、不带路径**）后，
-    /// 任意端口都会被匹配，所以我们随机取一个空闲端口即可。
-    /// 如果用户在设置里填了带端口的具体地址，说明他在 Azure 里注册的就是那一个，必须原样使用。
-    /// </para>
+    /// 给界面用的配置指引：设备码流程不需要回调地址，但 Azure 里必须允许公共客户端流。
     /// </summary>
-    private (int Port, string? RedirectUriOverride) ResolveRedirectTarget()
-    {
-        var configured = _config.Settings.MsRedirectUri;
-
-        if (!string.IsNullOrWhiteSpace(configured)
-            && Uri.TryCreate(configured.Trim(), UriKind.Absolute, out var uri)
-            && uri.Scheme is "http" or "https"
-            && (uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) || uri.Host == "127.0.0.1")
-            && !uri.IsDefaultPort)
-        {
-            var normalized = uri.GetLeftPart(UriPartial.Path);
-            _log.Info($"使用设置里指定的登录回调地址：{normalized}");
-            return (uri.Port, normalized);
-        }
-
-        if (!string.IsNullOrWhiteSpace(configured))
-        {
-            _log.Warn($"设置里的回调地址不可用（必须是带端口的 localhost 地址），已改用自动回环地址：{configured}");
-        }
-
-        return (LoopbackAuthListener.FindFreePort(), null);
-    }
-
-    /// <summary>给界面用的注册指引：告诉用户 Azure 里到底该填什么。</summary>
-    public string DescribeRedirectSetup()
-    {
-        var configured = _config.Settings.MsRedirectUri;
-
-        if (!string.IsNullOrWhiteSpace(configured))
-        {
-            return $"当前使用固定回调地址：{configured.Trim()}。请在 Azure 应用的「身份验证」里注册这一条完全相同的地址。";
-        }
-
-        return "Azure 门户 → 应用注册 → 身份验证 → 添加平台「移动和桌面应用程序」→ "
-               + "在重定向 URI 里填 http://localhost（不带端口、不带路径）。"
-               + "注册后启动器会自动用随机端口回调，Azure 会把任意端口都匹配到这一条。"
-               + "如果你的应用注册里填的是带端口的具体地址，请把它填到「设置 → 登录回调地址」里。"
-               + "懒得配回调地址也可以直接用「设备码登录」：那条路完全不需要 redirect_uri。";
-    }
+    public string DescribeSetup()
+        => "登录使用设备码流程，不需要注册回调地址。请在 Azure 应用注册里确认："
+           + "「身份验证 → 允许公共客户端流」为「是」，「支持的账户类型」包含个人 Microsoft 账户。";
 
     /// <summary>
     /// 设备码登录：**完全不需要注册任何回调地址**。
     /// <para>
-    /// 流程是给用户一个短码，让他到 <c>microsoft.com/devicelogin</c> 输入；启动器一边显示短码、
-    /// 一边按微软给的间隔轮询令牌端点，用户授权完就自动拿到令牌。
+    /// 启动器申请一个短码，并直接打开 <c>https://www.microsoft.com/link?otc=&lt;code&gt;</c> ——
+    /// 验证码已经预填好（与 Prism / MultiMC 的做法一致），用户只需登录并确认，无需手抄。
     /// </para>
     /// <para>
-    /// 这条路是为了绕开 redirect_uri 那堆坑：即使在 Azure 里把回调地址配错，设备码也照样能用。
+    /// 短码同时会通过 <paramref name="prompt"/> 交给界面，方便复制；
+    /// 启动器按微软给的间隔轮询令牌端点，用户授权完就自动拿到令牌。
     /// </para>
     /// </summary>
     public async Task<Account> LoginWithDeviceCodeAsync(
@@ -224,9 +122,6 @@ public sealed class MicrosoftAuthService
         var clientId = ClientId
                        ?? throw new MsAuthException(MsAuthFailure.NotConfigured, "尚未配置微软客户端 ID");
 
-        // Live 端点没有设备码能力，缺了就直接回落到账号中心。
-        var endpoints = Endpoints.SupportsDeviceCode ? Endpoints : MsAuthEndpoints.Consumers;
-
         Report(progress, "申请设备码", "正在向微软申请一次性登录码");
 
         string json;
@@ -236,9 +131,9 @@ public sealed class MicrosoftAuthService
                 new Dictionary<string, string>
                 {
                     ["client_id"] = clientId,
-                    ["scope"] = endpoints.Scope,
+                    ["scope"] = MsAuthEndpoints.Scope,
                 },
-                endpoints.DeviceCodeUrl!,
+                MsAuthEndpoints.DeviceCodeUrl,
                 ct).ConfigureAwait(false);
         }
         catch (HttpApiException ex)
@@ -255,19 +150,25 @@ public sealed class MicrosoftAuthService
         }
 
         var verificationUri = string.IsNullOrWhiteSpace(device.VerificationUri)
-            ? "https://microsoft.com/devicelogin"
+            ? MsAuthEndpoints.VerificationPage
             : device.VerificationUri!;
+
+        // 优先用服务端给的完整地址；微软通常不返回它，此时自己拼免输入链接。
+        var linkUri = !string.IsNullOrWhiteSpace(device.VerificationUriComplete)
+            ? device.VerificationUriComplete!
+            : MsAuthEndpoints.BuildLinkUri(device.UserCode!);
 
         prompt?.Report(new MsDeviceCodePrompt
         {
             UserCode = device.UserCode!,
             VerificationUri = verificationUri,
+            LinkUri = linkUri,
             Message = device.Message,
             ExpiresInSeconds = device.ExpiresIn,
         });
 
-        _log.Info($"设备码登录已发起，验证地址 {verificationUri}");
-        Report(progress, "等待授权", $"请打开 {verificationUri} 并输入代码 {device.UserCode}");
+        _log.Info($"设备码登录已发起，免输入链接 {linkUri}");
+        Report(progress, "等待授权", "浏览器已打开登录页，验证码已自动填好，请登录并确认授权");
 
         var interval = TimeSpan.FromSeconds(Math.Max(3, device.Interval));
         var deadline = DateTimeOffset.Now.AddSeconds(device.ExpiresIn > 0 ? device.ExpiresIn : 900);
@@ -293,7 +194,7 @@ public sealed class MicrosoftAuthService
                         ["device_code"] = device.DeviceCode!,
                         ["grant_type"] = "urn:ietf:params:oauth:grant-type:device_code",
                     },
-                    endpoints.TokenUrl,
+                    MsAuthEndpoints.TokenUrl,
                     ct).ConfigureAwait(false);
 
                 var token = JsonUtil.Deserialize<MsTokenResponse>(tokenJson)
@@ -412,7 +313,7 @@ public sealed class MicrosoftAuthService
         string json;
         try
         {
-            json = await _downloader.PostFormAsync(form, Endpoints.TokenUrl, ct).ConfigureAwait(false);
+            json = await _downloader.PostFormAsync(form, MsAuthEndpoints.TokenUrl, ct).ConfigureAwait(false);
         }
         catch (HttpApiException ex)
         {

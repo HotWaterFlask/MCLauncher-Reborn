@@ -1,5 +1,4 @@
 using System.Net;
-using System.Security.Cryptography;
 using System.Text;
 using MCLauncher.Core.Abstractions;
 using MCLauncher.Core.Models;
@@ -12,7 +11,7 @@ namespace MCLauncher.Core.Tests;
 
 public sealed class MicrosoftAuthTests
 {
-    private static MicrosoftAuthService CreateService(out TestLog log, out ConfigService config, out HttpDownloader downloader, string? clientId = null, string? redirectUri = null)
+    private static MicrosoftAuthService CreateService(out TestLog log, out ConfigService config, out HttpDownloader downloader, string? clientId = null)
     {
         log = new TestLog();
         var temp = new TempDirectory();
@@ -25,75 +24,28 @@ public sealed class MicrosoftAuthTests
             config.Settings.MsClientId = clientId;
         }
 
-        if (redirectUri is not null)
-        {
-            config.Settings.MsRedirectUri = redirectUri;
-        }
-
         downloader = new HttpDownloader(log, new FakeHttpHandler("{}"));
         return new MicrosoftAuthService(downloader, config, log);
     }
 
     /// <summary>
-    /// 这是踩过的坑：回调地址多一个 <c>/auth</c> 路径，Azure 就会直接返回
-    /// <c>invalid_request: redirect_uri is not valid</c>，因为「注册 http://localhost 匹配任意端口」
-    /// 这条通配规则只覆盖到端口，不覆盖路径。这里把"不得带路径"写死成回归测试。
+    /// 与 Prism / MultiMC 相同的做法：把短码拼进 <c>www.microsoft.com/link?otc=</c>，
+    /// 浏览器打开后验证码已预填，用户不需要手抄。
     /// </summary>
     [Fact]
-    public void 回调地址必须不带路径()
+    public void 免输入链接携带预填验证码()
     {
-        var log = new TestLog();
-        using var listener = new LoopbackAuthListener(39123, log);
+        var uri = MsAuthEndpoints.BuildLinkUri("N5LWRN7E");
 
-        Assert.Equal("http://localhost:39123", listener.RedirectUri);
-        Assert.DoesNotContain("/auth", listener.RedirectUri);
-        Assert.Equal(39123, listener.Port);
+        Assert.Equal("https://www.microsoft.com/link?otc=N5LWRN7E", uri);
     }
 
     [Fact]
-    public void 指定回调地址时原样使用()
+    public void 免输入链接对短码做转义()
     {
-        var log = new TestLog();
-        using var listener = new LoopbackAuthListener(39123, log, "http://localhost:39123/signin");
+        var uri = MsAuthEndpoints.BuildLinkUri("AB CD&X");
 
-        Assert.Equal("http://localhost:39123/signin", listener.RedirectUri);
-    }
-
-    [Fact]
-    public void 授权地址包含全部必需参数()
-    {
-        var url = MsAuthEndpoints.Consumers.BuildAuthorizeUrl(
-            "client-123",
-            "http://localhost:39123",
-            "challenge-abc",
-            "state-xyz");
-
-        Assert.Contains("response_type=code", url);
-        Assert.Contains("client_id=client-123", url);
-        Assert.Contains("code_challenge=challenge-abc", url);
-        Assert.Contains("code_challenge_method=S256", url);
-        Assert.Contains("state=state-xyz", url);
-        Assert.Contains("XboxLive.signin", url);
-        // 回调地址必须被正确转义
-        Assert.Contains("redirect_uri=http%3A%2F%2Flocalhost%3A39123", url);
-    }
-
-    [Fact]
-    public void PKCE的challenge等于verifier的SHA256的base64url()
-    {
-        var verifier = PkceUtil.CreateVerifier();
-        var challenge = PkceUtil.CreateChallenge(verifier);
-
-        var expected = Convert.ToBase64String(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)))
-            .TrimEnd('=')
-            .Replace('+', '-')
-            .Replace('/', '_');
-
-        Assert.Equal(expected, challenge);
-        Assert.DoesNotContain('+', challenge);
-        Assert.DoesNotContain('/', challenge);
-        Assert.DoesNotContain('=', challenge);
-        Assert.InRange(verifier.Length, 43, 128);
+        Assert.Equal("https://www.microsoft.com/link?otc=AB%20CD%26X", uri);
     }
 
     [Fact]
@@ -105,7 +57,7 @@ public sealed class MicrosoftAuthTests
             Assert.False(service.IsConfigured);
 
             var exception = Assert.Throws<MsAuthException>(() =>
-                service.LoginAsync(_ => Task.CompletedTask).GetAwaiter().GetResult());
+                service.LoginWithDeviceCodeAsync(null).GetAwaiter().GetResult());
 
             Assert.Equal(MsAuthFailure.NotConfigured, exception.Failure);
             Assert.Contains("客户端 ID", exception.ToUserMessage());
@@ -113,23 +65,15 @@ public sealed class MicrosoftAuthTests
     }
 
     [Fact]
-    public void 回调注册指引区分自动与固定两种情形()
+    public void 配置指引说明设备码流程与公共客户端流()
     {
-        var automatic = CreateService(out _, out _, out var downloader1, clientId: "cid");
-        using (downloader1)
+        var service = CreateService(out _, out _, out var downloader, clientId: "cid");
+        using (downloader)
         {
-            var text = automatic.DescribeRedirectSetup();
-            Assert.Contains("http://localhost", text);
-            // 自动模式下要强调"不带端口、不带路径"
-            Assert.Contains("不带端口", text);
-        }
-
-        var pinned = CreateService(out _, out _, out var downloader2, clientId: "cid", redirectUri: "http://localhost:39123");
-        using (downloader2)
-        {
-            var text = pinned.DescribeRedirectSetup();
-            Assert.Contains("http://localhost:39123", text);
-            Assert.Contains("固定回调地址", text);
+            var text = service.DescribeSetup();
+            Assert.Contains("不需要注册回调地址", text);
+            Assert.Contains("允许公共客户端流", text);
+            Assert.Contains("个人 Microsoft 账户", text);
         }
     }
 
@@ -143,28 +87,6 @@ public sealed class MicrosoftAuthTests
         Assert.Contains("没有购买", new MsAuthException(MsAuthFailure.NoGameOwnership, "").ToUserMessage());
         Assert.Contains("重新登录", new MsAuthException(MsAuthFailure.MustSignInAgain, "").ToUserMessage());
         Assert.Contains("稍后", new MsAuthException(MsAuthFailure.RateLimited, "").ToUserMessage());
-    }
-
-    [Fact]
-    public void 两套端点都可构造授权地址()
-    {
-        foreach (var endpoints in MsAuthEndpoints.All)
-        {
-            var url = endpoints.BuildAuthorizeUrl("cid", "http://localhost:1", "c", "s");
-            Assert.StartsWith(endpoints.AuthorizeUrl, url, StringComparison.Ordinal);
-            Assert.Equal(endpoints, MsAuthEndpoints.ByName(endpoints.Name));
-        }
-    }
-
-    [Fact]
-    public void 只有账号中心端点支持设备码()
-    {
-        Assert.True(MsAuthEndpoints.Consumers.SupportsDeviceCode);
-        Assert.NotNull(MsAuthEndpoints.Consumers.DeviceCodeUrl);
-        Assert.EndsWith("/devicecode", MsAuthEndpoints.Consumers.DeviceCodeUrl!, StringComparison.Ordinal);
-
-        Assert.False(MsAuthEndpoints.Live.SupportsDeviceCode);
-        Assert.Null(MsAuthEndpoints.Live.DeviceCodeUrl);
     }
 
     /// <summary>
@@ -214,10 +136,11 @@ public sealed class MicrosoftAuthTests
             null,
             cts.Token);
 
-        // 短码必须被展示出来，否则用户无从输入
+        // 短码必须被展示出来，并且同时给出免输入链接
         Assert.NotNull(shown);
         Assert.Equal("ABCD-EFGH", shown!.UserCode);
         Assert.Equal("https://microsoft.com/devicelogin", shown.VerificationUri);
+        Assert.Equal("https://www.microsoft.com/link?otc=ABCD-EFGH", shown.LinkUri);
 
         Assert.Equal(AccountKind.Microsoft, account.Kind);
         Assert.Equal("Steve", account.Name);
@@ -229,6 +152,38 @@ public sealed class MicrosoftAuthTests
         var pollBody = handler.Bodies.FirstOrDefault(b => b.Contains("device_code", StringComparison.Ordinal));
         Assert.NotNull(pollBody);
         Assert.Contains("urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Adevice_code", pollBody);
+    }
+
+    /// <summary>
+    /// RFC 8628 允许服务端直接给出带验证码的完整地址；给了就必须用它，不能自己再拼。
+    /// </summary>
+    [Fact]
+    public async Task 服务端给出完整验证地址时优先使用()
+    {
+        const string deviceJson = """
+        {"device_code":"d","user_code":"ABC",
+         "verification_uri":"https://microsoft.com/devicelogin",
+         "verification_uri_complete":"https://microsoft.com/devicelogin?code=ABC",
+         "expires_in":30,"interval":1}
+        """;
+
+        var (service, downloader, _) = CreateWithHandler(
+            (HttpStatusCode.OK, deviceJson),
+            (HttpStatusCode.BadRequest, """{"error":"expired_token"}"""));
+
+        using (downloader)
+        using (var cts = new CancellationTokenSource(TimeSpan.FromMinutes(1)))
+        {
+            MsDeviceCodePrompt? shown = null;
+
+            await Assert.ThrowsAsync<MsAuthException>(() => service.LoginWithDeviceCodeAsync(
+                new InlineProgress<MsDeviceCodePrompt>(p => shown = p),
+                null,
+                cts.Token));
+
+            Assert.NotNull(shown);
+            Assert.Equal("https://microsoft.com/devicelogin?code=ABC", shown!.LinkUri);
+        }
     }
 
     private const string DeviceCodeJson = """

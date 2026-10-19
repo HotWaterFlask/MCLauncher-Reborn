@@ -94,12 +94,7 @@
                      Height="26" VerticalContentAlignment="Center" Padding="6,0" FontSize="13"
                      ToolTip="Azure 应用注册里的「应用程序(客户端) ID」"/>
             <TextBlock Margin="0,6,0,0" Style="{StaticResource BodyText}" Text="{Binding MsClientIdHint}"/>
-
-            <TextBlock Margin="0,12,0,0" Style="{StaticResource BodyText}" Text="登录回调地址（留空即自动使用随机端口）"/>
-            <TextBox Text="{Binding MsRedirectUri, UpdateSourceTrigger=PropertyChanged}"
-                     Height="26" VerticalContentAlignment="Center" Padding="6,0" FontSize="13"
-                     ToolTip="仅在 Azure 里注册的是带端口的具体地址时才需要填，例如 http://localhost:39123"/>
-            <TextBlock Margin="0,6,0,0" Style="{StaticResource BodyText}" Text="{Binding MsRedirectHint}"/>
+            <TextBlock Margin="0,6,0,0" Style="{StaticResource BodyText}" Text="{Binding MsSetupHint}"/>
 
             <!-- CurseForge -->
             <TextBlock Text="CurseForge API Key" Style="{StaticResource SectionTitle}" Margin="0,18,0,8"/>

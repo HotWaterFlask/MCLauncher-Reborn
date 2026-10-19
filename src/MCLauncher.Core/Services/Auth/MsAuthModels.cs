@@ -11,11 +11,8 @@ public enum MsAuthFailure
     /// <summary>用户取消 / 关掉了授权页。</summary>
     UserCancelled,
 
-    /// <summary>等回调超时。</summary>
+    /// <summary>等授权超时。</summary>
     Timeout,
-
-    /// <summary>回调 state 不匹配。</summary>
-    StateMismatch,
 
     /// <summary>该微软账号还没有 Xbox 档案（需要先去 xbox.com 登录一次）。</summary>
     NoXboxAccount,
@@ -67,16 +64,22 @@ public sealed class MsAuthProgress
 }
 
 /// <summary>
-/// 设备码登录时要在界面上展示给用户的信息：
-/// 「打开 microsoft.com/devicelogin，输入 ABCD-EFGH 并授权」。
+/// 设备码登录时要在界面上展示给用户的信息。
+/// 正常情况下浏览器会直接打开 <see cref="LinkUri"/>（验证码已预填），用户不需要手动输入。
 /// </summary>
 public sealed class MsDeviceCodePrompt
 {
-    /// <summary>用户在验证页要输入的短码，例如 <c>ABCD-EFGH</c>。</summary>
+    /// <summary>短码，例如 <c>N5LWRN7E</c>。界面应可选中/复制。</summary>
     public required string UserCode { get; init; }
 
-    /// <summary>验证页地址（通常是 <c>https://microsoft.com/devicelogin</c>）。</summary>
+    /// <summary>验证页根地址（通常是 <c>https://microsoft.com/devicelogin</c>）。</summary>
     public required string VerificationUri { get; init; }
+
+    /// <summary>
+    /// 免输入直达链接：<c>https://www.microsoft.com/link?otc=&lt;user_code&gt;</c>。
+    /// 打开后验证码已填好，用户只需登录并点「继续」。
+    /// </summary>
+    public required string LinkUri { get; init; }
 
     /// <summary>微软给出的整句提示，可直接展示。</summary>
     public string? Message { get; init; }
@@ -101,9 +104,8 @@ public sealed class MsAuthException : Exception
     {
         MsAuthFailure.NotConfigured => "尚未配置微软客户端 ID。请到「设置」页填写 Azure 应用客户端 ID 后重试。",
         MsAuthFailure.UserCancelled => "已取消登录。",
-        // 超时的文案里已经带上了"本次使用的回调地址"与排查方向，直接透出更有用。
+        // 设备码过期等超时文案由调用方给出，直接透出更有用。
         MsAuthFailure.Timeout => Message,
-        MsAuthFailure.StateMismatch => "回调校验失败，请重新发起登录。",
         MsAuthFailure.NoXboxAccount => "该微软账号还没有 Xbox 档案：请先用它登录一次 xbox.com 创建档案，然后回来重试。",
         MsAuthFailure.AccountBanned => "该 Xbox 账号已被封禁，无法登录。",
         MsAuthFailure.RegionBlocked => "该账号所在地区不支持 Xbox Live。",
@@ -167,6 +169,13 @@ public sealed class MsDeviceCodeResponse
 
     [JsonPropertyName("verification_uri")]
     public string? VerificationUri { get; set; }
+
+    /// <summary>
+    /// 带验证码的完整验证地址。RFC 8628 里的可选字段，微软通常不返回，
+    /// 此时由启动器自行拼 <c>https://www.microsoft.com/link?otc=...</c>。
+    /// </summary>
+    [JsonPropertyName("verification_uri_complete")]
+    public string? VerificationUriComplete { get; set; }
 
     [JsonPropertyName("expires_in")]
     public int ExpiresIn { get; set; }

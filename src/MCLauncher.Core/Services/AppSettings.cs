@@ -66,13 +66,6 @@ public sealed class AppSettings
     /// <summary>微软登录用 Azure 应用客户端 ID。</summary>
     public string? MsClientId { get; set; }
 
-    /// <summary>
-    /// 微软登录的回调地址；留空时自动使用 <c>http://localhost:&lt;随机端口&gt;</c>。
-    /// 若在 Azure 里注册的是带端口的具体地址（如 <c>http://localhost:39123</c>），把那个地址填到这里，
-    /// 启动器就会用同样的端口与地址回调。
-    /// </summary>
-    public string? MsRedirectUri { get; set; }
-
     /// <summary>CurseForge API Key。</summary>
     public string? CurseForgeApiKey { get; set; }
 
