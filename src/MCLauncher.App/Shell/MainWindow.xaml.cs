@@ -4,15 +4,13 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
-using MCLauncher.App.ViewModels;
 using MCLauncher.Core.Abstractions;
 using MCLauncher.Core.Services;
 
 namespace MCLauncher.App.Shell;
 
 /// <summary>
-/// 外壳窗口：自适应布局（紧凑态保留原版观感 / 完整态显示导航），
-/// 以及贴角关闭按钮、署名链接、拖动与窗口尺寸持久化。
+/// 外壳窗口：顶部横向导航、贴角窗口按钮、署名链接、拖动与窗口尺寸持久化。
 /// </summary>
 public partial class MainWindow : Window
 {
@@ -29,15 +27,7 @@ public partial class MainWindow : Window
         InitializeComponent();
     }
 
-    private ShellViewModel? Shell => DataContext as ShellViewModel;
-
-    /// <summary>窗口尺寸变化：达到阈值即切换到完整态。</summary>
-    private void OnWindowSizeChanged(object sender, SizeChangedEventArgs e)
-    {
-        Shell?.UpdateWindowWidth(ActualWidth);
-    }
-
-    /// <summary>窗口没有标题栏，按住背景即可拖动。</summary>
+    /// <summary>窗口没有标题栏，按住顶部空白区即可拖动。</summary>
     private void OnDragMove(object sender, MouseButtonEventArgs e)
     {
         if (e.LeftButton == MouseButtonState.Pressed)
@@ -49,9 +39,6 @@ public partial class MainWindow : Window
     private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
 
     private void OnMinimizeClick(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
-
-    private void OnMaximizeClick(object sender, RoutedEventArgs e) =>
-        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
 
     /// <summary>点击署名：用默认浏览器打开项目主页。</summary>
     private void OnCreditClick(object sender, RoutedEventArgs e)
@@ -99,7 +86,6 @@ public partial class MainWindow : Window
             config.Settings.WindowHeight = (int)Math.Round(ActualHeight);
         }
 
-        config.Settings.FullMode = Shell?.FullMode ?? false;
         config.Save();
     }
 

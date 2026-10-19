@@ -7,14 +7,11 @@ namespace MCLauncher.Core.Services;
 public sealed class AppSettings
 {
     // ---- 界面 ----
-    /// <summary>窗口宽度（紧凑态默认 720，拉大后进入完整态）。</summary>
+    /// <summary>窗口宽度（默认 720，可自由缩放）。</summary>
     public int WindowWidth { get; set; } = 720;
 
     /// <summary>窗口高度（默认 450）。</summary>
     public int WindowHeight { get; set; } = 450;
-
-    /// <summary>上次是否为完整态（拉大过）。</summary>
-    public bool FullMode { get; set; }
 
     // ---- 游戏目录与实例 ----
     public List<string> GameFolders { get; set; } = new();

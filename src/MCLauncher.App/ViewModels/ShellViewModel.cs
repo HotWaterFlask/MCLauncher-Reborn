@@ -23,18 +23,14 @@ public sealed class NavItem
 }
 
 /// <summary>
-/// 外壳 ViewModel：负责窗口形态（紧凑态 / 完整态）、导航与状态栏文字。
+/// 外壳 ViewModel：负责导航与状态栏文字。
 /// </summary>
 public sealed class ShellViewModel : ViewModelBase
 {
-    /// <summary>宽度达到该值时进入"完整态"（显示导航栏）。</summary>
-    public const double FullModeThreshold = 900;
-
     private readonly Dictionary<string, object> _pageCache = new();
     private readonly Func<string, object> _pageFactory;
     private object? _currentPage;
     private NavItem? _selectedNavItem;
-    private bool _fullMode;
     private string _statusText = "就绪";
 
     public ShellViewModel(
@@ -42,15 +38,15 @@ public sealed class ShellViewModel : ViewModelBase
         Func<string, object> pageFactory,
         object initialPage,
         int initialWidth,
-        int initialHeight,
-        bool initialFullMode)
+        int initialHeight)
     {
         _pageFactory = pageFactory;
         NavItems = new ObservableCollection<NavItem>(navItems);
         _currentPage = initialPage;
+        _selectedNavItem = NavItems.FirstOrDefault();
+        _statusText = _selectedNavItem?.Title ?? "就绪";
         InitialWidth = initialWidth;
         InitialHeight = initialHeight;
-        _fullMode = initialFullMode;
     }
 
     public ObservableCollection<NavItem> NavItems { get; }
@@ -81,22 +77,6 @@ public sealed class ShellViewModel : ViewModelBase
         }
     }
 
-    /// <summary>完整态：显示左侧导航栏与窗口按钮。</summary>
-    public bool FullMode
-    {
-        get => _fullMode;
-        private set
-        {
-            if (SetProperty(ref _fullMode, value))
-            {
-                OnPropertyChanged(nameof(CompactMode));
-            }
-        }
-    }
-
-    /// <summary>紧凑态：只有背景 + 首页内容层，观感与原版一致。</summary>
-    public bool CompactMode => !_fullMode;
-
     public string StatusText
     {
         get => _statusText;
@@ -110,18 +90,6 @@ public sealed class ShellViewModel : ViewModelBase
             SelectedNavItem = item;
         }
     });
-
-    /// <summary>窗口尺寸变化时调用，用于在紧凑态与完整态之间切换。</summary>
-    public void UpdateWindowWidth(double width)
-    {
-        var shouldBeFull = width >= FullModeThreshold;
-        if (shouldBeFull == _fullMode)
-        {
-            return;
-        }
-
-        FullMode = shouldBeFull;
-    }
 
     /// <summary>切换到指定 id 的页面（带缓存，保证页面状态不丢失）。</summary>
     public void NavigateTo(string pageId)
@@ -142,7 +110,6 @@ public sealed class ShellViewModel : ViewModelBase
         }
 
         CurrentPage = page;
-        var title = item.Id == NavItems.FirstOrDefault()?.Id ? "主页" : item.Title;
-        StatusText = title;
+        StatusText = item.Title;
     }
 }

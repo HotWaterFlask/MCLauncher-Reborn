@@ -25,9 +25,9 @@ public sealed class PageFactory
 
     public static IReadOnlyList<NavItem> NavItems { get; } = new[]
     {
-        new NavItem(HomePageId, "主页", "\uE80F"),
-        new NavItem(VersionsPageId, "版本管理", "\uE896"),
+        new NavItem(HomePageId, "首页", "\uE80F"),
         new NavItem(AccountsPageId, "账号", "\uE77B"),
+        new NavItem(VersionsPageId, "版本管理", "\uE896"),
         new NavItem(LaunchLogPageId, "启动日志", "\uE9D9"),
         new NavItem(SettingsPageId, "设置", "\uE713"),
     };
