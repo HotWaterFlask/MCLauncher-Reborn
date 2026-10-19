@@ -1,0 +1,172 @@
+﻿<Window x:Class="MCLauncher.App.Shell.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        xmlns:vm="clr-namespace:MCLauncher.App.ViewModels"
+        xmlns:views="clr-namespace:MCLauncher.App.Views"
+        mc:Ignorable="d"
+        Title="MCLauncher-reborn"
+        Icon="pack://application:,,,/MCLauncher-Reborn.ico"
+        SizeToContent="Manual"
+        MinWidth="720" MinHeight="450"
+        WindowStyle="None"
+        ResizeMode="CanResize"
+        WindowStartupLocation="CenterScreen"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        FontFamily="Microsoft YaHei UI, Microsoft YaHei, Segoe UI"
+        SizeChanged="OnWindowSizeChanged"
+        SourceInitialized="OnSourceInitialized">
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="0"
+                      ResizeBorderThickness="6"
+                      GlassFrameThickness="0"
+                      CornerRadius="8"
+                      UseAeroCaptionButtons="False"/>
+    </WindowChrome.WindowChrome>
+
+    <Window.Background>
+        <!-- 必须用程序集绝对路径：本文件位于 Shell\ 子目录，相对路径会被解析成 shell/assets/... -->
+        <ImageBrush ImageSource="pack://application:,,,/Assets/bgskin/bg9.jpg" Stretch="Fill"/>
+    </Window.Background>
+
+    <Window.Resources>
+        <DataTemplate DataType="{x:Type vm:HomeViewModel}">
+            <views:HomePage/>
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:VersionsViewModel}">
+            <views:VersionsPage/>
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:AccountsViewModel}">
+            <views:AccountsPage/>
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:LaunchLogViewModel}">
+            <views:LaunchLogPage/>
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:SettingsViewModel}">
+            <views:SettingsPage/>
+        </DataTemplate>
+    </Window.Resources>
+
+    <!-- 无标题栏，按住背景即可拖动 -->
+    <Grid Background="Transparent" MouseLeftButtonDown="OnDragMove">
+
+        <!-- ===== 内容层：导航栏 + 内容区 ===== -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- 导航栏：仅完整态显示 -->
+            <Border Grid.Column="0"
+                    Width="190"
+                    Background="{StaticResource NavPanelBrush}"
+                    Visibility="{Binding FullMode, Converter={StaticResource BoolToVis}}">
+                <ListBox ItemsSource="{Binding NavItems}"
+                         SelectedItem="{Binding SelectedNavItem, Mode=TwoWay}"
+                         ItemContainerStyle="{StaticResource NavItemStyle}"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         Margin="0,42,0,30">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding Glyph}"
+                                           FontFamily="Segoe MDL2 Assets"
+                                           FontSize="14"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,10,0"/>
+                                <TextBlock Text="{Binding Title}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Border>
+
+            <!-- 内容区：紧凑态无底板（与原版一致），完整态带半透明圆角底板 -->
+            <Border Grid.Column="1">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Margin" Value="0"/>
+                        <Setter Property="Background" Value="Transparent"/>
+                        <Setter Property="BorderThickness" Value="0"/>
+                        <Setter Property="CornerRadius" Value="0"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding FullMode}" Value="True">
+                                <Setter Property="Margin" Value="8,42,8,34"/>
+                                <Setter Property="Background" Value="{StaticResource ContentPanelBrush}"/>
+                                <Setter Property="BorderThickness" Value="1"/>
+                                <Setter Property="BorderBrush" Value="{StaticResource ContentBorderBrush}"/>
+                                <Setter Property="CornerRadius" Value="8"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <ContentControl Content="{Binding CurrentPage}"/>
+            </Border>
+        </Grid>
+
+        <!-- ===== 覆盖层：标题 / 窗口按钮 / 署名 / 状态 ===== -->
+        <Grid>
+            <!-- 标题：仅完整态显示（紧凑态与原版一致，窗口内不显示标题） -->
+            <TextBlock Text="MineCraft Launcher 6.0 Reborn"
+                       Style="{StaticResource OverlayText}"
+                       FontSize="13"
+                       HorizontalAlignment="Left" VerticalAlignment="Top"
+                       Margin="18,12,0,0"
+                       Visibility="{Binding FullMode, Converter={StaticResource BoolToVis}}"/>
+
+            <!-- 窗口按钮：关闭按钮始终贴角，最小化/最大化仅完整态显示 -->
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Right" VerticalAlignment="Top"
+                        Margin="0">
+                <Button x:Name="MinimizeButton"
+                        Style="{StaticResource WindowButton}"
+                        Width="38" Height="26"
+                        Click="OnMinimizeClick"
+                        ToolTip="最小化"
+                        Visibility="{Binding FullMode, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="&#xE921;" FontFamily="Segoe MDL2 Assets" FontSize="10"/>
+                </Button>
+                <Button x:Name="MaximizeButton"
+                        Style="{StaticResource WindowButton}"
+                        Width="38" Height="26"
+                        Click="OnMaximizeClick"
+                        ToolTip="最大化 / 还原"
+                        Visibility="{Binding FullMode, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="&#xE922;" FontFamily="Segoe MDL2 Assets" FontSize="10"/>
+                </Button>
+                <Button x:Name="CloseButton"
+                        Style="{StaticResource CloseButton}"
+                        Width="38" Height="26"
+                        Click="OnCloseClick"
+                        ToolTip="关闭">
+                    <TextBlock Text="&#x2715;" FontFamily="Segoe UI Symbol, Segoe UI" FontSize="14">
+                        <TextBlock.Effect>
+                            <DropShadowEffect Color="Black" BlurRadius="3" ShadowDepth="0" Opacity="0.6"/>
+                        </TextBlock.Effect>
+                    </TextBlock>
+                </Button>
+            </StackPanel>
+
+            <!-- 左下角署名：悬停变蓝，点击打开项目主页 -->
+            <Button Style="{StaticResource CreditLink}"
+                    Click="OnCreditClick"
+                    Content="MineCraft Launcher 6.0 Reborn by 忘却的旋律"
+                    HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                    Margin="8,0,0,7"/>
+
+            <!-- 状态栏文字：仅完整态显示 -->
+            <TextBlock Text="{Binding StatusText}"
+                       Style="{StaticResource OverlayText}"
+                       FontSize="12"
+                       HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                       Margin="0,0,12,8"
+                       Visibility="{Binding FullMode, Converter={StaticResource BoolToVis}}"/>
+        </Grid>
+    </Grid>
+</Window>

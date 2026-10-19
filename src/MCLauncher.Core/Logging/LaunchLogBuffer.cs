@@ -1,0 +1,81 @@
+using System.Text;
+using MCLauncher.Core.Abstractions;
+
+namespace MCLauncher.Core.Logging;
+
+/// <summary>
+/// 游戏输出的内存环形缓冲。UI 绑定它显示启动日志，避免把几千行日志塞进 ObservableCollection。
+/// </summary>
+public sealed class LaunchLogBuffer
+{
+    private readonly Queue<string> _lines;
+    private readonly int _capacity;
+    private readonly object _gate = new();
+
+    public LaunchLogBuffer(int capacity = 2000)
+    {
+        _capacity = Math.Max(64, capacity);
+        _lines = new Queue<string>(_capacity);
+    }
+
+    /// <summary>有新行时触发（在工作线程上，界面需自行 marshal）。</summary>
+    public event Action<string>? LineAdded;
+
+    public int Capacity => _capacity;
+
+    public void Append(string line)
+    {
+        if (line is null)
+        {
+            return;
+        }
+
+        lock (_gate)
+        {
+            _lines.Enqueue(line);
+            while (_lines.Count > _capacity)
+            {
+                _lines.Dequeue();
+            }
+        }
+
+        try
+        {
+            LineAdded?.Invoke(line);
+        }
+        catch
+        {
+            // 订阅方异常不能影响游戏进程的读取循环。
+        }
+    }
+
+    public void Clear()
+    {
+        lock (_gate)
+        {
+            _lines.Clear();
+        }
+    }
+
+    public IReadOnlyList<string> Snapshot()
+    {
+        lock (_gate)
+        {
+            return _lines.ToArray();
+        }
+    }
+
+    public string Join() => string.Join(Environment.NewLine, Snapshot());
+
+    /// <summary>把缓冲区接成一个 <see cref="ILogSink"/>，方便与启动器日志共用同一出口。</summary>
+    public ILogSink CreateSink() => new BufferSink(this);
+
+    private sealed class BufferSink : ILogSink
+    {
+        private readonly LaunchLogBuffer _buffer;
+
+        public BufferSink(LaunchLogBuffer buffer) => _buffer = buffer;
+
+        public void Write(LogLevel level, string message) => _buffer.Append(message);
+    }
+}

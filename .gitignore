@@ -5,3 +5,6 @@ obj/
 # Visual Studio 本地文件
 .vs/
 *.user
+
+# 本机私有凭据（真实 API Key / 客户端 ID），绝不入库
+src/MCLauncher.Core/Secrets/LocalSecrets.cs
