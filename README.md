@@ -180,4 +180,5 @@ MCLauncher-reborn/
 ## 致谢
 
 
+原项目MCLauncher（忘却的旋律）
 
