@@ -63,8 +63,7 @@ public partial class App : Application
                 pageFactory.Create,
                 pageFactory.Create(PageFactory.HomePageId),
                 config.Settings.WindowWidth,
-                config.Settings.WindowHeight,
-                config.Settings.FullMode);
+                config.Settings.WindowHeight);
 
             pageFactory.AttachNavigator(shellViewModel.NavigateTo);
             Services.RegisterSingleton(shellViewModel);
@@ -72,7 +71,7 @@ public partial class App : Application
             var window = new MainWindow { DataContext = shellViewModel };
 
             // 显式设置初始尺寸：Window.Width/Height 的绑定在 DataContext 赋值时序上不可靠，
-            // 这里直接按配置赋初值，低于紧凑态下限时钳到 720×450。
+            // 这里直接按配置赋初值，低于最小尺寸时钳到 720×450。
             window.Width = Math.Max(shellViewModel.InitialWidth, window.MinWidth);
             window.Height = Math.Max(shellViewModel.InitialHeight, window.MinHeight);
 

@@ -1,4 +1,4 @@
-﻿<UserControl x:Class="MCLauncher.App.Views.HomePage"
+<UserControl x:Class="MCLauncher.App.Views.HomePage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -6,11 +6,9 @@
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="720">
     <Grid>
-        <!-- 完整态下的信息层（紧凑态隐藏，保持与原版一致的观感） -->
+        <!-- 顶部信息层：账号与进度 -->
         <StackPanel VerticalAlignment="Top"
-                    Margin="20,18,20,0"
-                    Visibility="{Binding DataContext.FullMode, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
-            <TextBlock Text="MineCraft Launcher 6.0 Reborn" Style="{StaticResource PageTitle}"/>
+                    Margin="20,18,20,0">
             <TextBlock Margin="0,6,0,0"
                        Style="{StaticResource BodyText}"
                        Text="{Binding AccountText}"/>
