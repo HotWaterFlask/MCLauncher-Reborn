@@ -1,0 +1,29 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>MCLauncher.Core</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 模板文件不参与编译：真正编译的是同目录的 LocalSecrets.cs（含真实凭据，已被 .gitignore 排除）。 -->
+    <Compile Remove="Secrets\LocalSecrets.example.cs" />
+  </ItemGroup>
+
+  <!--
+    新克隆的仓库里没有 LocalSecrets.cs，首次构建时从模板自动生成一份，保证开箱即可编译。
+    生成后需要用户自己把凭据填进去；此时该文件已存在，后续构建走常规的 **/*.cs 通配。
+  -->
+  <Target Name="EnsureLocalSecrets" BeforeTargets="CoreCompile"
+          Condition="!Exists('$(MSBuildProjectDirectory)\Secrets\LocalSecrets.cs')">
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\Secrets\LocalSecrets.example.cs"
+          DestinationFiles="$(MSBuildProjectDirectory)\Secrets\LocalSecrets.cs" />
+    <ItemGroup>
+      <Compile Include="Secrets\LocalSecrets.cs" />
+    </ItemGroup>
+  </Target>
+
+</Project>

@@ -1,3 +1,5 @@
-<Solution>
-  <Project Path="MCLauncher-reborn.csproj" />
+﻿<Solution>
+  <Project Path="src/MCLauncher.Core/MCLauncher.Core.csproj" />
+  <Project Path="src/MCLauncher.App/MCLauncher.App.csproj" />
+  <Project Path="tests/MCLauncher.Core.Tests/MCLauncher.Core.Tests.csproj" />
 </Solution>

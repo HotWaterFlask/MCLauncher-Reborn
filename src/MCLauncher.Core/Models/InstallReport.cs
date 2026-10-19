@@ -1,0 +1,84 @@
+using MCLauncher.Core.Network;
+
+namespace MCLauncher.Core.Models;
+
+/// <summary>安装选项。</summary>
+public sealed class InstallOptions
+{
+    /// <summary>是否下载资源对象（跳过可省掉 90% 的下载量，但游戏会丢贴图/音效）。</summary>
+    public bool DownloadAssets { get; init; } = true;
+
+    /// <summary>是否解压 natives。</summary>
+    public bool ExtractNatives { get; init; } = true;
+
+    /// <summary>是否写 <c>launcher_profiles.json</c>（Forge 安装器需要它）。</summary>
+    public bool CreateLauncherProfiles { get; init; } = true;
+
+    /// <summary>并发下载数。默认与官方源的主机并发桶一致。</summary>
+    public int MaxParallel { get; init; } = 16;
+
+    /// <summary>
+    /// 对已存在的文件是否做完整哈希校验。
+    /// true = 严格（慢，但能发现被改坏的文件）；false = 只检查存在（快）。
+    /// </summary>
+    public bool VerifyExisting { get; init; } = true;
+
+    /// <summary>强制重新下载（无视已存在文件）。</summary>
+    public bool ForceRedownload { get; init; }
+}
+
+/// <summary>安装过程中的阶段性进度。</summary>
+public sealed class InstallProgress
+{
+    public required string Stage { get; init; }
+
+    public int Completed { get; init; }
+
+    public int Total { get; init; }
+
+    public long DownloadedBytes { get; init; }
+
+    public long TotalBytes { get; init; }
+
+    public string? Current { get; init; }
+
+    public double Fraction => Total > 0 ? Math.Clamp((double)Completed / Total, 0d, 1d) : 0d;
+
+    public override string ToString() => $"{Stage} {Completed}/{Total}";
+}
+
+/// <summary>安装结果。</summary>
+public sealed class InstallReport
+{
+    public bool Success { get; init; }
+
+    public int Downloaded { get; init; }
+
+    public int Skipped { get; init; }
+
+    public int Failed { get; init; }
+
+    public long TotalBytes { get; init; }
+
+    public IReadOnlyList<DownloadFailure> Failures { get; init; } = Array.Empty<DownloadFailure>();
+
+    /// <summary>校验模式下缺失或被改动的文件。</summary>
+    public IReadOnlyList<string> Missing { get; init; } = Array.Empty<string>();
+
+    public static InstallReport Ok(int downloaded, int skipped, long totalBytes) => new()
+    {
+        Success = true,
+        Downloaded = downloaded,
+        Skipped = skipped,
+        TotalBytes = totalBytes,
+    };
+
+    public static InstallReport FromBatch(DownloadBatchResult batch) => new()
+    {
+        Success = batch.Success,
+        Downloaded = batch.Completed,
+        Skipped = batch.Skipped,
+        Failed = batch.Failed,
+        Failures = batch.Failures,
+    };
+}
