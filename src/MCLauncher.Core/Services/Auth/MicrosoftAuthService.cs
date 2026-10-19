@@ -106,11 +106,11 @@ public sealed class MicrosoftAuthService
     /// <summary>
     /// 设备码登录：**完全不需要注册任何回调地址**。
     /// <para>
-    /// 启动器申请一个短码，并直接打开 <c>https://www.microsoft.com/link?otc=&lt;code&gt;</c> ——
-    /// 验证码已经预填好（与 Prism / MultiMC 的做法一致），用户只需登录并确认，无需手抄。
+    /// 启动器申请一个短码，并打开微软返回的验证页（<c>https://www.microsoft.com/link</c>）。
+    /// 该短码由界面展示、可一键复制，用户在页面上粘贴后登录并确认授权。
+    /// 注意不要拼接 <c>?otc=</c>：微软会把这条路径当作第一方授权处理，普通应用会被拒绝。
     /// </para>
     /// <para>
-    /// 短码同时会通过 <paramref name="prompt"/> 交给界面，方便复制；
     /// 启动器按微软给的间隔轮询令牌端点，用户授权完就自动拿到令牌。
     /// </para>
     /// </summary>
@@ -153,10 +153,11 @@ public sealed class MicrosoftAuthService
             ? MsAuthEndpoints.VerificationPage
             : device.VerificationUri!;
 
-        // 优先用服务端给的完整地址；微软通常不返回它，此时自己拼免输入链接。
+        // 有完整地址就用完整地址；否则用服务端给的验证页根地址。
+        // 不能自己拼 ?otc=，那条路径会被微软按第一方应用处理并拒绝普通应用。
         var linkUri = !string.IsNullOrWhiteSpace(device.VerificationUriComplete)
             ? device.VerificationUriComplete!
-            : MsAuthEndpoints.BuildLinkUri(device.UserCode!);
+            : verificationUri;
 
         prompt?.Report(new MsDeviceCodePrompt
         {
@@ -167,8 +168,8 @@ public sealed class MicrosoftAuthService
             ExpiresInSeconds = device.ExpiresIn,
         });
 
-        _log.Info($"设备码登录已发起，免输入链接 {linkUri}");
-        Report(progress, "等待授权", "浏览器已打开登录页，验证码已自动填好，请登录并确认授权");
+        _log.Info($"设备码登录已发起，验证地址 {linkUri}");
+        Report(progress, "等待授权", "浏览器已打开登录页，请粘贴验证码并确认授权");
 
         var interval = TimeSpan.FromSeconds(Math.Max(3, device.Interval));
         var deadline = DateTimeOffset.Now.AddSeconds(device.ExpiresIn > 0 ? device.ExpiresIn : 900);

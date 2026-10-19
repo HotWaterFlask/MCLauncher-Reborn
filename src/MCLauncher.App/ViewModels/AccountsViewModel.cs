@@ -95,7 +95,7 @@ public sealed class AccountsViewModel : ViewModelBase
         }
     }
 
-    /// <summary>免输入直达链接（验证码已预填）。</summary>
+    /// <summary>浏览器打开的微软验证页地址。</summary>
     public string DeviceCodeLink
     {
         get => _deviceCodeLink ?? string.Empty;
@@ -207,8 +207,8 @@ public sealed class AccountsViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// 微软正版登录：申请设备码后直接打开免输入链接（<c>www.microsoft.com/link?otc=...</c>），
-    /// 验证码已预填，用户只需登录并确认，不需要手抄短码。
+    /// 微软正版登录：申请设备码后打开微软验证页（<c>www.microsoft.com/link</c>），
+    /// 验证码可一键复制、粘贴到页面里确认授权。
     /// </summary>
     private async Task LoginMicrosoftAsync()
     {
@@ -223,7 +223,7 @@ public sealed class AccountsViewModel : ViewModelBase
                 {
                     DeviceCodeText = p.UserCode;
                     DeviceCodeLink = p.LinkUri;
-                    StatusText = "浏览器已打开登录页，验证码已自动填好；请登录并确认授权";
+                    StatusText = "浏览器已打开登录页，请粘贴验证码并确认授权";
                     OpenDeviceCodePage();
                 }),
                 new Progress<MsAuthProgress>(p => StatusText = p.Stage),
