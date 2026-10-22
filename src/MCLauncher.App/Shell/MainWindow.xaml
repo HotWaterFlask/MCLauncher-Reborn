@@ -28,7 +28,7 @@
 
     <Window.Background>
         <!-- 必须用程序集绝对路径：本文件位于 Shell\ 子目录，相对路径会被解析成 shell/assets/... -->
-        <ImageBrush ImageSource="pack://application:,,,/Assets/bgskin/bg9.jpg" Stretch="Fill"/>
+        <ImageBrush ImageSource="pack://application:,,,/Assets/default-bg.jpg" Stretch="Fill"/>
     </Window.Background>
 
     <Window.Resources>
@@ -46,6 +46,9 @@
         </DataTemplate>
         <DataTemplate DataType="{x:Type vm:SettingsViewModel}">
             <views:SettingsPage/>
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:InstanceManageViewModel}">
+            <views:InstanceManagePage/>
         </DataTemplate>
     </Window.Resources>
 
@@ -122,13 +125,24 @@
             </Grid>
         </Border>
 
-        <!-- ===== 内容区 ===== -->
-        <Border Grid.Row="1"
-                Margin="8,8,8,34"
-                Background="{StaticResource ContentPanelBrush}"
-                BorderBrush="{StaticResource ContentBorderBrush}"
-                BorderThickness="1"
-                CornerRadius="8">
+        <!-- ===== 内容区：首页不铺白底（保持背景图观感），其它页面带半透明圆角底板 ===== -->
+        <Border Grid.Row="1">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Margin" Value="8,8,8,34"/>
+                    <Setter Property="Background" Value="{StaticResource ContentPanelBrush}"/>
+                    <Setter Property="BorderBrush" Value="{StaticResource ContentBorderBrush}"/>
+                    <Setter Property="BorderThickness" Value="1"/>
+                    <Setter Property="CornerRadius" Value="8"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsHomePage}" Value="True">
+                            <Setter Property="Margin" Value="0"/>
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
             <ContentControl Content="{Binding CurrentPage}"/>
         </Border>
 

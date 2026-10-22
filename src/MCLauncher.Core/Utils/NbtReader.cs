@@ -70,19 +70,19 @@ public static class NbtReader
         }
     }
 
-    private const byte TagEnd = 0;
-    private const byte TagByte = 1;
-    private const byte TagShort = 2;
-    private const byte TagInt = 3;
-    private const byte TagLong = 4;
-    private const byte TagFloat = 5;
-    private const byte TagDouble = 6;
-    private const byte TagByteArray = 7;
-    private const byte TagString = 8;
-    private const byte TagList = 9;
-    private const byte TagCompound = 10;
-    private const byte TagIntArray = 11;
-    private const byte TagLongArray = 12;
+    internal const byte TagEnd = 0;
+    internal const byte TagByte = 1;
+    internal const byte TagShort = 2;
+    internal const byte TagInt = 3;
+    internal const byte TagLong = 4;
+    internal const byte TagFloat = 5;
+    internal const byte TagDouble = 6;
+    internal const byte TagByteArray = 7;
+    internal const byte TagString = 8;
+    internal const byte TagList = 9;
+    internal const byte TagCompound = 10;
+    internal const byte TagIntArray = 11;
+    internal const byte TagLongArray = 12;
 
     private static bool ReadCompound(
         BinaryReader reader,
@@ -127,7 +127,7 @@ public static class NbtReader
     }
 
     /// <summary>跳过指定类型的负载。返回 false 表示数据已损坏。</summary>
-    private static bool Skip(BinaryReader reader, byte type)
+    internal static bool Skip(BinaryReader reader, byte type)
     {
         switch (type)
         {
@@ -224,7 +224,7 @@ public static class NbtReader
         }
     }
 
-    private static string ReadString(BinaryReader reader)
+    internal static string ReadString(BinaryReader reader)
     {
         var length = reader.ReadUInt16();
         if (length == 0)

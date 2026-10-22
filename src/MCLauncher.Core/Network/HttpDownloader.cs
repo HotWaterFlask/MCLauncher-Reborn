@@ -74,13 +74,30 @@ public sealed class HttpDownloader : IDisposable
         IReadOnlyDictionary<string, string>? headers = null,
         CancellationToken ct = default)
     {
+        if (content is null)
+        {
+            return await RequestContentAsync(url, method, null, headers, ct).ConfigureAwait(false);
+        }
+
+        using var stringContent = new StringContent(
+            content, System.Text.Encoding.UTF8, contentType ?? "application/json");
+        return await RequestContentAsync(url, method, stringContent, headers, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 发送任意 <see cref="HttpContent"/>（如表单 multipart）并返回响应文本。
+    /// <paramref name="content"/> 随请求一起释放，调用方不要复用。
+    /// </summary>
+    public async Task<string> RequestContentAsync(
+        string url,
+        HttpMethod method,
+        HttpContent? content,
+        IReadOnlyDictionary<string, string>? headers = null,
+        CancellationToken ct = default)
+    {
         using var gate = await EnterHostAsync(url, ct).ConfigureAwait(false);
 
-        using var request = new HttpRequestMessage(method, url);
-        if (content is not null)
-        {
-            request.Content = new StringContent(content, System.Text.Encoding.UTF8, contentType ?? "application/json");
-        }
+        using var request = new HttpRequestMessage(method, url) { Content = content };
 
         if (headers is not null)
         {
@@ -106,6 +123,28 @@ public sealed class HttpDownloader : IDisposable
         }
 
         return body;
+    }
+
+    /// <summary>获取二进制内容（皮肤、披风这类小图片）。</summary>
+    public async Task<byte[]> GetBytesAsync(string url, CancellationToken ct = default)
+    {
+        using var gate = await EnterHostAsync(url, ct).ConfigureAwait(false);
+
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(HeaderTimeout);
+
+        using var response = await _http
+            .GetAsync(url, HttpCompletionOption.ResponseContentRead, timeoutCts.Token)
+            .ConfigureAwait(false);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            _log.Trace($"请求失败：GET {url} → {(int)response.StatusCode}");
+            throw new HttpApiException(response.StatusCode, body, response.ReasonPhrase, url);
+        }
+
+        return await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
     }
 
     /// <summary>表单 POST（OAuth token 端点用）。</summary>

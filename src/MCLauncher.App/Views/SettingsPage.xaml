@@ -1,121 +1,160 @@
-﻿<UserControl x:Class="MCLauncher.App.Views.SettingsPage"
+<UserControl x:Class="MCLauncher.App.Views.SettingsPage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="720">
-    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="20,18,20,16">
-        <StackPanel>
-            <TextBlock Text="设置" Style="{StaticResource PageTitle}"/>
+    <Grid Margin="20,18,20,16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
 
-            <!-- 游戏目录 -->
-            <TextBlock Text="游戏目录" Style="{StaticResource SectionTitle}" Margin="0,18,0,8"/>
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <TextBox Grid.Column="0" Text="{Binding GameFolder, UpdateSourceTrigger=PropertyChanged}"
-                         Height="26" VerticalContentAlignment="Center" Padding="6,0" FontSize="13"/>
-                <Button Grid.Column="1" Margin="8,0,0,0" Style="{StaticResource SkinButton}"
-                        Command="{Binding BrowseGameFolderCommand}"
-                        Content="浏览…" Width="72" Height="26" FontSize="13"/>
-            </Grid>
+        <TextBlock Grid.Row="0" Text="设置" Style="{StaticResource PageTitle}"/>
 
-            <!-- Java -->
-            <TextBlock Text="Java 运行时" Style="{StaticResource SectionTitle}" Margin="0,18,0,8"/>
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <TextBox Grid.Column="0" Text="{Binding JavaPath, UpdateSourceTrigger=PropertyChanged}"
-                         Height="26" VerticalContentAlignment="Center" Padding="6,0" FontSize="13"/>
-                <Button Grid.Column="1" Margin="8,0,0,0" Style="{StaticResource SkinButton}"
-                        Command="{Binding BrowseJavaCommand}"
-                        Content="浏览…" Width="72" Height="26" FontSize="13"/>
-                <Button Grid.Column="2" Margin="8,0,0,0" Style="{StaticResource SkinButton}"
-                        Command="{Binding DetectJavaCommand}"
-                        Content="自动探测" Width="88" Height="26" FontSize="13"/>
-            </Grid>
-            <TextBlock Margin="0,6,0,0" Style="{StaticResource BodyText}" Text="{Binding JavaHint}"/>
-            <ListBox ItemsSource="{Binding Javas}" Height="96" Margin="0,8,0,0"
-                     Background="White" BorderBrush="{StaticResource ContentBorderBrush}" BorderThickness="1">
-                <ListBox.ItemTemplate>
-                    <DataTemplate>
-                        <StackPanel Margin="6,4">
-                            <TextBlock Text="{Binding Display}" FontSize="12"/>
-                            <TextBlock Text="{Binding Path}" FontSize="11" Foreground="#8A8A8A"
-                                       TextTrimming="CharacterEllipsis"/>
-                        </StackPanel>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
+        <!-- ===== 全局设置 ===== -->
+        <ScrollViewer Grid.Row="1" Margin="0,10,0,0" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <!-- 游戏目录 -->
+                <TextBlock Text="游戏目录" Style="{StaticResource SectionTitle}" Margin="0,10,0,8"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox Grid.Column="0" Text="{Binding GameFolder, UpdateSourceTrigger=PropertyChanged}"
+                             Height="26" VerticalContentAlignment="Center" Padding="6,0" FontSize="13"/>
+                    <Button Grid.Column="1" Margin="8,0,0,0" Style="{StaticResource SkinButton}"
+                            Command="{Binding BrowseGameFolderCommand}"
+                            Content="浏览…" Width="72" Height="26" FontSize="13"/>
+                </Grid>
 
-            <!-- 内存 -->
-            <TextBlock Text="内存" Style="{StaticResource SectionTitle}" Margin="0,18,0,8"/>
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Text="最大" VerticalAlignment="Center" FontSize="13" Foreground="#1A1A1A"/>
-                <TextBox Text="{Binding MaxMemoryMb, UpdateSourceTrigger=PropertyChanged}"
-                         Width="90" Margin="8,0,0,0"
-                         Height="26" VerticalContentAlignment="Center" Padding="6,0" FontSize="13"/>
-                <TextBlock Text="MB" VerticalAlignment="Center" Margin="6,0,0,0" FontSize="13" Foreground="#1A1A1A"/>
-                <TextBlock Text="初始" VerticalAlignment="Center" Margin="24,0,0,0" FontSize="13" Foreground="#1A1A1A"/>
-                <TextBox Text="{Binding MinMemoryMb, UpdateSourceTrigger=PropertyChanged}"
-                         Width="90" Margin="8,0,0,0"
-                         Height="26" VerticalContentAlignment="Center" Padding="6,0" FontSize="13"/>
-                <TextBlock Text="MB" VerticalAlignment="Center" Margin="6,0,0,0" FontSize="13" Foreground="#1A1A1A"/>
+                <!-- 下载源 -->
+                <TextBlock Text="下载源" Style="{StaticResource SectionTitle}" Margin="0,18,0,8"/>
+                <CheckBox Content="优先使用镜像源（BMCLAPI，失败自动回退官方）"
+                          IsChecked="{Binding PreferMirror, Mode=TwoWay}"
+                          FontSize="13" Foreground="#1A1A1A"/>
+                <TextBlock Margin="0,6,0,0" Style="{StaticResource BodyText}"
+                           Text="镜像源在国内更快；关闭后所有下载都走官方地址。"/>
+
+                <!-- Java -->
+                <TextBlock Text="Java 运行时" Style="{StaticResource SectionTitle}" Margin="0,18,0,8"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox Grid.Column="0" Text="{Binding JavaPath, UpdateSourceTrigger=PropertyChanged}"
+                             Height="26" VerticalContentAlignment="Center" Padding="6,0" FontSize="13"/>
+                    <Button Grid.Column="1" Margin="8,0,0,0" Style="{StaticResource SkinButton}"
+                            Command="{Binding BrowseJavaCommand}"
+                            Content="浏览…" Width="72" Height="26" FontSize="13"/>
+                    <Button Grid.Column="2" Margin="8,0,0,0" Style="{StaticResource SkinButton}"
+                            Command="{Binding DetectJavaCommand}"
+                            Content="自动探测" Width="88" Height="26" FontSize="13"/>
+                </Grid>
+                <TextBlock Margin="0,6,0,0" Style="{StaticResource BodyText}" Text="{Binding JavaHint}"/>
+                <ListBox ItemsSource="{Binding Javas}" Height="96" Margin="0,8,0,0"
+                         Background="White" BorderBrush="{StaticResource ContentBorderBrush}" BorderThickness="1">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Margin="6,4">
+                                <TextBlock Text="{Binding Display}" FontSize="12"/>
+                                <TextBlock Text="{Binding Path}" FontSize="11" Foreground="#8A8A8A"
+                                           TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <!-- 内存 -->
+                <TextBlock Text="内存" Style="{StaticResource SectionTitle}" Margin="0,18,0,8"/>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="最大" VerticalAlignment="Center" FontSize="13" Foreground="#1A1A1A"/>
+                    <TextBox Text="{Binding MaxMemoryMb, UpdateSourceTrigger=PropertyChanged}"
+                             Width="90" Margin="8,0,0,0"
+                             Height="26" VerticalContentAlignment="Center" Padding="6,0" FontSize="13"/>
+                    <TextBlock Text="MB" VerticalAlignment="Center" Margin="6,0,0,0" FontSize="13" Foreground="#1A1A1A"/>
+                    <TextBlock Text="初始" VerticalAlignment="Center" Margin="24,0,0,0" FontSize="13" Foreground="#1A1A1A"/>
+                    <TextBox Text="{Binding MinMemoryMb, UpdateSourceTrigger=PropertyChanged}"
+                             Width="90" Margin="8,0,0,0"
+                             Height="26" VerticalContentAlignment="Center" Padding="6,0" FontSize="13"/>
+                    <TextBlock Text="MB" VerticalAlignment="Center" Margin="6,0,0,0" FontSize="13" Foreground="#1A1A1A"/>
+                </StackPanel>
+
+                <!-- 游戏窗口 -->
+                <TextBlock Text="游戏窗口" Style="{StaticResource SectionTitle}" Margin="0,18,0,8"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <RadioButton Grid.Row="0" Grid.Column="0" Content="窗口化"
+                                 GroupName="GameWindow"
+                                 IsChecked="{Binding IsWindowed, Mode=TwoWay}"
+                                 FontSize="13" Foreground="#1A1A1A" VerticalAlignment="Center"/>
+                    <ComboBox Grid.Row="0" Grid.Column="1"
+                              Margin="16,0,0,0" Width="160" Height="26"
+                              HorizontalAlignment="Left"
+                              FontSize="13"
+                              IsEditable="True"
+                              ItemsSource="{Binding WindowSizePresets}"
+                              Text="{Binding GameWindowSize, UpdateSourceTrigger=LostFocus}"
+                              IsEnabled="{Binding IsWindowed}"
+                              ToolTip="选择预设，或直接输入「宽x高」，例如 1366x768"/>
+
+                    <RadioButton Grid.Row="1" Grid.Column="0" Content="全屏" Margin="0,8,0,0"
+                                 GroupName="GameWindow"
+                                 IsChecked="{Binding IsFullscreen, Mode=TwoWay}"
+                                 FontSize="13" Foreground="#1A1A1A"/>
+                    <RadioButton Grid.Row="2" Grid.Column="0" Content="最大化" Margin="0,8,0,0"
+                                 GroupName="GameWindow"
+                                 IsChecked="{Binding IsMaximized, Mode=TwoWay}"
+                                 FontSize="13" Foreground="#1A1A1A"/>
+                </Grid>
+                <TextBlock Margin="0,8,0,0" Style="{StaticResource BodyText}"
+                           Text="窗口大小可选预设，也可以直接输入数字；「最大化」按主显示器分辨率启动。"/>
+
+                <!-- 附加参数 -->
+                <TextBlock Text="附加启动参数" Style="{StaticResource SectionTitle}" Margin="0,18,0,8"/>
+                <TextBlock Style="{StaticResource BodyText}" Text="JVM 参数（支持 ${version_name} 等变量）"/>
+                <TextBox Text="{Binding ExtraJvmArgs, UpdateSourceTrigger=PropertyChanged}"
+                         Margin="0,4,0,0" Height="26" VerticalContentAlignment="Center" Padding="6,0" FontSize="13"/>
+                <TextBlock Style="{StaticResource BodyText}" Text="游戏参数" Margin="0,8,0,0"/>
+                <TextBox Text="{Binding ExtraGameArgs, UpdateSourceTrigger=PropertyChanged}"
+                         Margin="0,4,0,0" Height="26" VerticalContentAlignment="Center" Padding="6,0" FontSize="13"/>
+
+                <!-- 版本隔离 -->
+                <TextBlock Text="版本隔离" Style="{StaticResource SectionTitle}" Margin="0,18,0,8"/>
+                <CheckBox Content="默认启用版本隔离（mods / 存档与其它版本分开）"
+                          IsChecked="{Binding DefaultIsolation}"
+                          FontSize="13" Foreground="#1A1A1A"/>
+                <TextBlock Margin="0,6,0,0" Style="{StaticResource BodyText}"
+                           Text="实例设置里可以单独覆盖，选择「跟随全局」时就按这里的值。"/>
+
+                <!-- 配置位置 -->
+                <TextBlock Text="配置文件位置" Style="{StaticResource SectionTitle}" Margin="0,18,0,8"/>
+                <TextBlock Style="{StaticResource BodyText}" Text="{Binding ConfigDirectory}" FontFamily="Consolas, 宋体"/>
+
+                <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
+                    <Button Style="{StaticResource SkinButton}"
+                            Command="{Binding SaveCommand}"
+                            Content="保存设置"
+                            Width="110" Height="30" FontSize="13"/>
+                    <TextBlock Margin="12,0,0,0" VerticalAlignment="Center"
+                               Style="{StaticResource BodyText}"
+                               Text="{Binding StatusText}"/>
+                </StackPanel>
             </StackPanel>
+        </ScrollViewer>
 
-            <!-- 附加参数 -->
-            <TextBlock Text="附加启动参数" Style="{StaticResource SectionTitle}" Margin="0,18,0,8"/>
-            <TextBlock Style="{StaticResource BodyText}" Text="JVM 参数（支持 ${version_name} 等变量）"/>
-            <TextBox Text="{Binding ExtraJvmArgs, UpdateSourceTrigger=PropertyChanged}"
-                     Margin="0,4,0,0" Height="26" VerticalContentAlignment="Center" Padding="6,0" FontSize="13"/>
-            <TextBlock Style="{StaticResource BodyText}" Text="游戏参数" Margin="0,8,0,0"/>
-            <TextBox Text="{Binding ExtraGameArgs, UpdateSourceTrigger=PropertyChanged}"
-                     Margin="0,4,0,0" Height="26" VerticalContentAlignment="Center" Padding="6,0" FontSize="13"/>
-
-            <!-- 下载源 -->
-            <TextBlock Text="下载源与隔离" Style="{StaticResource SectionTitle}" Margin="0,18,0,8"/>
-            <CheckBox Content="优先使用镜像源（BMCLAPI，国内更快）"
-                      IsChecked="{Binding PreferMirror}"
-                      FontSize="13" Foreground="#1A1A1A"/>
-            <CheckBox Content="默认启用版本隔离（mods / 存档与其它版本分开）"
-                      IsChecked="{Binding DefaultIsolation}"
-                      Margin="0,8,0,0"
-                      FontSize="13" Foreground="#1A1A1A"/>
-
-            <!-- 微软登录 -->
-            <TextBlock Text="微软正版登录" Style="{StaticResource SectionTitle}" Margin="0,18,0,8"/>
-            <TextBox Text="{Binding MsClientId, UpdateSourceTrigger=PropertyChanged}"
-                     Height="26" VerticalContentAlignment="Center" Padding="6,0" FontSize="13"
-                     ToolTip="Azure 应用注册里的「应用程序(客户端) ID」"/>
-            <TextBlock Margin="0,6,0,0" Style="{StaticResource BodyText}" Text="{Binding MsClientIdHint}"/>
-            <TextBlock Margin="0,6,0,0" Style="{StaticResource BodyText}" Text="{Binding MsSetupHint}"/>
-
-            <!-- CurseForge -->
-            <TextBlock Text="CurseForge API Key" Style="{StaticResource SectionTitle}" Margin="0,18,0,8"/>
-            <TextBox Text="{Binding CurseForgeApiKey, UpdateSourceTrigger=PropertyChanged}"
-                     Height="26" VerticalContentAlignment="Center" Padding="6,0" FontSize="13"/>
-            <TextBlock Margin="0,6,0,0" Style="{StaticResource BodyText}"
-                       Text="留空时依次尝试环境变量 MCLR_CURSEFORGE_API_KEY 与代码内默认值；都没有则 CurseForge 不可用（Modrinth 无需 Key，始终可用）。"/>
-
-            <!-- 配置位置 -->
-            <TextBlock Text="配置文件位置" Style="{StaticResource SectionTitle}" Margin="0,18,0,8"/>
-            <TextBlock Style="{StaticResource BodyText}" Text="{Binding ConfigDirectory}" FontFamily="Consolas, 宋体"/>
-
-            <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
-                <Button Style="{StaticResource SkinButton}"
-                        Command="{Binding SaveCommand}"
-                        Content="保存设置"
-                        Width="110" Height="30" FontSize="13"/>
-                <TextBlock Margin="12,0,0,0" VerticalAlignment="Center"
-                           Style="{StaticResource BodyText}"
-                           Text="{Binding StatusText}"/>
-            </StackPanel>
-        </StackPanel>
-    </ScrollViewer>
+    </Grid>
 </UserControl>

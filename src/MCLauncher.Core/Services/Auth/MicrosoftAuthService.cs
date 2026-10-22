@@ -279,7 +279,7 @@ public sealed class MicrosoftAuthService
         var xblToken = await AuthenticateXboxLiveAsync(token.AccessToken!, ct).ConfigureAwait(false);
 
         Report(progress, "获取 XSTS 令牌", "正在向 Xbox 安全令牌服务申请令牌");
-        var (xstsToken, uhs) = await AuthorizeXstsAsync(xblToken, ct).ConfigureAwait(false);
+        var (xstsToken, uhs, gamertag) = await AuthorizeXstsAsync(xblToken, ct).ConfigureAwait(false);
 
         Report(progress, "登录 Minecraft", "正在用 Xbox 令牌换取 Minecraft 访问令牌");
         var mcToken = await LoginWithXboxAsync(uhs, xstsToken, ct).ConfigureAwait(false);
@@ -297,6 +297,7 @@ public sealed class MicrosoftAuthService
             Uuid = profile.Id ?? string.Empty,
             AccessToken = mcToken,
             Xuid = uhs,
+            XboxName = gamertag,
             RefreshToken = token.RefreshToken,
             ExpiresAt = DateTimeOffset.Now.AddSeconds(Math.Max(60, token.ExpiresIn)),
             ClientId = clientId,
@@ -400,7 +401,7 @@ public sealed class MicrosoftAuthService
         }
     }
 
-    private async Task<(string Token, string Uhs)> AuthorizeXstsAsync(string xblToken, CancellationToken ct)
+    private async Task<(string Token, string Uhs, string? Gamertag)> AuthorizeXstsAsync(string xblToken, CancellationToken ct)
     {
         var payload = JsonSerializer.Serialize(new
         {
@@ -422,13 +423,15 @@ public sealed class MicrosoftAuthService
             var response = JsonUtil.Deserialize<XblTokenResponse>(json)
                            ?? throw new MsAuthException(MsAuthFailure.Unknown, "XSTS 响应无法解析");
 
-            var uhs = response.DisplayClaims?.Xui?.FirstOrDefault()?.GetValueOrDefault("uhs");
+            var claims = response.DisplayClaims?.Xui?.FirstOrDefault();
+            var uhs = claims?.GetValueOrDefault("uhs");
+            var gamertag = claims?.GetValueOrDefault("gtg");
             if (string.IsNullOrWhiteSpace(response.Token) || string.IsNullOrWhiteSpace(uhs))
             {
                 throw new MsAuthException(MsAuthFailure.Unknown, "XSTS 没有返回令牌或 uhs");
             }
 
-            return (response.Token!, uhs!);
+            return (response.Token!, uhs!, gamertag);
         }
         catch (HttpApiException ex)
         {

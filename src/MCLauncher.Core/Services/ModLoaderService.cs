@@ -120,6 +120,38 @@ public sealed partial class ModLoaderService
         _ => "OptiFine",
     };
 
+    /// <summary>
+    /// 解析整合包里的加载器描述，兼容 <c>Fabric 0.15.3</c> 与 CurseForge 的 <c>fabric-0.15.3</c>。
+    /// </summary>
+    public static (ModLoaderKind Kind, string? Version)? ParseLoaderDescription(string? description)
+    {
+        if (string.IsNullOrWhiteSpace(description))
+        {
+            return null;
+        }
+
+        var text = description.Trim();
+        var lower = text.ToLowerInvariant();
+
+        var kind = lower switch
+        {
+            _ when lower.StartsWith("fabric", StringComparison.Ordinal) => ModLoaderKind.Fabric,
+            _ when lower.StartsWith("quilt", StringComparison.Ordinal) => ModLoaderKind.Quilt,
+            _ when lower.StartsWith("neoforge", StringComparison.Ordinal) => ModLoaderKind.NeoForge,
+            _ when lower.StartsWith("forge", StringComparison.Ordinal) => ModLoaderKind.Forge,
+            _ => (ModLoaderKind?)null,
+        };
+
+        if (kind is null)
+        {
+            return null;
+        }
+
+        var separator = text.IndexOfAny(new[] { ' ', '-', ':' });
+        var version = separator >= 0 ? text[(separator + 1)..].Trim() : null;
+        return (kind.Value, string.IsNullOrWhiteSpace(version) ? null : version);
+    }
+
     // ------------------------------------------------------------------ 版本列表
 
     /// <summary>列出该加载器针对某个原版版本的可用加载器版本。</summary>

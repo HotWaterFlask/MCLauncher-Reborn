@@ -1,16 +1,25 @@
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Text.RegularExpressions;
 using System.Windows.Input;
 using MCLauncher.App.ViewModels.Mvvm;
+using MCLauncher.Core.Models;
 using MCLauncher.Core.Services;
 
 namespace MCLauncher.App.ViewModels;
 
-/// <summary>设置页：绑定 <see cref="AppSettings"/>，保存即写回配置文件。</summary>
+/// <summary>
+/// 设置页：只放全局设置。
+/// 实例的独立设置由实例管理页的「游戏设置」在右侧原地展示。
+/// </summary>
 public sealed class SettingsViewModel : ViewModelBase
 {
+    private static readonly Regex WindowSizePattern =
+        new(@"^\s*(\d{2,5})\s*[xX×*]\s*(\d{2,5})\s*$", RegexOptions.Compiled);
+
     private readonly LauncherStack _stack;
     private readonly AsyncRelayCommand _detectJavaCommand;
+
     private string _statusText = "修改后点「保存设置」生效";
     private bool _isBusy;
 
@@ -29,6 +38,8 @@ public sealed class SettingsViewModel : ViewModelBase
             Javas.Add(java);
         }
     }
+
+    // ---------------------------------------------------------------- 全局设置
 
     public ObservableCollection<DetectedJava> Javas { get; } = new();
 
@@ -93,19 +104,128 @@ public sealed class SettingsViewModel : ViewModelBase
         }
     }
 
+    /// <summary>窗口大小的常用预设；下拉框允许直接输入任意「宽x高」。</summary>
+    public IReadOnlyList<string> WindowSizePresets { get; } = new[]
+    {
+        "854x480",
+        "1280x720",
+        "1600x900",
+        "1920x1080",
+        "2560x1440",
+        "3840x2160",
+    };
+
+    public bool IsWindowed
+    {
+        get => _stack.Config.Settings.WindowMode == GameWindowMode.Windowed;
+        set
+        {
+            if (value)
+            {
+                SetWindowMode(GameWindowMode.Windowed);
+            }
+        }
+    }
+
+    public bool IsFullscreen
+    {
+        get => _stack.Config.Settings.WindowMode == GameWindowMode.Fullscreen;
+        set
+        {
+            if (value)
+            {
+                SetWindowMode(GameWindowMode.Fullscreen);
+            }
+        }
+    }
+
+    public bool IsMaximized
+    {
+        get => _stack.Config.Settings.WindowMode == GameWindowMode.Maximized;
+        set
+        {
+            if (value)
+            {
+                SetWindowMode(GameWindowMode.Maximized);
+            }
+        }
+    }
+
+    /// <summary>窗口化尺寸，格式「宽x高」；选预设或直接改数字都走这里。</summary>
+    public string GameWindowSize
+    {
+        get
+        {
+            var settings = _stack.Config.Settings;
+            return settings.DefaultWidth > 0 && settings.DefaultHeight > 0
+                ? $"{settings.DefaultWidth}x{settings.DefaultHeight}"
+                : "854x480";
+        }
+        set
+        {
+            var match = WindowSizePattern.Match(value ?? string.Empty);
+            if (!match.Success
+                || !int.TryParse(match.Groups[1].Value, out var width)
+                || !int.TryParse(match.Groups[2].Value, out var height)
+                || width < 100 || height < 100)
+            {
+                // 输入不合法：还原成当前有效值（失焦时才触发，不会打断输入过程）。
+                OnPropertyChanged();
+                return;
+            }
+
+            var settings = _stack.Config.Settings;
+            if (settings.DefaultWidth == width && settings.DefaultHeight == height)
+            {
+                return;
+            }
+
+            settings.DefaultWidth = width;
+            settings.DefaultHeight = height;
+            OnPropertyChanged();
+        }
+    }
+
+    private void SetWindowMode(GameWindowMode mode)
+    {
+        var settings = _stack.Config.Settings;
+        if (settings.WindowMode == mode)
+        {
+            return;
+        }
+
+        settings.WindowMode = mode;
+        OnPropertyChanged(nameof(IsWindowed));
+        OnPropertyChanged(nameof(IsFullscreen));
+        OnPropertyChanged(nameof(IsMaximized));
+    }
+
     public string GameFolder
     {
         get => _stack.Config.Settings.SelectedGameFolder ?? string.Empty;
         set
         {
-            if (string.Equals(_stack.Config.Settings.SelectedGameFolder, value, StringComparison.Ordinal))
+            var normalized = string.IsNullOrWhiteSpace(value)
+                ? null
+                : LauncherStack.NormalizeGameFolder(value.Trim());
+
+            if (string.Equals(_stack.Config.Settings.SelectedGameFolder, normalized, StringComparison.Ordinal))
             {
                 return;
             }
 
-            _stack.Config.Settings.SelectedGameFolder = value;
+            if (normalized is not null && Directory.Exists(normalized))
+            {
+                // 有效目录直接交给栈处理：会补进目录列表并保存/通知其它页面。
+                _stack.SelectGameFolder(normalized);
+            }
+            else
+            {
+                _stack.Config.Settings.SelectedGameFolder = normalized;
+                _stack.Config.Save();
+            }
+
             OnPropertyChanged();
-            _stack.RaiseChanged();
         }
     }
 
@@ -162,46 +282,6 @@ public sealed class SettingsViewModel : ViewModelBase
         }
     }
 
-    public string MsClientId
-    {
-        get => _stack.Config.Settings.MsClientId ?? string.Empty;
-        set
-        {
-            var normalized = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-            if (string.Equals(_stack.Config.Settings.MsClientId, normalized, StringComparison.Ordinal))
-            {
-                return;
-            }
-
-            _stack.Config.Settings.MsClientId = normalized;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(MsClientIdHint));
-        }
-    }
-
-    /// <summary>客户端 ID 缺失时的引导文案（缺失不算错误，只是功能不可用）。</summary>
-    public string MsClientIdHint => _stack.Config.ResolveMsClientId() is null
-        ? "尚未配置：微软正版登录将不可用。需在 Azure 注册应用后把客户端 ID 填到此处。"
-        : "已配置，可用于微软正版登录。";
-
-    public string MsSetupHint => _stack.MicrosoftAuth.DescribeSetup();
-
-    public string CurseForgeApiKey
-    {
-        get => _stack.Config.Settings.CurseForgeApiKey ?? string.Empty;
-        set
-        {
-            var normalized = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-            if (string.Equals(_stack.Config.Settings.CurseForgeApiKey, normalized, StringComparison.Ordinal))
-            {
-                return;
-            }
-
-            _stack.Config.Settings.CurseForgeApiKey = normalized;
-            OnPropertyChanged();
-        }
-    }
-
     public string ConfigDirectory => _stack.Config.ConfigDirectory;
 
     public string StatusText
@@ -229,6 +309,8 @@ public sealed class SettingsViewModel : ViewModelBase
     public ICommand BrowseJavaCommand { get; }
 
     public ICommand DetectJavaCommand { get; }
+
+    // ---------------------------------------------------------------- 全局操作
 
     private void Save()
     {

@@ -16,7 +16,8 @@ public sealed class MicrosoftAuthTests
         log = new TestLog();
         var temp = new TempDirectory();
         var store = new JsonConfigStore(temp.Path, log);
-        config = new ConfigService(store, log);
+        // 单元测试不依赖开发者本机 LocalSecrets 里的真实凭据。
+        config = new ConfigService(store, log, includeBuiltInSecrets: false);
         config.Load();
 
         if (clientId is not null)

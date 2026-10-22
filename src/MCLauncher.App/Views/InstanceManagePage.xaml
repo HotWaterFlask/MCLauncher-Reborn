@@ -1,0 +1,458 @@
+<UserControl x:Class="MCLauncher.App.Views.InstanceManagePage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:views="clr-namespace:MCLauncher.App.Views"
+             mc:Ignorable="d"
+             d:DesignHeight="450" d:DesignWidth="720">
+    <UserControl.Resources>
+        <!-- 左侧资源类别 -->
+        <Style x:Key="ManageTabItemStyle" TargetType="ListBoxItem">
+            <Setter Property="Foreground" Value="#1A1A1A"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="4"
+                                Padding="10,8" Margin="0,1">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#F2F7FD"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#E3F0FA"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 侧栏「游戏设置」按钮 -->
+        <Style x:Key="SidebarButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#1A1A1A"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                CornerRadius="4" Padding="10,8">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#F2F7FD"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 小图标按钮（详情 / 删除） -->
+        <Style x:Key="RowIconButton" TargetType="Button">
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Foreground" Value="#5A5A5A"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="3">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#EEF3F9"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 资源行 -->
+        <Style x:Key="ResourceItemStyle" TargetType="ListBoxItem">
+            <Setter Property="Foreground" Value="#1A1A1A"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" Background="Transparent"
+                                BorderBrush="#F0F0F0" BorderThickness="0,0,0,1">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#F5F9FD"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#E3F0FA"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Margin="20,18,20,16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- ===== 头部 ===== -->
+        <Grid Grid.Row="0">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Button Style="{StaticResource SkinButton}" Command="{Binding BackCommand}"
+                        Content="← 返回实例列表" Width="112" Height="26" FontSize="12"
+                        Margin="0,0,12,0"/>
+                <TextBlock Text="实例管理" Style="{StaticResource PageTitle}"/>
+                <TextBlock Text="{Binding InstanceDisplay}" FontSize="15" FontWeight="SemiBold"
+                           Foreground="#2F6FB6" Margin="10,0,0,0" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" MaxWidth="320"/>
+            </StackPanel>
+            <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center"
+                       Text="{Binding InstanceSubtitle}" FontSize="11" Foreground="#7A7A7A"
+                       TextTrimming="CharacterEllipsis" MaxWidth="360"/>
+        </Grid>
+
+        <!-- ===== 主体 ===== -->
+        <Grid Grid.Row="1" Margin="0,12,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="176"/>
+                <ColumnDefinition Width="14"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- 左栏 -->
+            <Border Grid.Column="0" Background="White" CornerRadius="6"
+                    BorderBrush="{StaticResource ContentBorderBrush}" BorderThickness="1">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="{Binding InstanceDirectory}"
+                               Margin="12,10,12,4" FontSize="10" Foreground="#8A8A8A"
+                               TextTrimming="CharacterEllipsis"
+                               ToolTip="{Binding InstanceDirectory}"/>
+
+                    <Button DockPanel.Dock="Top"
+                            Command="{Binding OpenSettingsCommand}" Margin="6,4,6,2">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource SidebarButtonStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsSettingsMode}" Value="True">
+                                        <Setter Property="Background" Value="#E3F0FA"/>
+                                        <Setter Property="Foreground" Value="#2F6FB6"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="15"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Text="游戏设置" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+
+                    <Button DockPanel.Dock="Top"
+                            Command="{Binding OpenEngineCommand}" Margin="6,0,6,2">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource SidebarButtonStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsEngineMode}" Value="True">
+                                        <Setter Property="Background" Value="#E3F0FA"/>
+                                        <Setter Property="Foreground" Value="#2F6FB6"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE90F;" FontFamily="Segoe MDL2 Assets" FontSize="15"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Text="引擎管理" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+
+                    <TextBlock DockPanel.Dock="Top" Text="管理" Margin="12,8,0,4"
+                               FontSize="11" Foreground="#8A8A8A"/>
+
+                    <ListBox ItemsSource="{Binding Tabs}"
+                             SelectedItem="{Binding SelectedTab, Mode=TwoWay}"
+                             Background="Transparent" BorderThickness="0"
+                             Margin="6,0,6,8"
+                             ItemContainerStyle="{StaticResource ManageTabItemStyle}"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding Glyph}" FontFamily="Segoe MDL2 Assets"
+                                               FontSize="15" Foreground="#5A5A5A" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding Label}" Margin="10,0,0,0"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+
+            <!-- 右栏：资源列表 / 实例设置 -->
+            <Border Grid.Column="2" Background="White" CornerRadius="6"
+                    BorderBrush="{StaticResource ContentBorderBrush}" BorderThickness="1">
+                <Grid>
+                <DockPanel>
+                    <DockPanel.Style>
+                        <Style TargetType="DockPanel">
+                            <Setter Property="Visibility" Value="Visible"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsSettingsMode}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsEngineMode}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsServerMode}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DockPanel.Style>
+                    <Grid DockPanel.Dock="Top" Margin="10,10,10,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Button Grid.Column="0" Style="{StaticResource SkinButton}"
+                                Command="{Binding RefreshCommand}"
+                                Width="66" Height="26" FontSize="12" Content="刷新"/>
+
+                        <Button Grid.Column="1" Style="{StaticResource SkinButton}"
+                                Command="{Binding AddCommand}"
+                                Content="{Binding AddButtonText}"
+                                Width="94" Height="26" FontSize="12" Margin="6,0,0,0"/>
+
+                        <Button Grid.Column="2" Style="{StaticResource SkinButton}"
+                                Command="{Binding OpenFolderCommand}"
+                                Width="90" Height="26" FontSize="12" Margin="6,0,0,0"
+                                Content="打开文件夹"/>
+
+                        <Button Grid.Column="3" Style="{StaticResource SkinButton}"
+                                Command="{Binding CheckUpdatesCommand}"
+                                Width="80" Height="26" FontSize="12" Margin="6,0,0,0"
+                                Content="检查更新"
+                                ToolTip="用 CurseForge 指纹匹配本地文件，查找可更新版本"
+                                Visibility="{Binding SupportsUpdate, Converter={StaticResource BoolToVis}}"/>
+
+                        <Button Grid.Column="4" Style="{StaticResource SkinButton}"
+                                Command="{Binding OpenDownloadCommand}"
+                                Width="60" Height="26" FontSize="12" Margin="6,0,0,0"
+                                Content="下载"
+                                ToolTip="从 CurseForge 检索并下载"
+                                Visibility="{Binding SupportsDownload, Converter={StaticResource BoolToVis}}"/>
+
+                        <TextBox Grid.Column="5" Margin="8,0,8,0"
+                                 Height="26" FontSize="12" Padding="6,0"
+                                 VerticalContentAlignment="Center"
+                                 Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="按名称 / 文件名 / 版本搜索"/>
+
+                        <TextBlock Grid.Column="6" VerticalAlignment="Center"
+                                   FontSize="11" Foreground="#7A7A7A"
+                                   Text="{Binding Items.Count, StringFormat=共 {0} 项}"/>
+                    </Grid>
+
+                    <Border DockPanel.Dock="Bottom" Padding="10,8" Background="#F7F7F7"
+                            BorderBrush="{StaticResource ContentBorderBrush}" BorderThickness="0,1,0,0">
+                        <TextBlock Text="{Binding StatusText}" FontSize="12" Foreground="#5A5A5A"
+                                   TextTrimming="CharacterEllipsis" ToolTip="{Binding StatusText}"/>
+                    </Border>
+
+                    <Grid>
+                        <ListBox ItemsSource="{Binding Items}"
+                                 Background="Transparent" BorderThickness="0"
+                                 ItemContainerStyle="{StaticResource ResourceItemStyle}"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 VirtualizingPanel.IsVirtualizing="True"
+                                 VirtualizingPanel.VirtualizationMode="Recycling">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Height="58" Margin="8,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="26"/>
+                                            <ColumnDefinition Width="36"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <CheckBox Grid.Column="0" VerticalAlignment="Center"
+                                                  ToolTip="启用 / 禁用"
+                                                  IsChecked="{Binding IsEnabled, Mode=OneWay}"
+                                                  Visibility="{Binding CanToggle, Converter={StaticResource BoolToVis}}"
+                                                  Command="{Binding Owner.ToggleEnabledCommand}"
+                                                  CommandParameter="{Binding}"/>
+
+                                        <Grid Grid.Column="1" Width="30" Height="30" VerticalAlignment="Center">
+                                            <Border Background="#F1F5F9" CornerRadius="5">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding HasIcon}" Value="True">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <TextBlock Text="{Binding IconGlyph}" FontFamily="Segoe MDL2 Assets"
+                                                           FontSize="15" Foreground="#4A6FA5"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <Image Source="{Binding Icon}" Stretch="UniformToFill"
+                                                   RenderOptions.BitmapScalingMode="HighQuality"
+                                                   Visibility="{Binding HasIcon, Converter={StaticResource BoolToVis}}"/>
+                                        </Grid>
+
+                                        <StackPanel Grid.Column="2" Margin="6,0,8,0" VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold"
+                                                           TextTrimming="CharacterEllipsis" MaxWidth="240"
+                                                           ToolTip="{Binding ToolTipText}"/>
+                                                <Border Background="#E8EEF7" CornerRadius="3"
+                                                        Padding="5,1" Margin="8,0,0,0"
+                                                        VerticalAlignment="Center"
+                                                        Visibility="{Binding HasVersion, Converter={StaticResource BoolToVis}}">
+                                                    <TextBlock Text="{Binding VersionText}" FontSize="10"
+                                                               Foreground="#3F628E"/>
+                                                </Border>
+                                                <Border Background="#EDE7F6" CornerRadius="3"
+                                                        Padding="5,1" Margin="4,0,0,0"
+                                                        VerticalAlignment="Center"
+                                                        Visibility="{Binding HasLoader, Converter={StaticResource BoolToVis}}">
+                                                    <TextBlock Text="{Binding LoaderText}" FontSize="10"
+                                                               Foreground="#6A4C93"/>
+                                                </Border>
+                                                <Border Background="#FFF1D6" CornerRadius="3"
+                                                        Padding="5,1" Margin="4,0,0,0"
+                                                        VerticalAlignment="Center"
+                                                        Visibility="{Binding UpdateAvailable, Converter={StaticResource BoolToVis}}">
+                                                    <TextBlock Text="{Binding UpdateVersionText, StringFormat=可更新 → {0}}"
+                                                               FontSize="10" Foreground="#A05A00"/>
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Text="{Binding Subtitle}" FontSize="10" Foreground="#8A8A8A"
+                                                       Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+
+                                        <Button Grid.Column="3" Style="{StaticResource RowIconButton}"
+                                                Content="更新" Width="44" FontSize="11"
+                                                ToolTip="下载并替换为可用的新版本"
+                                                Command="{Binding Owner.UpdateResourceCommand}"
+                                                CommandParameter="{Binding}"
+                                                Visibility="{Binding UpdateAvailable, Converter={StaticResource BoolToVis}}"/>
+
+                                        <Button Grid.Column="4" Style="{StaticResource RowIconButton}"
+                                                Content="备份" Width="44" FontSize="11"
+                                                ToolTip="把这个存档打包备份到 backups 目录"
+                                                Command="{Binding Owner.BackupCommand}"
+                                                CommandParameter="{Binding}"
+                                                Visibility="{Binding IsWorld, Converter={StaticResource BoolToVis}}"/>
+
+                                        <Button Grid.Column="5" Style="{StaticResource RowIconButton}"
+                                                Content="&#xE946;" FontFamily="Segoe MDL2 Assets"
+                                                ToolTip="查看详情"
+                                                Command="{Binding Owner.InfoCommand}"
+                                                CommandParameter="{Binding}"/>
+
+                                        <Button Grid.Column="6" Style="{StaticResource RowIconButton}"
+                                                Content="&#x2715;" FontSize="11"
+                                                ToolTip="删除"
+                                                Command="{Binding Owner.DeleteCommand}"
+                                                CommandParameter="{Binding}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    Visibility="{Binding ShowEmptyHint, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="{Binding EmptyHint}" FontSize="13" Foreground="#5A5A5A"
+                                       HorizontalAlignment="Center" TextAlignment="Center" MaxWidth="360"
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Grid>
+                </DockPanel>
+
+                <!-- 游戏设置：在同一块右栏内原地显示 -->
+                <Grid Visibility="{Binding IsSettingsMode, Converter={StaticResource BoolToVis}}">
+                    <views:InstanceSettingsView DataContext="{Binding Settings}"/>
+                </Grid>
+
+                <!-- 引擎管理：加载器状态与安装/卸载 -->
+                <Grid Visibility="{Binding IsEngineMode, Converter={StaticResource BoolToVis}}">
+                    <views:EngineManagementView DataContext="{Binding Engine}"/>
+                </Grid>
+
+                <!-- 服务器管理：servers.dat 列表与编辑 -->
+                <Grid Visibility="{Binding IsServerMode, Converter={StaticResource BoolToVis}}">
+                    <views:ServerManagementView DataContext="{Binding Servers}"/>
+                </Grid>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- ===== 详情弹窗 ===== -->
+        <Grid Grid.RowSpan="2" Background="#66000000" Panel.ZIndex="20"
+              Visibility="{Binding IsDetailOpen, Converter={StaticResource BoolToVis}}">
+            <Border Width="520" MaxHeight="460" Background="White" CornerRadius="8" Padding="18,16"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    BorderBrush="#D8D8D8" BorderThickness="1">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top">
+                        <TextBlock Text="{Binding DetailTitle}" FontSize="15" FontWeight="SemiBold"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="{Binding DetailSubtitle}" FontSize="11" Foreground="#7A7A7A"
+                                   Margin="0,4,0,0"/>
+                    </StackPanel>
+
+                    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
+                                HorizontalAlignment="Right" Margin="0,12,0,0">
+                        <Button Style="{StaticResource SkinButton}" Content="打开所在位置"
+                                Width="104" Height="28" FontSize="12"
+                                Command="{Binding OpenDetailFolderCommand}"/>
+                        <Button Style="{StaticResource SkinButton}" Content="关闭"
+                                Width="76" Height="28" FontSize="12" Margin="8,0,0,0"
+                                Command="{Binding CloseDetailCommand}"/>
+                    </StackPanel>
+
+                    <TextBox Margin="0,10,0,0" Height="240" IsReadOnly="True"
+                             Text="{Binding DetailText, Mode=OneWay}"
+                             TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"
+                             Background="#F7F8FA" BorderBrush="#E2E6EC" BorderThickness="1"
+                             Padding="8" FontSize="12" FontFamily="Microsoft YaHei UI, Segoe UI"/>
+                </DockPanel>
+            </Border>
+        </Grid>
+
+        <!-- ===== 资源下载弹窗 ===== -->
+        <Grid Grid.RowSpan="2" Panel.ZIndex="30" DataContext="{Binding Download}"
+              Visibility="{Binding IsOpen, Converter={StaticResource BoolToVis}}">
+            <views:ResourceDownloadView/>
+        </Grid>
+    </Grid>
+</UserControl>

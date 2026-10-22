@@ -40,6 +40,13 @@ public sealed class LocalResource
     /// <summary>资源声明的目标游戏版本（存档为存档版本，Mod 为加载器/MC 版本）。</summary>
     public string? GameVersion { get; set; }
 
+    /// <summary>Mod 使用的加载器（Fabric / Forge / NeoForge / Quilt），其它资源为 null。</summary>
+    public string? Loader { get; set; }
+
+    /// <summary>列表里显示的图标（Mod logo / 资源包 pack.png / 存档 icon.png）。</summary>
+    [JsonIgnore]
+    public byte[]? IconBytes { get; set; }
+
     /// <summary>大小的人类可读形式。</summary>
     [JsonIgnore]
     public string SizeText => SizeBytes switch

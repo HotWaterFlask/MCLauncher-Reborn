@@ -59,8 +59,17 @@ public sealed class ShellViewModel : ViewModelBase
     public object? CurrentPage
     {
         get => _currentPage;
-        private set => SetProperty(ref _currentPage, value);
+        private set
+        {
+            if (SetProperty(ref _currentPage, value))
+            {
+                OnPropertyChanged(nameof(IsHomePage));
+            }
+        }
     }
+
+    /// <summary>当前停在首页：首页不铺白色底板，直接露出背景图。</summary>
+    public bool IsHomePage => _currentPage is HomeViewModel;
 
     /// <summary>选中的导航项；赋值即切页。</summary>
     public NavItem? SelectedNavItem
@@ -99,6 +108,27 @@ public sealed class ShellViewModel : ViewModelBase
         {
             SelectedNavItem = item;
         }
+    }
+
+    /// <summary>
+    /// 打开不在顶部导航里的页面（如实例管理）：清空导航选中项，仍复用页面缓存。
+    /// </summary>
+    public void NavigateToPage(string pageId, string title)
+    {
+        if (!_pageCache.TryGetValue(pageId, out var page))
+        {
+            page = _pageFactory(pageId);
+            _pageCache[pageId] = page;
+        }
+
+        if (_selectedNavItem is not null)
+        {
+            _selectedNavItem = null;
+            OnPropertyChanged(nameof(SelectedNavItem));
+        }
+
+        CurrentPage = page;
+        StatusText = title;
     }
 
     private void Navigate(NavItem item)

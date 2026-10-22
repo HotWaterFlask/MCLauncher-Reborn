@@ -1,6 +1,7 @@
 using MCLauncher.Core.Abstractions;
 using MCLauncher.Core.Logging;
 using MCLauncher.Core.Models;
+using MCLauncher.Core.Services.Auth;
 using MCLauncher.Core.Utils;
 
 namespace MCLauncher.Core.Services;
@@ -22,6 +23,9 @@ public sealed class GameLaunchRequest
 
     /// <summary>指定 Java；为空时自动按版本要求挑选。</summary>
     public JavaInfo? JavaOverride { get; init; }
+
+    /// <summary>启动器配置目录（外置登录时缓存 authlib-injector）。</summary>
+    public string? AuthlibCacheDirectory { get; init; }
 }
 
 /// <summary>
@@ -35,6 +39,8 @@ public sealed class GameLaunchService
     private readonly JavaService _javaService;
     private readonly LaunchArgumentBuilder _argumentBuilder;
     private readonly GameLauncher _launcher;
+    private readonly AuthlibAuthService _authlibAuth;
+    private readonly AuthlibInjectorService _authlibInjector;
     private readonly ILogger _log;
 
     public GameLaunchService(
@@ -43,6 +49,8 @@ public sealed class GameLaunchService
         JavaService javaService,
         LaunchArgumentBuilder argumentBuilder,
         GameLauncher launcher,
+        AuthlibAuthService authlibAuth,
+        AuthlibInjectorService authlibInjector,
         ILogger log)
     {
         _repository = repository;
@@ -50,6 +58,8 @@ public sealed class GameLaunchService
         _javaService = javaService;
         _argumentBuilder = argumentBuilder;
         _launcher = launcher;
+        _authlibAuth = authlibAuth;
+        _authlibInjector = authlibInjector;
         _log = log;
     }
 
@@ -111,6 +121,42 @@ public sealed class GameLaunchService
             logConfigPath = null;
         }
 
+        // 外置登录：准备 authlib-injector 与认证服务器元数据。
+        string? authlibJar = null;
+        string? authlibPrefetched = null;
+        if (request.Account.IsExternal)
+        {
+            if (string.IsNullOrWhiteSpace(request.Account.AuthServer))
+            {
+                throw new InvalidOperationException("外置登录账号缺少认证服务器地址，请重新登录");
+            }
+
+            if (string.IsNullOrWhiteSpace(request.AuthlibCacheDirectory))
+            {
+                throw new InvalidOperationException("缺少启动器配置目录，无法准备外置登录组件");
+            }
+
+            progress?.Report(new InstallProgress { Stage = "准备外置登录组件" });
+            authlibJar = await _authlibInjector
+                .EnsureJarAsync(request.AuthlibCacheDirectory, ct)
+                .ConfigureAwait(false);
+
+            try
+            {
+                var metadata = await _authlibAuth
+                    .FetchMetadataAsync(request.Account.AuthServer, ct)
+                    .ConfigureAwait(false);
+
+                authlibPrefetched = Convert.ToBase64String(
+                    System.Text.Encoding.UTF8.GetBytes(metadata.RawJson));
+            }
+            catch (Exception ex)
+            {
+                // 预取只是加速；失败时让 authlib-injector 自己拉取。
+                _log.Warn("预取认证服务器元数据失败，将由游戏内自行获取", ex);
+            }
+        }
+
         var context = new LaunchContext
         {
             Version = version,
@@ -127,6 +173,9 @@ public sealed class GameLaunchService
             ClientJarPath = clientJarPath,
             AssetsIndexName = indexInfo?.Id,
             LogConfigPath = logConfigPath,
+            AuthlibInjectorJar = authlibJar,
+            AuthlibServer = request.Account.AuthServer,
+            AuthlibPrefetchedMetadata = authlibPrefetched,
         };
 
         if (request.Isolated)
@@ -134,9 +183,50 @@ public sealed class GameLaunchService
             PathUtil.EnsureDirectory(context.GameDirectory);
         }
 
+        ApplyFullscreenOption(context.GameDirectory, request.Options.WindowMode == GameWindowMode.Fullscreen);
+
         var command = _argumentBuilder.Build(context);
         _log.Info($"使用 Java {java.MajorVersion}（{java.Path}）启动 {request.VersionId}");
 
         return _launcher.Start(command, logBuffer, java.MajorVersion);
+    }
+
+    /// <summary>
+    /// 把窗口类型落到 <c>options.txt</c> 的 fullscreen 开关：全屏为 true，窗口化/最大化为 false。
+    /// 其它行原样保留，避免覆盖玩家的按键、音量等设置。
+    /// </summary>
+    private void ApplyFullscreenOption(string gameDirectory, bool fullscreen)
+    {
+        try
+        {
+            var path = Path.Combine(gameDirectory, "options.txt");
+            var lines = File.Exists(path)
+                ? File.ReadAllLines(path).ToList()
+                : new List<string>();
+
+            var value = "fullscreen:" + (fullscreen ? "true" : "false");
+            var index = lines.FindIndex(line => line.StartsWith("fullscreen:", StringComparison.Ordinal));
+
+            if (index >= 0)
+            {
+                if (string.Equals(lines[index], value, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                lines[index] = value;
+            }
+            else
+            {
+                lines.Add(value);
+            }
+
+            File.WriteAllLines(path, lines);
+        }
+        catch (Exception ex)
+        {
+            // 写不进去也不影响启动，最多是不按用户选择的窗口类型显示。
+            _log.Warn($"写入 options.txt 的 fullscreen 开关失败：{gameDirectory}", ex);
+        }
     }
 }

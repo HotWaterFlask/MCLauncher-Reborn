@@ -123,4 +123,160 @@ public sealed class InstanceService
 
     /// <summary>删除实例（含隔离目录与配置）。</summary>
     public bool Delete(string gameDirectory, string versionId) => _repository.Delete(gameDirectory, versionId);
+
+    // ------------------------------------------------------------------ 创建实例
+
+    /// <summary>
+    /// 把用户输入的实例名规整成合法且不冲突的目录名：替换非法字符，冲突时追加 (2)、(3)。
+    /// </summary>
+    public string CreateUniqueInstanceId(string gameDirectory, string? desiredName, string fallbackName)
+    {
+        var name = string.IsNullOrWhiteSpace(desiredName) ? fallbackName : desiredName.Trim();
+        var invalid = Path.GetInvalidFileNameChars();
+        var builder = new System.Text.StringBuilder(name.Length);
+
+        foreach (var ch in name)
+        {
+            builder.Append(Array.IndexOf(invalid, ch) >= 0 ? '_' : ch);
+        }
+
+        name = builder.ToString().Trim().TrimEnd('.');
+        if (string.IsNullOrWhiteSpace(name) || name is "." or "..")
+        {
+            name = fallbackName;
+        }
+
+        var candidate = name;
+        var suffix = 2;
+        while (Directory.Exists(VersionRepository.VersionDirectory(gameDirectory, candidate)))
+        {
+            candidate = $"{name} ({suffix++})";
+        }
+
+        return candidate;
+    }
+
+    /// <summary>
+    /// 创建一个「只继承原版」的空实例：不复制客户端 jar，<c>jar</c> 指回基底版本。
+    /// 这样同一个原版可以开多个互不影响（mods / 存档隔离）的实例。
+    /// </summary>
+    public string CreateProfileInstance(
+        string gameDirectory,
+        string instanceId,
+        string baseVersionId,
+        string? displayName = null,
+        bool isolated = true)
+    {
+        if (_repository.IsInstalled(gameDirectory, instanceId))
+        {
+            throw new InvalidOperationException($"实例 {instanceId} 已经存在");
+        }
+
+        var baseVersion = _repository.TryLoad(gameDirectory, baseVersionId)
+                          ?? throw new InvalidOperationException($"基底版本 {baseVersionId} 还没有安装");
+
+        _repository.Save(gameDirectory, new GameVersionJson
+        {
+            Id = instanceId,
+            InheritsFrom = baseVersionId,
+            Jar = baseVersionId,
+            Type = baseVersion.Type ?? "release",
+        });
+
+        var config = Load(gameDirectory, instanceId);
+        config.DisplayName = string.IsNullOrWhiteSpace(displayName) ? instanceId : displayName.Trim();
+        config.Isolated = isolated;
+        Save(gameDirectory, instanceId, config);
+
+        if (isolated)
+        {
+            EnsureIsolatedLayout(gameDirectory, instanceId);
+        }
+
+        _log.Info($"已创建实例 {instanceId}（继承 {baseVersionId}）");
+        return instanceId;
+    }
+
+    /// <summary>
+    /// 把加载器安装生成的版本目录接管为实例：重命名到实例名，并把客户端 jar 指回基底原版，
+    /// 避免启动时去找一个不存在的 <c>versions/&lt;实例名&gt;/&lt;实例名&gt;.jar</c>。
+    /// </summary>
+    public string AdoptLoaderVersion(
+        string gameDirectory,
+        string technicalVersionId,
+        string instanceId,
+        string baseVersionId,
+        string loaderDescription,
+        string? displayName = null,
+        bool isolated = true)
+    {
+        if (!string.Equals(technicalVersionId, instanceId, StringComparison.OrdinalIgnoreCase))
+        {
+            _repository.Rename(gameDirectory, technicalVersionId, instanceId);
+        }
+
+        var version = _repository.TryLoad(gameDirectory, instanceId)
+                      ?? throw new InvalidOperationException($"加载器版本 {instanceId} 不存在");
+
+        // Forge/Fabric 的版本 JSON 不带 jar 字段，合并后 ResolveJarId 会指向实例自己。
+        if (string.IsNullOrWhiteSpace(version.Jar))
+        {
+            version.Jar = baseVersionId;
+            _repository.Save(gameDirectory, version);
+        }
+
+        var config = Load(gameDirectory, instanceId);
+        config.DisplayName = string.IsNullOrWhiteSpace(displayName) ? instanceId : displayName.Trim();
+        config.Isolated = isolated;
+        if (!config.Loaders.Contains(loaderDescription, StringComparer.OrdinalIgnoreCase))
+        {
+            config.Loaders.Add(loaderDescription);
+        }
+
+        Save(gameDirectory, instanceId, config);
+
+        if (isolated)
+        {
+            EnsureIsolatedLayout(gameDirectory, instanceId);
+        }
+
+        _log.Info($"已把 {technicalVersionId} 接管为实例 {instanceId}（{loaderDescription}）");
+        return instanceId;
+    }
+
+    /// <summary>
+    /// 卸载实例上的加载器：把版本 JSON 还原成只继承原版基底的薄配置，
+    /// mods / 存档 / 配置保持不变（加载器的库文件留在共享 libraries 里，不影响原版启动）。
+    /// 只对「基底版本已安装且不是实例自身」的实例生效。
+    /// </summary>
+    public bool RemoveLoader(string gameDirectory, string versionId, string? baseVersionId)
+    {
+        if (string.IsNullOrWhiteSpace(baseVersionId)
+            || string.Equals(baseVersionId, versionId, StringComparison.OrdinalIgnoreCase)
+            || !_repository.IsInstalled(gameDirectory, baseVersionId))
+        {
+            return false;
+        }
+
+        var version = _repository.TryLoad(gameDirectory, versionId);
+        if (version is null)
+        {
+            return false;
+        }
+
+        _repository.Save(gameDirectory, new GameVersionJson
+        {
+            Id = versionId,
+            InheritsFrom = baseVersionId,
+            Jar = baseVersionId,
+            Type = version.Type ?? "release",
+        });
+
+        var config = Load(gameDirectory, versionId);
+        config.Loaders.Clear();
+        Save(gameDirectory, versionId, config);
+
+        _log.Info($"已卸载实例 {versionId} 的加载器，恢复为继承 {baseVersionId}");
+        return true;
+    }
 }

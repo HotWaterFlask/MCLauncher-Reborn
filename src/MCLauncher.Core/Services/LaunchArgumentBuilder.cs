@@ -62,6 +62,15 @@ public sealed class LaunchContext
     /// <summary>下载好的 log4j 配置文件路径（老版本需要）。</summary>
     public string? LogConfigPath { get; init; }
 
+    /// <summary>外置登录：authlib-injector jar 的绝对路径。</summary>
+    public string? AuthlibInjectorJar { get; init; }
+
+    /// <summary>外置登录：认证服务器 API 根地址。</summary>
+    public string? AuthlibServer { get; init; }
+
+    /// <summary>外置登录：认证服务器元数据（base64），供 authlib-injector 预取。</summary>
+    public string? AuthlibPrefetchedMetadata { get; init; }
+
     /// <summary>额外特性开关（默认按分辨率为用户设定推导）。</summary>
     public IReadOnlyDictionary<string, bool>? Features { get; init; }
 
@@ -107,6 +116,19 @@ public sealed class LaunchArgumentBuilder
         {
             // Log4Shell 缓解措施：老版本自带的 log4j 无法升级，只能靠这个开关兜住。
             jvm.Add("-Dlog4j2.formatMsgNoLookups=true");
+        }
+
+        // 外置登录：交给 authlib-injector 拦截会话请求。
+        if (!string.IsNullOrWhiteSpace(context.AuthlibInjectorJar) &&
+            !string.IsNullOrWhiteSpace(context.AuthlibServer))
+        {
+            jvm.Add($"-javaagent:{context.AuthlibInjectorJar}={context.AuthlibServer}");
+            jvm.Add("-Dauthlibinjector.side=client");
+
+            if (!string.IsNullOrWhiteSpace(context.AuthlibPrefetchedMetadata))
+            {
+                jvm.Add("-Dauthlibinjector.yggdrasil.prefetched=" + context.AuthlibPrefetchedMetadata);
+            }
         }
 
         if (version.Arguments?.Jvm is { Count: > 0 } jvmFromJson)
