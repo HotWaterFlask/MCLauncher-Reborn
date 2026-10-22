@@ -15,8 +15,18 @@ public sealed class PageFactory
     public const string LaunchLogPageId = "log";
     public const string SettingsPageId = "settings";
 
+    /// <summary>实例管理页不放在顶部导航里，只能从实例列表进入。</summary>
+    public const string InstanceManagePageId = "instance-manage";
+
     private readonly LauncherStack _stack;
     private Action<string>? _navigate;
+    private Action<string, string>? _pageNavigate;
+
+    // 页面由 ShellViewModel 缓存，这里再持有一份引用，方便跨页面跳转时直接调用目标页的方法。
+    private HomeViewModel? _home;
+    private SettingsViewModel? _settings;
+    private VersionsViewModel? _versions;
+    private InstanceManageViewModel? _instanceManage;
 
     public PageFactory(LauncherStack stack)
     {
@@ -27,35 +37,80 @@ public sealed class PageFactory
     {
         new NavItem(HomePageId, "首页", "\uE80F"),
         new NavItem(AccountsPageId, "账号", "\uE77B"),
-        new NavItem(VersionsPageId, "版本管理", "\uE896"),
+        new NavItem(VersionsPageId, "实例列表", "\uE896"),
         new NavItem(LaunchLogPageId, "启动日志", "\uE9D9"),
         new NavItem(SettingsPageId, "设置", "\uE713"),
     };
 
     /// <summary>
     /// 壳创建好之后把导航回调接进来。
-    /// HomeViewModel 里的「设置」按钮是通过 lambda 调用 <see cref="Navigate(string)"/> 的，
+    /// 各页面里的跳转按钮通过 lambda 调用 <see cref="Navigate(string)"/>，
     /// 因此这里晚一点注入也来得及。
     /// </summary>
     public void AttachNavigator(Action<string> navigate) => _navigate = navigate;
+
+    /// <summary>用于打开不在顶部导航里的页面（实例管理）。</summary>
+    public void AttachPageNavigator(Action<string, string> navigate) => _pageNavigate = navigate;
 
     public void Navigate(string pageId) => _navigate?.Invoke(pageId);
 
     public object Create(string pageId) => pageId switch
     {
-        VersionsPageId => CreateVersions(),
+        VersionsPageId => Versions,
         AccountsPageId => new AccountsViewModel(_stack),
         LaunchLogPageId => new LaunchLogViewModel(_stack),
-        SettingsPageId => new SettingsViewModel(_stack),
-        _ => new HomeViewModel(_stack, () => Navigate(SettingsPageId)),
+        SettingsPageId => Settings,
+        InstanceManagePageId => InstanceManage,
+        _ => Home,
     };
 
-    private VersionsViewModel CreateVersions()
+    /// <summary>首页设置按钮 / 实例列表「实例设置」：打开实例管理页并在右侧显示游戏设置。</summary>
+    public void OpenInstanceSettings(string? versionId)
     {
-        var viewModel = new VersionsViewModel(_stack);
+        if (string.IsNullOrWhiteSpace(versionId))
+        {
+            Navigate(VersionsPageId);
+            return;
+        }
 
-        // 首次进入版本页时后台加载清单，界面先显示"点击刷新"。
-        _ = viewModel.LoadManifestAsync();
-        return viewModel;
+        InstanceManage.ShowSettings(versionId);
+        _pageNavigate?.Invoke(InstanceManagePageId, $"实例管理 · {versionId}");
     }
+
+    /// <summary>设置页现在只包含全局设置。</summary>
+    public void OpenGlobalSettings() => Navigate(SettingsPageId);
+
+    /// <summary>实例页的「启动」：回到首页并立即启动该实例。</summary>
+    public void LaunchFromVersions(string versionId)
+    {
+        var home = Home;
+        Navigate(HomePageId);
+        home.SelectAndLaunch(versionId);
+    }
+
+    /// <summary>服务器管理的「加入」：回到首页、启动该实例并直接进入服务器。</summary>
+    public void LaunchWithServer(string versionId, string host, int port)
+    {
+        var home = Home;
+        Navigate(HomePageId);
+        home.SelectAndLaunchServer(versionId, host, port);
+    }
+
+    /// <summary>实例列表的「实例管理」：打开模组 / 资源包 / 世界等管理页。</summary>
+    public void OpenInstanceManage(string versionId)
+    {
+        InstanceManage.Show(versionId);
+        _pageNavigate?.Invoke(InstanceManagePageId, $"实例管理 · {versionId}");
+    }
+
+    private HomeViewModel Home =>
+        _home ??= new HomeViewModel(_stack, OpenInstanceSettings, () => Navigate(AccountsPageId));
+
+    private SettingsViewModel Settings => _settings ??= new SettingsViewModel(_stack);
+
+    private VersionsViewModel Versions => _versions ??= new VersionsViewModel(
+        _stack, OpenGlobalSettings, OpenInstanceSettings, LaunchFromVersions, OpenInstanceManage);
+
+    private InstanceManageViewModel InstanceManage => _instanceManage ??= new InstanceManageViewModel(
+        _stack, () => Navigate(VersionsPageId), LaunchWithServer);
 }

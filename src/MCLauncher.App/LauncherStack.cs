@@ -7,12 +7,15 @@ using MCLauncher.Core.Services.Auth;
 
 namespace MCLauncher.App;
 
-/// <summary>已安装版本的摘要信息。</summary>
+/// <summary>已安装实例的摘要信息。</summary>
 public sealed class InstalledVersionInfo
 {
     public required string Id { get; init; }
 
-    /// <summary>继承的原版基底（加载器版本才有）。</summary>
+    /// <summary>实例展示名；为空时用版本 id。</summary>
+    public string? DisplayName { get; init; }
+
+    /// <summary>继承的原版基底（加载器/实例版本才有）。</summary>
     public string? BaseVersionId { get; init; }
 
     public string? Type { get; init; }
@@ -20,8 +23,27 @@ public sealed class InstalledVersionInfo
     /// <summary>加载器名称（原版 / Forge / Fabric / Quilt / NeoForge / OptiFine）。</summary>
     public string LoaderName { get; init; } = "原版";
 
-    /// <summary>界面展示用的标题。</summary>
-    public string Display => LoaderName == "原版" ? Id : $"{Id}（{LoaderName}）";
+    /// <summary>加载器版本号（有则显示）。</summary>
+    public string? LoaderVersion { get; init; }
+
+    /// <summary>完整加载器描述，如 <c>Fabric 0.20.1</c>。</summary>
+    public string? LoaderText { get; init; }
+
+    /// <summary>实例所属的游戏目录。</summary>
+    public string GameDirectory { get; init; } = string.Empty;
+
+    /// <summary>界面展示用的标题（优先用实例名）。</summary>
+    public string Display => string.IsNullOrWhiteSpace(DisplayName) ? Id : DisplayName!.Trim();
+
+    /// <summary>基底游戏版本号。</summary>
+    public string VersionText => BaseVersionId ?? Id;
+
+    /// <summary>副标题：<c>26.3，Fabric 0.20.1</c>。</summary>
+    public string Subtitle => string.IsNullOrWhiteSpace(LoaderText)
+        ? VersionText
+        : $"{VersionText}，{LoaderText}";
+
+    public bool HasLoader => !string.IsNullOrWhiteSpace(LoaderText);
 
     public override string ToString() => Display;
 }
@@ -64,6 +86,25 @@ public sealed class LauncherStack : IDisposable
 
     public required MicrosoftAuthService MicrosoftAuth { get; init; }
 
+    public required AuthlibAuthService AuthlibAuth { get; init; }
+
+    public required AuthlibInjectorService AuthlibInjector { get; init; }
+
+    public required MinecraftProfileService Profiles { get; init; }
+
+    public required ModpackImporter Modpacks { get; init; }
+
+    public required ResourceRepository Resources { get; init; }
+
+    public required ServerListService ServerList { get; init; }
+
+    /// <summary>CurseForge 检索、文件查询与指纹匹配。</summary>
+    public required CurseForgeService CurseForge { get; init; }
+
+    public required ResourceDownloadService ResourceDownloads { get; init; }
+
+    public required ResourceUpdateService ResourceUpdates { get; init; }
+
     /// <summary>启动日志缓冲（界面绑定）。</summary>
     public LaunchLogBuffer LaunchLog { get; } = new();
 
@@ -93,6 +134,13 @@ public sealed class LauncherStack : IDisposable
         var java = new JavaService(log);
         var argumentBuilder = new LaunchArgumentBuilder(log);
         var launcher = new GameLauncher(log);
+        var authlibAuth = new AuthlibAuthService(downloader, log);
+        var authlibInjector = new AuthlibInjectorService(downloader, log);
+        var profiles = new MinecraftProfileService(downloader, log);
+        var resources = new ResourceRepository(log);
+        var modpacks = new ModpackImporter(downloader, resolver, resources, log);
+        var curseForge = new CurseForgeService(
+            downloader, resolver, config.ResolveCurseForgeApiKey(), log);
 
         return new LauncherStack
         {
@@ -108,16 +156,119 @@ public sealed class LauncherStack : IDisposable
             Java = java,
             ArgumentBuilder = argumentBuilder,
             Launcher = launcher,
-            LaunchService = new GameLaunchService(repository, installer, java, argumentBuilder, launcher, log),
+            LaunchService = new GameLaunchService(
+                repository, installer, java, argumentBuilder, launcher, authlibAuth, authlibInjector, log),
             Instances = new InstanceService(repository, log),
             ModLoaders = new ModLoaderService(downloader, resolver, repository, installer, java, log),
             MicrosoftAuth = new MicrosoftAuthService(downloader, config, log),
+            AuthlibAuth = authlibAuth,
+            AuthlibInjector = authlibInjector,
+            Profiles = profiles,
+            Modpacks = modpacks,
+            Resources = resources,
+            ServerList = new ServerListService(log),
+            CurseForge = curseForge,
+            ResourceDownloads = new ResourceDownloadService(downloader, resolver, log),
+            ResourceUpdates = new ResourceUpdateService(curseForge, log),
         };
     }
 
     public void RaiseChanged() => Changed?.Invoke(this, EventArgs.Empty);
 
-    /// <summary>扫描本地已安装版本。</summary>
+    // ---------------------------------------------------------------- 游戏目录
+
+    /// <summary>官方启动器默认目录（<c>%APPDATA%\.minecraft</c>）。</summary>
+    public static string OfficialGameFolder => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), ".minecraft");
+
+    public IReadOnlyList<string> GameFolders => Config.Settings.GameFolders;
+
+    public static string NormalizeGameFolder(string path)
+    {
+        try
+        {
+            return Path.GetFullPath(path).TrimEnd(
+                Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+        catch (ArgumentException)
+        {
+            return path.Trim();
+        }
+    }
+
+    public static bool IsSameGameFolder(string? a, string? b) =>
+        !string.IsNullOrWhiteSpace(a) && !string.IsNullOrWhiteSpace(b) &&
+        string.Equals(NormalizeGameFolder(a!), NormalizeGameFolder(b!), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>切换当前游戏目录并保存。</summary>
+    public bool SelectGameFolder(string path)
+    {
+        var normalized = NormalizeGameFolder(path);
+        if (!Directory.Exists(normalized))
+        {
+            return false;
+        }
+
+        if (!Config.Settings.GameFolders.Any(folder => IsSameGameFolder(folder, normalized)))
+        {
+            Config.Settings.GameFolders.Add(normalized);
+        }
+
+        Config.Settings.SelectedGameFolder = normalized;
+        Config.Save();
+        RaiseChanged();
+        return true;
+    }
+
+    /// <summary>把目录加入列表（不切换）。</summary>
+    public bool AddGameFolder(string path)
+    {
+        var normalized = NormalizeGameFolder(path);
+        if (!Directory.Exists(normalized))
+        {
+            return false;
+        }
+
+        if (Config.Settings.GameFolders.Any(folder => IsSameGameFolder(folder, normalized)))
+        {
+            return false;
+        }
+
+        Config.Settings.GameFolders.Add(normalized);
+        Config.Save();
+        RaiseChanged();
+        return true;
+    }
+
+    /// <summary>从列表移除目录；当前目录被移除时自动切到第一个。至少保留一个。</summary>
+    public bool RemoveGameFolder(string path)
+    {
+        if (Config.Settings.GameFolders.Count <= 1)
+        {
+            return false;
+        }
+
+        var existing = Config.Settings.GameFolders
+            .FirstOrDefault(folder => IsSameGameFolder(folder, path));
+
+        if (existing is null)
+        {
+            return false;
+        }
+
+        Config.Settings.GameFolders.Remove(existing);
+
+        if (IsSameGameFolder(Config.Settings.SelectedGameFolder, existing))
+        {
+            Config.Settings.SelectedGameFolder = Config.Settings.GameFolders[0];
+        }
+
+        Config.Save();
+        RaiseChanged();
+        return true;
+    }
+
+    /// <summary>扫描当前游戏目录里已安装的实例。</summary>
     public IReadOnlyList<InstalledVersionInfo> GetInstalledVersions()
     {
         var result = new List<InstalledVersionInfo>();
@@ -131,12 +282,19 @@ public sealed class LauncherStack : IDisposable
                 continue;
             }
 
+            var config = Instances.Load(gameRoot, id);
+            var (loaderName, loaderVersion, loaderText) = DetectLoaderDetails(json, id, config);
+
             result.Add(new InstalledVersionInfo
             {
                 Id = id,
+                DisplayName = config.DisplayName,
                 BaseVersionId = json.InheritsFrom,
                 Type = json.Type,
-                LoaderName = DetectLoader(id),
+                LoaderName = loaderName,
+                LoaderVersion = loaderVersion,
+                LoaderText = loaderText,
+                GameDirectory = gameRoot,
             });
         }
 
@@ -160,14 +318,15 @@ public sealed class LauncherStack : IDisposable
     {
         var id = versionId.ToLowerInvariant();
 
-        if (id.Contains("-forge") || id.Contains("forge-"))
-        {
-            return "Forge";
-        }
-
+        // 顺序不能反：neoforge-21.1.0 里也含 "forge-"。
         if (id.Contains("neoforge"))
         {
             return "NeoForge";
+        }
+
+        if (id.Contains("-forge") || id.Contains("forge-"))
+        {
+            return "Forge";
         }
 
         if (id.Contains("quilt"))
@@ -191,6 +350,105 @@ public sealed class LauncherStack : IDisposable
         }
 
         return "原版";
+    }
+
+    /// <summary>加载器展示信息：优先用实例配置里的记录，其次从库坐标推断，最后按版本 id 猜。</summary>
+    private static (string Name, string? Version, string? Text) DetectLoaderDetails(
+        GameVersionJson json, string versionId, InstanceConfig config)
+    {
+        var saved = config.Loaders.LastOrDefault();
+        if (!string.IsNullOrWhiteSpace(saved))
+        {
+            var parsed = ModLoaderService.ParseLoaderDescription(saved);
+            return parsed is { } p
+                ? (ModLoaderService.DisplayName(p.Kind), p.Version, saved)
+                : (saved!, null, saved);
+        }
+
+        foreach (var library in json.Libraries ?? new List<Library>())
+        {
+            var coordinates = library.Name ?? string.Empty;
+            var lower = coordinates.ToLowerInvariant();
+            var version = coordinates.Split(':').ElementAtOrDefault(2);
+            version = StripGamePrefix(version, json.InheritsFrom);
+
+            if (lower.Contains("fabric-loader"))
+            {
+                return ("Fabric", version, Describe("Fabric", version));
+            }
+
+            if (lower.Contains("quilt-loader"))
+            {
+                return ("Quilt", version, Describe("Quilt", version));
+            }
+
+            if (lower.Contains("neoforge"))
+            {
+                return ("NeoForge", version, Describe("NeoForge", version));
+            }
+
+            if (lower.Contains("minecraftforge:forge") || lower.Contains("minecraftforge:fmlloader"))
+            {
+                return ("Forge", version, Describe("Forge", version));
+            }
+        }
+
+        var kind = DetectLoader(versionId);
+        if (kind == "原版")
+        {
+            return ("原版", null, null);
+        }
+
+        var guessed = GuessLoaderVersionFromId(versionId, kind);
+        return (kind, guessed, Describe(kind, guessed));
+    }
+
+    private static string Describe(string kind, string? version) =>
+        string.IsNullOrWhiteSpace(version) ? kind : $"{kind} {version}";
+
+    private static string? StripGamePrefix(string? version, string? baseVersion)
+    {
+        if (string.IsNullOrWhiteSpace(version) || string.IsNullOrWhiteSpace(baseVersion))
+        {
+            return version;
+        }
+
+        var prefix = baseVersion + "-";
+        return version.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+            ? version[prefix.Length..]
+            : version;
+    }
+
+    private static string? GuessLoaderVersionFromId(string versionId, string kind)
+    {
+        var id = versionId;
+        return kind switch
+        {
+            "Fabric" => SliceBetween(id, "fabric-loader-", "-"),
+            "Quilt" => SliceBetween(id, "quilt-loader-", "-"),
+            "NeoForge" => SliceAfter(id, "neoforge-"),
+            "Forge" => SliceAfter(id, "-forge-"),
+            "OptiFine" => SliceAfter(id, "optifine-"),
+            _ => null,
+        };
+    }
+
+    private static string? SliceAfter(string text, string marker)
+    {
+        var index = text.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        return index < 0 ? null : text[(index + marker.Length)..];
+    }
+
+    private static string? SliceBetween(string text, string marker, string terminator)
+    {
+        var after = SliceAfter(text, marker);
+        if (after is null)
+        {
+            return null;
+        }
+
+        var end = after.IndexOf(terminator, StringComparison.Ordinal);
+        return end < 0 ? after : after[..end];
     }
 
     /// <summary>实例目录：开启隔离时为 <c>versions/&lt;id&gt;</c>，否则为游戏根目录。</summary>

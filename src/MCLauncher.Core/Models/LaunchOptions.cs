@@ -1,5 +1,18 @@
 namespace MCLauncher.Core.Models;
 
+/// <summary>游戏窗口类型。</summary>
+public enum GameWindowMode
+{
+    /// <summary>窗口化，使用 <see cref="LaunchOptions.Width"/> / <see cref="LaunchOptions.Height"/>。</summary>
+    Windowed = 0,
+
+    /// <summary>全屏（写入 options.txt 的 fullscreen 开关）。</summary>
+    Fullscreen = 1,
+
+    /// <summary>最大化：以主显示器分辨率窗口化启动。</summary>
+    Maximized = 2,
+}
+
 /// <summary>一次启动的可调参数。</summary>
 public sealed class LaunchOptions
 {
@@ -14,6 +27,9 @@ public sealed class LaunchOptions
 
     /// <summary>游戏窗口高（0 表示用版本自带默认值）。</summary>
     public int Height { get; init; }
+
+    /// <summary>窗口类型：窗口化 / 全屏 / 最大化。</summary>
+    public GameWindowMode WindowMode { get; init; } = GameWindowMode.Windowed;
 
     /// <summary>附加 JVM 参数（空格分隔，支持 ${...} 变量）。</summary>
     public string? ExtraJvmArgs { get; init; }

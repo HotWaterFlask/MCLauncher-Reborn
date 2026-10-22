@@ -8,8 +8,8 @@ public static class Skin
     /// <summary>窗口圆角半径。</summary>
     public const double CornerRadius = 8;
 
-    /// <summary>背景皮肤图资源路径（与原版一致，整窗铺满）。</summary>
-    public static readonly Uri BackgroundImage = new("pack://application:,,,/Assets/bgskin/bg9.jpg");
+    /// <summary>默认背景图资源路径（整窗铺满）。</summary>
+    public static readonly Uri BackgroundImage = new("pack://application:,,,/Assets/default-bg.jpg");
 
     /// <summary>内容区半透明底板。</summary>
     public static readonly SolidColorBrush ContentPanel = Frozen(Color.FromArgb(0xE6, 0xFF, 0xFF, 0xFF));

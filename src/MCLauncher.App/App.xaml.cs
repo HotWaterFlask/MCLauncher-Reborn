@@ -37,7 +37,7 @@ public partial class App : Application
             var store = new JsonConfigStore(GetConfigDirectory(), log);
             var config = new ConfigService(store, log);
             config.Load();
-            config.EnsureDefaultGameFolder(AppContext.BaseDirectory);
+            config.EnsureKnownGameFolders(AppContext.BaseDirectory);
 
             Services.RegisterSingleton<ILogger>(log);
             Services.RegisterSingleton<IConfigStore>(store);
@@ -66,6 +66,7 @@ public partial class App : Application
                 config.Settings.WindowHeight);
 
             pageFactory.AttachNavigator(shellViewModel.NavigateTo);
+            pageFactory.AttachPageNavigator(shellViewModel.NavigateToPage);
             Services.RegisterSingleton(shellViewModel);
 
             var window = new MainWindow { DataContext = shellViewModel };

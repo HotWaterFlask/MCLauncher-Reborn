@@ -29,4 +29,31 @@ public sealed class InstanceConfig
     /// <summary>该实例安装过的加载器描述（Forge 49.0.30 / Fabric 0.15.3 …）。</summary>
     [JsonPropertyName("loaders")]
     public List<string> Loaders { get; set; } = new();
+
+    // ---- 实例级覆盖项：null 表示跟随全局设置 ----
+
+    [JsonPropertyName("maxMemoryMb")]
+    public int? MaxMemoryMb { get; set; }
+
+    [JsonPropertyName("minMemoryMb")]
+    public int? MinMemoryMb { get; set; }
+
+    /// <summary>实例专用 Java；为空时跟随全局设置。</summary>
+    [JsonPropertyName("javaPath")]
+    public string? JavaPath { get; set; }
+
+    [JsonPropertyName("extraJvmArgs")]
+    public string? ExtraJvmArgs { get; set; }
+
+    [JsonPropertyName("extraGameArgs")]
+    public string? ExtraGameArgs { get; set; }
+
+    [JsonPropertyName("width")]
+    public int? Width { get; set; }
+
+    [JsonPropertyName("height")]
+    public int? Height { get; set; }
+
+    [JsonPropertyName("windowMode")]
+    public GameWindowMode? WindowMode { get; set; }
 }

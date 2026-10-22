@@ -56,6 +56,27 @@
         </Setter>
     </Style>
 
+    <!-- ============ 首页左上角账号块：整块可点击，跳转账号页 ============ -->
+    <Style x:Key="AccountBlockButton" TargetType="Button">
+        <Setter Property="Foreground" Value="White"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="FontFamily" Value="Microsoft YaHei UI, Microsoft YaHei, Segoe UI"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd" Background="#99000000" CornerRadius="6" Padding="8,7">
+                        <ContentPresenter/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#B3000000"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- ============ 叠在背景图上的白字（带投影） ============ -->
     <Style x:Key="OverlayText" TargetType="TextBlock">
         <Setter Property="Foreground" Value="White"/>

@@ -5,13 +5,165 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="720">
+    <UserControl.Resources>
+        <!-- 左栏「添加账户」条目 -->
+        <Style x:Key="AddAccountButton" TargetType="Button">
+            <Setter Property="Foreground" Value="#1A1A1A"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="4" Padding="9,7">
+                            <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#F2F7FD"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#E3F0FA"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 对话框里的「主页 / 注册」链接 -->
+        <Style x:Key="DialogLinkButton" TargetType="Button">
+            <Setter Property="Foreground" Value="#0078D7"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="Transparent" Padding="4,2">
+                            <TextBlock x:Name="Txt" Text="{TemplateBinding Content}"
+                                       Foreground="{TemplateBinding Foreground}"
+                                       TextDecorations="Underline"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Txt" Property="Foreground" Value="#0B5FA5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 认证服务器条目的移除按钮 -->
+        <Style x:Key="ServerRemoveButton" TargetType="Button">
+            <Setter Property="Foreground" Value="#8A8A8A"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="3" Padding="6,4">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#FDECEC"/>
+                                <Setter Property="Foreground" Value="#C62828"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 换肤弹窗里的披风卡片 -->
+        <Style x:Key="CapeTileButton" TargetType="Button">
+            <Setter Property="Foreground" Value="#1A1A1A"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Width="52" Padding="5,4"
+                                Background="#FAFBFC" BorderBrush="#E2E6EC" BorderThickness="1" CornerRadius="4">
+                            <ContentPresenter HorizontalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#2F6FB6"/>
+                                <Setter TargetName="Bd" Property="Background" Value="#F2F7FD"/>
+                            </Trigger>
+                            <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#4C9A55"/>
+                                <Setter TargetName="Bd" Property="Background" Value="#EEF7EF"/>
+                            </DataTrigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.55"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 账号表格行：悬停/选中用浅蓝底 -->
+        <Style x:Key="AccountRowStyle" TargetType="ListViewItem">
+            <Setter Property="Foreground" Value="#1A1A1A"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <EventSetter Event="MouseDoubleClick" Handler="OnAccountRowDoubleClick"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListViewItem">
+                        <Border x:Name="Bd" Background="Transparent"
+                                BorderBrush="#F0F0F0" BorderThickness="0,0,0,1">
+                            <GridViewRowPresenter Content="{TemplateBinding Content}"
+                                                  VerticalAlignment="Center"
+                                                  SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#F5F9FD"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#E3F0FA"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 表头：白底浅灰字，去掉系统默认的立体感 -->
+        <Style TargetType="GridViewColumnHeader">
+            <Setter Property="Background" Value="#F7F7F7"/>
+            <Setter Property="Foreground" Value="#5A5A5A"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="10,7"/>
+            <Setter Property="BorderBrush" Value="#E2E2E2"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="GridViewColumnHeader">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
     <Grid Margin="20,18,20,16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <TextBlock Grid.Row="0" Text="账号" Style="{StaticResource PageTitle}"/>
@@ -19,89 +171,462 @@
                    Style="{StaticResource BodyText}"
                    Text="{Binding SelectedAccountText}"/>
 
-        <!-- 账号列表 + 操作 -->
-        <Border Grid.Row="2" Background="White" CornerRadius="6"
-                BorderBrush="{StaticResource ContentBorderBrush}" BorderThickness="1">
-            <DockPanel>
-                <Border DockPanel.Dock="Bottom" Padding="10,8" Background="#F7F7F7"
-                        BorderBrush="{StaticResource ContentBorderBrush}" BorderThickness="0,1,0,0">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBox Width="150" Height="28" VerticalContentAlignment="Center" Padding="6,0" FontSize="13"
-                                 Text="{Binding NewAccountName, UpdateSourceTrigger=PropertyChanged}"
-                                 ToolTip="离线玩家名（不超过 16 字符）"/>
-                        <Button Style="{StaticResource SkinButton}"
-                                Command="{Binding AddOfflineCommand}"
-                                Content="添加离线账号"
-                                Width="112" Height="28" FontSize="13" Margin="8,0,0,0"/>
-                        <Button Style="{StaticResource SkinButton}"
-                                Command="{Binding SelectCommand}"
-                                CommandParameter="{Binding SelectedItem, ElementName=AccountList}"
-                                Content="设为当前"
-                                Width="88" Height="28" FontSize="13" Margin="8,0,0,0"/>
-                        <Button Style="{StaticResource SkinButton}"
-                                Command="{Binding RemoveCommand}"
-                                CommandParameter="{Binding SelectedItem, ElementName=AccountList}"
-                                Content="删除"
-                                Width="72" Height="28" FontSize="13" Margin="8,0,0,0"/>
-                    </StackPanel>
-                </Border>
-                <ListBox x:Name="AccountList"
-                         ItemsSource="{Binding Accounts}"
-                         Background="Transparent" BorderThickness="0"
-                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding Display}" FontSize="13" Margin="10,7"/>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
-            </DockPanel>
-        </Border>
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="210"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
 
-        <!-- 微软正版登录 -->
-        <TextBlock Grid.Row="3" Text="微软正版登录" Style="{StaticResource SectionTitle}" Margin="0,16,0,8"/>
-        <Border Grid.Row="4" Background="White" CornerRadius="6" Padding="12"
-                BorderBrush="{StaticResource ContentBorderBrush}" BorderThickness="1">
-            <StackPanel>
-                <TextBlock Style="{StaticResource BodyText}" Text="{Binding MsClientIdHint}"/>
-                <TextBlock Margin="0,6,0,0" Style="{StaticResource BodyText}" Text="{Binding MsSetupHint}"/>
-                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
-                    <Button Style="{StaticResource SkinButton}"
-                            Command="{Binding LoginMicrosoftCommand}"
-                            Content="微软登录"
-                            Width="100" Height="28" FontSize="13"
-                            ToolTip="打开微软登录页，复制验证码后粘贴到页面中"/>
-                    <Button Style="{StaticResource SkinButton}"
-                            Command="{Binding CancelLoginCommand}"
-                            Content="取消登录"
-                            Width="88" Height="28" FontSize="13" Margin="8,0,0,0"/>
+            <!-- ===== 左栏：添加账户 ===== -->
+            <Border Grid.Column="0" Background="White" CornerRadius="6" Margin="0,0,12,0"
+                    BorderBrush="{StaticResource ContentBorderBrush}" BorderThickness="1">
+                <DockPanel>
+                    <Button DockPanel.Dock="Bottom"
+                            Style="{StaticResource AddAccountButton}"
+                            Command="{Binding OpenAddServerDialogCommand}"
+                            ToolTip="添加 authlib-injector 认证服务器">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="16"
+                                       Foreground="#2F6FB6" VerticalAlignment="Center"/>
+                            <StackPanel Margin="10,0,0,0">
+                                <TextBlock Text="添加认证服务器" FontSize="13"/>
+                                <TextBlock Text="外置登录" FontSize="11" Foreground="#7A7A7A"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Button>
+
+                    <StackPanel>
+                        <TextBlock Text="添加账户" FontSize="12" Foreground="#7A7A7A" Margin="10,10,10,6"/>
+
+                        <Button Style="{StaticResource AddAccountButton}"
+                                Command="{Binding OpenMicrosoftDialogCommand}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE77B;" FontFamily="Segoe MDL2 Assets" FontSize="16"
+                                           Foreground="#2F6FB6" VerticalAlignment="Center"/>
+                                <TextBlock Text="微软账户" FontSize="13" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button Style="{StaticResource AddAccountButton}"
+                                Command="{Binding OpenOfflineDialogCommand}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE716;" FontFamily="Segoe MDL2 Assets" FontSize="16"
+                                           Foreground="#2F6FB6" VerticalAlignment="Center"/>
+                                <TextBlock Text="离线模式" FontSize="13" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <!-- 已添加的外置登录服务器 -->
+                        <ItemsControl ItemsSource="{Binding AuthServers}" Margin="0,2,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Button Style="{StaticResource AddAccountButton}"
+                                                Command="{Binding DataContext.OpenExternalDialogCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="&#xE774;" FontFamily="Segoe MDL2 Assets" FontSize="16"
+                                                           Foreground="#2F6FB6" VerticalAlignment="Center"/>
+                                                <StackPanel Margin="10,0,0,0">
+                                                    <TextBlock Text="{Binding Name}" FontSize="13"/>
+                                                    <TextBlock Text="{Binding Host}" FontSize="11" Foreground="#7A7A7A"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Grid.Column="1" Style="{StaticResource ServerRemoveButton}"
+                                                Content="✕"
+                                                ToolTip="移除该认证服务器"
+                                                VerticalAlignment="Center"
+                                                Command="{Binding DataContext.RemoveServerCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+
+            <!-- ===== 右栏：账号表格 ===== -->
+            <Border Grid.Column="1" Background="White" CornerRadius="6"
+                    BorderBrush="{StaticResource ContentBorderBrush}" BorderThickness="1">
+                <DockPanel>
+                    <Border DockPanel.Dock="Bottom" Padding="10,8" Background="#F7F7F7"
+                            BorderBrush="{StaticResource ContentBorderBrush}" BorderThickness="0,1,0,0">
+                        <DockPanel>
+                            <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
+                                <Button Style="{StaticResource SkinButton}"
+                                        Command="{Binding SelectCommand}"
+                                        CommandParameter="{Binding SelectedAccountItem}"
+                                        Content="设为当前"
+                                        Width="88" Height="28" FontSize="13"/>
+                                <Button Style="{StaticResource SkinButton}"
+                                        Command="{Binding RemoveCommand}"
+                                        CommandParameter="{Binding SelectedAccountItem}"
+                                        Content="删除"
+                                        Width="72" Height="28" FontSize="13" Margin="8,0,0,0"/>
+                                <Button Style="{StaticResource SkinButton}"
+                                        Command="{Binding OpenPersonalizeCommand}"
+                                        Content="个性化"
+                                        Width="88" Height="28" FontSize="13" Margin="8,0,0,0"
+                                        IsEnabled="{Binding CanPersonalize}"
+                                        ToolTip="查看和更换皮肤、披风（仅微软账户）"/>
+                            </StackPanel>
+                            <TextBlock Text="{Binding StatusText}"
+                                       FontSize="12" Foreground="#5A5A5A"
+                                       VerticalAlignment="Center"
+                                       Margin="12,0,0,0"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip="{Binding StatusText}"/>
+                        </DockPanel>
+                    </Border>
+
+                    <!-- 头像 | 游戏ID | Xbox用户名 | 账号类型 | 当前 -->
+                    <ListView x:Name="AccountList"
+                              ItemsSource="{Binding Accounts}"
+                              SelectedItem="{Binding SelectedAccountItem, Mode=TwoWay}"
+                              SelectionMode="Single"
+                              Background="Transparent" BorderThickness="0"
+                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                              ItemContainerStyle="{StaticResource AccountRowStyle}">
+                        <ListView.View>
+                            <GridView AllowsColumnReorder="False">
+                                <GridViewColumn Header="头像" Width="64">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Border Width="32" Height="32" Margin="10,4,0,4">
+                                                <Image Source="{Binding Avatar}"
+                                                       Stretch="UniformToFill"
+                                                       SnapsToDevicePixels="True"
+                                                       RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                                            </Border>
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
+                                <GridViewColumn Header="游戏ID" Width="150">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding GameId}" Margin="10,0"
+                                                       VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
+                                <GridViewColumn Header="Xbox用户名" Width="140">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding XboxName}" Margin="10,0"
+                                                       VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
+                                <GridViewColumn Header="账号类型" Width="100">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding AccountTypeText}" Margin="10,0"
+                                                       VerticalAlignment="Center"/>
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
+                                <GridViewColumn Header="√（当前）" Width="80">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding CurrentMark}" Margin="10,0"
+                                                       VerticalAlignment="Center"
+                                                       FontSize="14" FontWeight="Bold"
+                                                       Foreground="#2E7D32"/>
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
+                            </GridView>
+                        </ListView.View>
+                    </ListView>
+                </DockPanel>
+            </Border>
+        </Grid>
+
+        <!-- ===== 添加账号 / 认证服务器对话框 ===== -->
+        <Grid Grid.RowSpan="3"
+              Visibility="{Binding IsDialogOpen, Converter={StaticResource BoolToVis}}"
+              Background="#66000000" Panel.ZIndex="20">
+            <Border Width="440" Background="White" CornerRadius="8" Padding="18,16"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    BorderBrush="#D8D8D8" BorderThickness="1">
+                <Grid>
+                    <!-- 离线账户 -->
+                    <StackPanel Visibility="{Binding IsOfflineDialogOpen, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="添加离线账户" FontSize="16" FontWeight="SemiBold"/>
+                        <TextBlock Text="离线账户无需密码，UUID 由玩家名按协议派生。" Margin="0,6,0,0"
+                                   Style="{StaticResource BodyText}"/>
+                        <TextBlock Text="玩家名" Margin="0,14,0,4" FontSize="13" Foreground="#5A5A5A"/>
+                        <TextBox Text="{Binding NewAccountName, UpdateSourceTrigger=PropertyChanged}"
+                                 Height="30" Padding="6,0" FontSize="13" VerticalContentAlignment="Center"
+                                 ToolTip="不超过 16 个字符"/>
+                        <TextBlock Text="{Binding OfflineError}" Margin="0,6,0,0"
+                                   FontSize="12" Foreground="#C62828" TextWrapping="Wrap"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+                            <Button Style="{StaticResource SkinButton}" Content="取消"
+                                    Width="76" Height="28" FontSize="13"
+                                    Command="{Binding CloseDialogCommand}"/>
+                            <Button Style="{StaticResource SkinButton}" Content="添加"
+                                    Width="76" Height="28" FontSize="13" Margin="8,0,0,0"
+                                    Command="{Binding AddOfflineCommand}"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- 外置登录 -->
+                    <StackPanel Visibility="{Binding IsExternalDialogOpen, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="添加外置登录账户（authlib-injector）"
+                                   FontSize="16" FontWeight="SemiBold"/>
+                        <Grid Margin="0,14,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="80"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="认证服务器" FontSize="13" Foreground="#5A5A5A" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="1" Text="{Binding SelectedAuthServerName}"
+                                       FontSize="13" VerticalAlignment="Center"/>
+                            <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                <Button Style="{StaticResource DialogLinkButton}" Content="主页"
+                                        Visibility="{Binding HasExternalHomepage, Converter={StaticResource BoolToVis}}"
+                                        Command="{Binding OpenExternalHomepageCommand}"/>
+                                <Button Style="{StaticResource DialogLinkButton}" Content="注册"
+                                        Visibility="{Binding HasExternalRegister, Converter={StaticResource BoolToVis}}"
+                                        Command="{Binding OpenExternalRegisterCommand}"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <TextBlock Text="用户名" Margin="0,14,0,4" FontSize="13" Foreground="#5A5A5A"/>
+                        <TextBox Text="{Binding ExternalUsername, UpdateSourceTrigger=PropertyChanged}"
+                                 Height="30" Padding="6,0" FontSize="13" VerticalContentAlignment="Center"/>
+
+                        <TextBlock Text="密码" Margin="0,10,0,4" FontSize="13" Foreground="#5A5A5A"/>
+                        <PasswordBox x:Name="ExternalPasswordBox"
+                                     Height="30" Padding="6,0" FontSize="13" VerticalContentAlignment="Center"/>
+
+                        <TextBlock Text="{Binding ExternalError}" Margin="0,6,0,0"
+                                   FontSize="12" Foreground="#C62828" TextWrapping="Wrap"/>
+
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+                            <Button Style="{StaticResource SkinButton}" Content="取消"
+                                    Width="76" Height="28" FontSize="13"
+                                    Command="{Binding CloseDialogCommand}"/>
+                            <Button x:Name="ExternalLoginButton" Content="登录"
+                                    Width="76" Height="28" FontSize="13" Margin="8,0,0,0"
+                                    Click="OnExternalLoginClick">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource SkinButton}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsExternalBusy}" Value="True">
+                                                <Setter Property="IsEnabled" Value="False"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- 微软账户（设备码） -->
+                    <StackPanel Visibility="{Binding IsMicrosoftDialogOpen, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="添加微软账户" FontSize="16" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding MsClientIdHint}" Margin="0,8,0,0"
+                                   Style="{StaticResource BodyText}"/>
+                        <TextBlock Text="{Binding MsSetupHint}" Margin="0,6,0,0"
+                                   Style="{StaticResource BodyText}"/>
+
+                        <Border Margin="0,12,0,0" Padding="12,10" CornerRadius="6"
+                                Background="#FFF8E6" BorderBrush="#E8D9A8" BorderThickness="1"
+                                Visibility="{Binding HasDeviceCode, Converter={StaticResource BoolToVis}}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="验证码" VerticalAlignment="Center" FontSize="13" Foreground="#6B5B1E"/>
+                                <TextBox Text="{Binding DeviceCodeText, Mode=OneWay}" IsReadOnly="True"
+                                         IsReadOnlyCaretVisible="False" BorderThickness="0" Background="Transparent"
+                                         Margin="12,0,0,0" Padding="0" VerticalContentAlignment="Center"
+                                         FontFamily="Consolas, Courier New" FontSize="22" FontWeight="Bold"
+                                         Foreground="#1A1A1A" ToolTip="可直接选中复制"/>
+                                <Button Style="{StaticResource SkinButton}" Command="{Binding CopyDeviceCodeCommand}"
+                                        Content="复制" Width="60" Height="26" FontSize="12" Margin="12,0,0,0"/>
+                                <Button Style="{StaticResource SkinButton}" Command="{Binding OpenDeviceCodePageCommand}"
+                                        Content="打开登录页" Width="96" Height="26" FontSize="12" Margin="8,0,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock Text="{Binding StatusText}" Margin="0,12,0,0"
+                                   Style="{StaticResource BodyText}"/>
+
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+                            <Button Style="{StaticResource SkinButton}" Content="取消"
+                                    Width="76" Height="28" FontSize="13"
+                                    Command="{Binding CloseDialogCommand}"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- 添加认证服务器 -->
+                    <StackPanel Visibility="{Binding IsServerDialogOpen, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="添加认证服务器（外置登录）" FontSize="16" FontWeight="SemiBold"/>
+                        <TextBlock Text="填写 authlib-injector 的 API 根地址，例如 https://littleskin.cn/api/yggdrasil"
+                                   Margin="0,6,0,0" Style="{StaticResource BodyText}"/>
+
+                        <TextBlock Text="名称（可选）" Margin="0,14,0,4" FontSize="13" Foreground="#5A5A5A"/>
+                        <TextBox Text="{Binding NewServerName, UpdateSourceTrigger=PropertyChanged}"
+                                 Height="30" Padding="6,0" FontSize="13" VerticalContentAlignment="Center"/>
+
+                        <TextBlock Text="API 根地址" Margin="0,10,0,4" FontSize="13" Foreground="#5A5A5A"/>
+                        <TextBox Text="{Binding NewServerUrl, UpdateSourceTrigger=PropertyChanged}"
+                                 Height="30" Padding="6,0" FontSize="13" VerticalContentAlignment="Center"/>
+
+                        <TextBlock Text="{Binding ServerError}" Margin="0,6,0,0"
+                                   FontSize="12" Foreground="#C62828" TextWrapping="Wrap"/>
+
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+                            <Button Style="{StaticResource SkinButton}" Content="取消"
+                                    Width="76" Height="28" FontSize="13"
+                                    Command="{Binding CloseDialogCommand}"/>
+                            <Button Style="{StaticResource SkinButton}" Content="添加"
+                                    Width="76" Height="28" FontSize="13" Margin="8,0,0,0"
+                                    Command="{Binding AddServerCommand}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- ===== 个性化：皮肤与披风 ===== -->
+            <Border Width="580" Background="White" CornerRadius="8" Padding="18,14"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    BorderBrush="#D8D8D8" BorderThickness="1"
+                    Visibility="{Binding IsSkinDialogOpen, Converter={StaticResource BoolToVis}}">
+                <StackPanel>
+                    <TextBlock Text="个性化" FontSize="16" FontWeight="SemiBold"/>
+                    <TextBlock Text="{Binding PersonalizeAccountText}" Margin="0,4,0,0"
+                               Style="{StaticResource BodyText}"/>
+
+                    <Grid Margin="0,10,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="190"/>
+                            <ColumnDefinition Width="20"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- 皮肤 -->
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="皮肤" FontSize="13" Foreground="#5A5A5A"/>
+                            <Border Height="148" Margin="0,4,0,0" CornerRadius="6" Background="#F2F5F9"
+                                    BorderBrush="#E2E6EC" BorderThickness="1">
+                                <Grid>
+                                    <TextBlock Text="暂无预览" FontSize="12" Foreground="#8A8A8A"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Visibility="{Binding ShowSkinPlaceholder, Converter={StaticResource BoolToVis}}"/>
+                                    <Image Source="{Binding SkinPreview}" Margin="4" Stretch="Uniform"
+                                           RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                                </Grid>
+                            </Border>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                <TextBlock Text="模型" FontSize="12" Foreground="#5A5A5A"
+                                           VerticalAlignment="Center"/>
+                                <ComboBox Width="134" Height="26" Margin="8,0,0,0" FontSize="12"
+                                          ItemsSource="{Binding SkinModels}"
+                                          SelectedItem="{Binding SelectedSkinModel, Mode=TwoWay}"/>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                <Button Style="{StaticResource SkinButton}" Content="更换皮肤…"
+                                        Width="96" Height="28" FontSize="13"
+                                        Click="OnChangeSkinClick"
+                                        IsEnabled="{Binding CanInteractSkin}"/>
+                                <Button Style="{StaticResource SkinButton}" Content="恢复默认"
+                                        Width="84" Height="28" FontSize="13" Margin="8,0,0,0"
+                                        Command="{Binding ResetSkinCommand}"
+                                        IsEnabled="{Binding CanInteractSkin}"/>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- 披风 -->
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="披风" FontSize="13" Foreground="#5A5A5A"/>
+                            <Grid Margin="0,4,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="90"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <Border Width="90" Height="144" CornerRadius="6" Background="#F2F5F9"
+                                        BorderBrush="#E2E6EC" BorderThickness="1">
+                                    <Grid>
+                                        <TextBlock Text="无披风" FontSize="12" Foreground="#8A8A8A"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   Visibility="{Binding ShowCapePlaceholder, Converter={StaticResource BoolToVis}}"/>
+                                        <Image Source="{Binding CapePreview}" Margin="3" Stretch="Uniform"
+                                               RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                                    </Grid>
+                                </Border>
+
+                                <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                                    <TextBlock Text="{Binding CapeSummary}" FontSize="12"
+                                               Foreground="#5A5A5A" TextWrapping="Wrap"/>
+                                    <TextBlock Text="点击下方披风立即更换" FontSize="11"
+                                               Foreground="#8A8A8A" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                    <TextBlock Text="该账号暂无可用披风" FontSize="11"
+                                               Foreground="#8A8A8A" Margin="0,4,0,0"
+                                               Visibility="{Binding ShowCapeListPlaceholder, Converter={StaticResource BoolToVis}}"/>
+
+                                    <ItemsControl ItemsSource="{Binding Capes}" Margin="0,6,0,0">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <WrapPanel/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Button Style="{StaticResource CapeTileButton}" Margin="0,0,6,6"
+                                                        ToolTip="{Binding Name}"
+                                                        Command="{Binding DataContext.ApplyCapeCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        CommandParameter="{Binding}"
+                                                        IsEnabled="{Binding DataContext.CanInteractSkin, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                                    <StackPanel>
+                                                        <Image Source="{Binding Thumbnail}" Width="34" Height="54"
+                                                               RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                                                        <TextBlock Text="{Binding Name}" FontSize="11"
+                                                                   Margin="0,2,0,0" HorizontalAlignment="Center"
+                                                                   MaxWidth="38" TextTrimming="CharacterEllipsis"/>
+                                                    </StackPanel>
+                                                </Button>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <Button Style="{StaticResource SkinButton}" Content="隐藏披风"
+                                            Width="84" Height="28" FontSize="13" Margin="0,2,0,0"
+                                            HorizontalAlignment="Left"
+                                            Command="{Binding ApplyNoCapeCommand}"
+                                            IsEnabled="{Binding CanInteractSkin}"/>
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </Grid>
+
+                    <TextBlock Text="{Binding SkinStatusText}" Margin="0,8,0,0"
+                               FontSize="12" Foreground="#5A5A5A" TextWrapping="Wrap"
+                               MinHeight="16"/>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+                        <Button Style="{StaticResource SkinButton}" Content="刷新"
+                                Width="76" Height="28" FontSize="13"
+                                Command="{Binding ReloadSkinCommand}"
+                                IsEnabled="{Binding CanInteractSkin}"/>
+                        <Button Style="{StaticResource SkinButton}" Content="关闭"
+                                Width="76" Height="28" FontSize="13" Margin="8,0,0,0"
+                                Command="{Binding CloseDialogCommand}"/>
+                    </StackPanel>
                 </StackPanel>
-
-                <!-- 验证码：可选中复制，粘贴到浏览器登录页 -->
-                <Border Margin="0,10,0,0" Padding="12,10" CornerRadius="6"
-                        Background="#FFF8E6" BorderBrush="#E8D9A8" BorderThickness="1"
-                        Visibility="{Binding HasDeviceCode, Converter={StaticResource BoolToVis}}">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="验证码" VerticalAlignment="Center" FontSize="13" Foreground="#6B5B1E"/>
-                        <TextBox Text="{Binding DeviceCodeText, Mode=OneWay}" IsReadOnly="True"
-                                 IsReadOnlyCaretVisible="False" BorderThickness="0" Background="Transparent"
-                                 Margin="12,0,0,0" Padding="0" VerticalContentAlignment="Center"
-                                 FontFamily="Consolas, Courier New" FontSize="24" FontWeight="Bold"
-                                 Foreground="#1A1A1A"
-                                 ToolTip="可直接选中复制"/>
-                        <Button Style="{StaticResource SkinButton}"
-                                Command="{Binding CopyDeviceCodeCommand}"
-                                Content="复制"
-                                Width="64" Height="28" FontSize="13" Margin="12,0,0,0"/>
-                        <Button Style="{StaticResource SkinButton}"
-                                Command="{Binding OpenDeviceCodePageCommand}"
-                                Content="重新打开登录页"
-                                Width="112" Height="28" FontSize="13" Margin="8,0,0,0"/>
-                    </StackPanel>
-                </Border>
-
-                <TextBlock Margin="0,10,0,0" Style="{StaticResource BodyText}" Text="{Binding StatusText}"/>
-            </StackPanel>
-        </Border>
+            </Border>
+        </Grid>
     </Grid>
 </UserControl>

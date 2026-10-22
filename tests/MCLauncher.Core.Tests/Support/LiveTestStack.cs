@@ -1,6 +1,7 @@
 using MCLauncher.Core.Models;
 using MCLauncher.Core.Network;
 using MCLauncher.Core.Services;
+using MCLauncher.Core.Services.Auth;
 
 namespace MCLauncher.Core.Tests.Support;
 
@@ -48,6 +49,8 @@ internal sealed class LiveTestStack : IDisposable
         var java = new JavaService(log);
         var argumentBuilder = new LaunchArgumentBuilder(log);
         var launcher = new GameLauncher(log);
+        var authlibAuth = new AuthlibAuthService(downloader, log);
+        var authlibInjector = new AuthlibInjectorService(downloader, log);
 
         return new LiveTestStack
         {
@@ -61,7 +64,8 @@ internal sealed class LiveTestStack : IDisposable
             Java = java,
             ArgumentBuilder = argumentBuilder,
             Launcher = launcher,
-            LaunchService = new GameLaunchService(repository, installer, java, argumentBuilder, launcher, log),
+            LaunchService = new GameLaunchService(
+                repository, installer, java, argumentBuilder, launcher, authlibAuth, authlibInjector, log),
             ModLoaders = new ModLoaderService(downloader, resolver, repository, installer, java, log),
             Instances = new InstanceService(repository, log),
         };

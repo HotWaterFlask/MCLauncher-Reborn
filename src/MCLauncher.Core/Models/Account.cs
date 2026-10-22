@@ -11,6 +11,9 @@ public enum AccountKind
 
     /// <summary>微软正版账号。</summary>
     Microsoft,
+
+    /// <summary>外置登录账号（authlib-injector / Yggdrasil 认证服务器）。</summary>
+    External,
 }
 
 /// <summary>
@@ -34,8 +37,20 @@ public sealed class Account
     /// <summary>Xbox 用户 ID（仅微软账号有）。</summary>
     public string? Xuid { get; set; }
 
+    /// <summary>Xbox 玩家代号（仅微软账号有，来自 XSTS 的 gtg；旧数据可能为空）。</summary>
+    public string? XboxName { get; set; }
+
     /// <summary>微软 OAuth 刷新令牌（仅微软账号有）。</summary>
     public string? RefreshToken { get; set; }
+
+    /// <summary>外置登录认证服务器 API 根地址（authlib-injector）。</summary>
+    public string? AuthServer { get; set; }
+
+    /// <summary>外置登录认证服务器显示名。</summary>
+    public string? AuthServerName { get; set; }
+
+    /// <summary>authlib clientToken，刷新令牌时要用。</summary>
+    public string? ClientToken { get; set; }
 
     /// <summary>令牌过期时间。</summary>
     public DateTimeOffset? ExpiresAt { get; set; }
@@ -43,9 +58,12 @@ public sealed class Account
     [JsonIgnore]
     public bool IsMicrosoft => Kind == AccountKind.Microsoft;
 
-    /// <summary>协议里的 <c>${user_type}</c>：微软账号 <c>msa</c>，离线账号 <c>legacy</c>。</summary>
     [JsonIgnore]
-    public string UserType => IsMicrosoft ? "msa" : "legacy";
+    public bool IsExternal => Kind == AccountKind.External;
+
+    /// <summary>协议里的 <c>${user_type}</c>：微软/外置登录 <c>msa</c>，离线账号 <c>legacy</c>。</summary>
+    [JsonIgnore]
+    public string UserType => IsMicrosoft || IsExternal ? "msa" : "legacy";
 
     /// <summary>微软账号的客户端 ID（对应 <c>${clientid}</c>）。</summary>
     public string? ClientId { get; set; }
@@ -61,5 +79,10 @@ public sealed class Account
         AccessToken = "0",
     };
 
-    public override string ToString() => $"{Name}（{(IsMicrosoft ? "微软" : "离线")}）";
+    public override string ToString() => Kind switch
+    {
+        AccountKind.Microsoft => $"{Name}（微软）",
+        AccountKind.External => $"{Name}（{AuthServerName ?? "外置登录"}）",
+        _ => $"{Name}（离线）",
+    };
 }

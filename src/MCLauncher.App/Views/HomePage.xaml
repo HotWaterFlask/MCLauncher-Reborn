@@ -6,17 +6,54 @@
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="720">
     <Grid>
-        <!-- 顶部信息层：账号与进度 -->
-        <StackPanel VerticalAlignment="Top"
-                    Margin="20,18,20,0">
-            <TextBlock Margin="0,6,0,0"
-                       Style="{StaticResource BodyText}"
-                       Text="{Binding AccountText}"/>
-            <TextBlock Margin="0,4,0,0"
-                       Style="{StaticResource BodyText}"
-                       Text="{Binding StatusText}"/>
+        <!-- 左上角账号块：左侧皮肤头像（正版取官方皮肤，离线用默认皮肤），右侧账号名与类型；点击去账号页 -->
+        <Button Style="{StaticResource AccountBlockButton}"
+                HorizontalAlignment="Left" VerticalAlignment="Top"
+                Margin="16,14,0,0"
+                Command="{Binding OpenAccountsCommand}"
+                ToolTip="管理账号">
+            <StackPanel Orientation="Horizontal">
+                <Border Width="40" Height="40" SnapsToDevicePixels="True">
+                    <Image Source="{Binding AccountAvatar}"
+                           Stretch="UniformToFill"
+                           SnapsToDevicePixels="True"
+                           RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                </Border>
+                <StackPanel Margin="10,0,2,0" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding AccountName}"
+                               FontSize="14" FontWeight="SemiBold" Foreground="White"/>
+                    <TextBlock Text="{Binding AccountTypeText}"
+                               Margin="0,2,0,0"
+                               FontSize="11" Foreground="#B3FFFFFF"/>
+                </StackPanel>
+            </StackPanel>
+        </Button>
+
+        <!-- 启动输出：点击启动后才出现，进度条在这块下面 -->
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Margin="0,0,0,120" Width="560"
+                    Visibility="{Binding HasLaunchOutput, Converter={StaticResource BoolToVis}}">
+            <Border Background="#CC000000" CornerRadius="8" Padding="10,8">
+                <StackPanel>
+                    <TextBlock Text="{Binding StatusText}"
+                               Margin="2,0,2,6"
+                               FontSize="13" FontWeight="SemiBold" Foreground="White"
+                               TextTrimming="CharacterEllipsis"/>
+                    <TextBox x:Name="LaunchOutputBox"
+                             Text="{Binding LaunchOutput, Mode=OneWay}"
+                             IsReadOnly="True" IsReadOnlyCaretVisible="False"
+                             Background="Transparent" BorderThickness="0"
+                             Foreground="#D4D4D4"
+                             FontFamily="Consolas, Courier New, 宋体"
+                             FontSize="12"
+                             Height="130"
+                             TextWrapping="NoWrap"
+                             VerticalScrollBarVisibility="Auto"
+                             HorizontalScrollBarVisibility="Auto"
+                             TextChanged="OnLaunchOutputChanged"/>
+                </StackPanel>
+            </Border>
             <ProgressBar Margin="0,8,0,0" Height="6" Minimum="0" Maximum="1"
-                         Width="420" HorizontalAlignment="Left"
                          Value="{Binding Progress, Mode=OneWay}"/>
         </StackPanel>
 

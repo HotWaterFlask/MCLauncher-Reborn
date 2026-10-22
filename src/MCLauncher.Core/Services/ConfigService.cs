@@ -13,11 +13,17 @@ public sealed class ConfigService
 
     private readonly IConfigStore _store;
     private readonly ILogger _log;
+    private readonly bool _includeBuiltInSecrets;
 
-    public ConfigService(IConfigStore store, ILogger log)
+    /// <param name="includeBuiltInSecrets">
+    /// 是否允许回退到 <c>Secrets\LocalSecrets.cs</c> 里的本机默认凭据。
+    /// 测试可关掉它，避免受开发者本地凭据影响。
+    /// </param>
+    public ConfigService(IConfigStore store, ILogger log, bool includeBuiltInSecrets = true)
     {
         _store = store;
         _log = log;
+        _includeBuiltInSecrets = includeBuiltInSecrets;
     }
 
     public AppSettings Settings { get; private set; } = new();
@@ -55,7 +61,9 @@ public sealed class ConfigService
         }
 
         // 开发者在 Secrets\LocalSecrets.cs 里写的默认值（该文件不入库）。
-        return string.IsNullOrWhiteSpace(LocalSecrets.MsClientId) ? null : LocalSecrets.MsClientId.Trim();
+        return _includeBuiltInSecrets && !string.IsNullOrWhiteSpace(LocalSecrets.MsClientId)
+            ? LocalSecrets.MsClientId.Trim()
+            : null;
     }
 
     /// <summary>
@@ -74,7 +82,45 @@ public sealed class ConfigService
             return fromEnv.Trim();
         }
 
-        return string.IsNullOrWhiteSpace(LocalSecrets.CurseForgeApiKey) ? null : LocalSecrets.CurseForgeApiKey.Trim();
+        return _includeBuiltInSecrets && !string.IsNullOrWhiteSpace(LocalSecrets.CurseForgeApiKey)
+            ? LocalSecrets.CurseForgeApiKey.Trim()
+            : null;
+    }
+
+    /// <summary>
+    /// 把启动器自己的 <c>.minecraft</c> 与官方启动器的 <c>%APPDATA%\.minecraft</c> 都登记到目录列表里。
+    /// 官方目录不存在时跳过，不制造死条目。
+    /// </summary>
+    public void EnsureKnownGameFolders(string launcherDirectory)
+    {
+        EnsureDefaultGameFolder(launcherDirectory);
+
+        var official = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), ".minecraft");
+
+        if (!Directory.Exists(official) ||
+            Settings.GameFolders.Any(folder => SameFolder(folder, official)))
+        {
+            return;
+        }
+
+        Settings.GameFolders.Add(Path.GetFullPath(official).TrimEnd(
+            Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+    }
+
+    private static bool SameFolder(string a, string b)
+    {
+        try
+        {
+            return string.Equals(
+                Path.GetFullPath(a).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                Path.GetFullPath(b).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                StringComparison.OrdinalIgnoreCase);
+        }
+        catch (ArgumentException)
+        {
+            return string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     /// <summary>确保默认游戏目录（启动器所在目录下的 .minecraft）存在并登记。</summary>

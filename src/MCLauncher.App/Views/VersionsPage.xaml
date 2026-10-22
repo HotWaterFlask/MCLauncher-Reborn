@@ -5,80 +5,213 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="720">
+    <UserControl.Resources>
+        <!-- 左栏游戏目录条目 -->
+        <Style x:Key="FolderItemStyle" TargetType="ListBoxItem">
+            <Setter Property="Foreground" Value="#1A1A1A"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="4" Padding="9,7"
+                                BorderBrush="Transparent" BorderThickness="1">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#F2F7FD"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#E3F0FA"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#BBD9F2"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 右栏实例行 -->
+        <Style x:Key="InstanceItemStyle" TargetType="ListBoxItem">
+            <Setter Property="Foreground" Value="#1A1A1A"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" Background="Transparent"
+                                BorderBrush="#F0F0F0" BorderThickness="0,0,0,1">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#F5F9FD"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#E3F0FA"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 左下角「添加游戏文件夹」 -->
+        <Style x:Key="AddFolderButton" TargetType="Button">
+            <Setter Property="Foreground" Value="#1A1A1A"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="4" Padding="10,6">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#F2F7FD"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 加载器卡片 -->
+        <Style x:Key="LoaderCardStyle" TargetType="Button">
+            <Setter Property="Margin" Value="4"/>
+            <Setter Property="Height" Value="84"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Foreground" Value="#1A1A1A"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" CornerRadius="6" Padding="8"
+                                Background="#FAFBFC" BorderBrush="#E2E6EC" BorderThickness="1">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#2F6FB6"/>
+                                <Setter TargetName="Bd" Property="Background" Value="#F2F7FD"/>
+                            </Trigger>
+                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#2F6FB6"/>
+                                <Setter TargetName="Bd" Property="Background" Value="#EAF3FB"/>
+                            </DataTrigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.55"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 「⋯」按钮 -->
+        <Style x:Key="MoreButton" TargetType="Button">
+            <Setter Property="Width" Value="30"/>
+            <Setter Property="Height" Value="26"/>
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="Foreground" Value="#5A5A5A"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="3">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#EEF3F9"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 实例图标 -->
+        <BitmapImage x:Key="InstanceIcon" UriSource="pack://application:,,,/MCLauncher-Reborn;component/Assets/instances/grass.png"/>
+    </UserControl.Resources>
+
     <Grid Margin="20,18,20,16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" Text="版本管理" Style="{StaticResource PageTitle}"/>
+        <TextBlock Grid.Row="0" Text="实例列表" Style="{StaticResource PageTitle}"/>
 
-        <!-- 工具栏 -->
-        <Grid Grid.Row="1" Margin="0,10,0,10">
+        <Grid Grid.Row="1" Margin="0,12,0,0">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="220"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="238"/>
+                <ColumnDefinition Width="14"/>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
-            <TextBox Grid.Column="0"
-                     Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}"
-                     Height="26" VerticalContentAlignment="Center" Padding="6,0" FontSize="13"
-                     ToolTip="按版本号搜索"/>
-            <CheckBox Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center"
-                      Content="显示快照" FontSize="13" Foreground="#1A1A1A"
-                      IsChecked="{Binding ShowSnapshots}"/>
-            <CheckBox Grid.Column="2" Margin="12,0,0,0" VerticalAlignment="Center"
-                      Content="显示远古版本" FontSize="13" Foreground="#1A1A1A"
-                      IsChecked="{Binding ShowOldVersions}"/>
-            <Button Grid.Column="4" Style="{StaticResource SkinButton}"
-                    Command="{Binding RefreshCommand}"
-                    Content="刷新列表"
-                    Width="92" Height="26" FontSize="13"/>
-        </Grid>
-
-        <!-- 两栏：远端清单 / 已安装 -->
-        <Grid Grid.Row="2">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="12"/>
-                <ColumnDefinition Width="240"/>
-            </Grid.ColumnDefinitions>
-
+            <!-- ===== 左栏：游戏目录 ===== -->
             <Border Grid.Column="0" Background="White" CornerRadius="6"
                     BorderBrush="{StaticResource ContentBorderBrush}" BorderThickness="1">
                 <DockPanel>
-                    <Border DockPanel.Dock="Bottom" Padding="10,8" Background="#F7F7F7"
-                            BorderBrush="{StaticResource ContentBorderBrush}" BorderThickness="0,1,0,0">
-                        <Button Style="{StaticResource SkinButton}"
-                                Command="{Binding InstallCommand}"
-                                Content="安装选中版本"
-                                Height="28" FontSize="13" HorizontalAlignment="Stretch"/>
-                    </Border>
-                    <ListBox ItemsSource="{Binding RemoteVersions}"
-                             SelectedItem="{Binding SelectedRemote, Mode=TwoWay}"
+                    <StackPanel DockPanel.Dock="Bottom" Margin="8,8,8,10">
+                        <Button Style="{StaticResource SkinButton}" Content="安装新游戏"
+                                Height="32" FontSize="13" Command="{Binding OpenInstallCommand}"/>
+                        <Button Style="{StaticResource SkinButton}" Content="安装整合包"
+                                Height="32" FontSize="13" Margin="0,6,0,0"
+                                Command="{Binding OpenModpackCommand}"/>
+                        <Button Style="{StaticResource SkinButton}" Content="全局游戏设置"
+                                Height="32" FontSize="13" Margin="0,6,0,0"
+                                Command="{Binding OpenGlobalSettingsCommand}"/>
+                    </StackPanel>
+
+                    <Button DockPanel.Dock="Bottom" Style="{StaticResource AddFolderButton}"
+                            Margin="8,0,8,2" Command="{Binding AddFolderCommand}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="15"
+                                       Foreground="#2F6FB6" VerticalAlignment="Center"/>
+                            <TextBlock Text="添加游戏文件夹" FontSize="13" Margin="10,0,0,0"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+
+                    <TextBlock DockPanel.Dock="Top" Text="游戏目录" FontSize="12" Foreground="#7A7A7A"
+                               Margin="12,12,0,4"/>
+
+                    <ListBox ItemsSource="{Binding Folders}"
+                             SelectedItem="{Binding SelectedFolder, Mode=TwoWay}"
                              Background="Transparent" BorderThickness="0"
-                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                             VirtualizingPanel.IsVirtualizing="True"
-                             VirtualizingPanel.VirtualizationMode="Recycling">
+                             Margin="6,0,6,4"
+                             ItemContainerStyle="{StaticResource FolderItemStyle}"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <Grid Margin="10,4" Height="22">
+                                <Grid>
                                     <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="{Binding Id}" FontSize="13" VerticalAlignment="Center"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding TypeLabel}" FontSize="11"
-                                               Foreground="#5A5A5A" VerticalAlignment="Center" Margin="8,0,0,0"/>
-                                    <TextBlock Grid.Column="2" Text="{Binding ReleaseTime}" FontSize="11"
-                                               Foreground="#8A8A8A" VerticalAlignment="Center" Margin="8,0,0,0"/>
+
+                                    <TextBlock Grid.Column="0" Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets"
+                                               FontSize="15" Foreground="#5A5A5A" VerticalAlignment="Center"/>
+
+                                    <StackPanel Grid.Column="1" Margin="9,0,4,0">
+                                        <TextBlock Text="{Binding Name}" FontSize="13"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{Binding Path}" FontSize="10" Foreground="#8A8A8A"
+                                                   Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+
+                                    <Button Grid.Column="2" Content="✕"
+                                            ToolTip="从列表移除这个目录"
+                                            Width="24" Height="24" FontSize="11"
+                                            Foreground="#8A8A8A" Background="Transparent" BorderThickness="0"
+                                            Cursor="Hand"
+                                            Visibility="{Binding CanRemove, Converter={StaticResource BoolToVis}}"
+                                            Command="{Binding DataContext.RemoveFolderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding}"/>
                                 </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
@@ -86,96 +219,303 @@
                 </DockPanel>
             </Border>
 
+            <!-- ===== 右栏：实例列表 ===== -->
             <Border Grid.Column="2" Background="White" CornerRadius="6"
                     BorderBrush="{StaticResource ContentBorderBrush}" BorderThickness="1">
                 <DockPanel>
-                    <TextBlock DockPanel.Dock="Top" Text="已安装版本" Style="{StaticResource SectionTitle}"
-                               Margin="10,10,10,0"/>
+                    <Grid DockPanel.Dock="Top" Margin="10,10,10,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Button Grid.Column="0" Style="{StaticResource SkinButton}"
+                                Command="{Binding RefreshCommand}"
+                                Width="76" Height="26" FontSize="13"
+                                Content="刷新"/>
+
+                        <TextBox Grid.Column="1" Margin="8,0,8,0"
+                                 Height="26" FontSize="13" Padding="6,0"
+                                 VerticalContentAlignment="Center"
+                                 Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="按实例名 / 游戏版本 / 加载器搜索"/>
+
+                        <TextBlock Grid.Column="2" VerticalAlignment="Center"
+                                   FontSize="12" Foreground="#7A7A7A"
+                                   Text="{Binding Instances.Count, StringFormat=共 {0} 个实例}"/>
+                    </Grid>
+
                     <Border DockPanel.Dock="Bottom" Padding="10,8" Background="#F7F7F7"
                             BorderBrush="{StaticResource ContentBorderBrush}" BorderThickness="0,1,0,0">
-                        <StackPanel>
-                            <CheckBox Content="版本隔离"
-                                      IsChecked="{Binding IsSelectedIsolated}"
-                                      FontSize="12" Foreground="#1A1A1A"
-                                      ToolTip="开启后该版本的 mods / 存档 / 配置都放在自己的目录里，与其它版本互不影响"/>
-                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                <Button Style="{StaticResource SkinButton}"
-                                        Command="{Binding CompleteCommand}"
-                                        Content="补全"
-                                        Width="82" Height="28" FontSize="13"/>
-                                <Button Style="{StaticResource SkinButton}"
-                                        Command="{Binding DeleteCommand}"
-                                        Content="删除"
-                                        Width="82" Height="28" FontSize="13" Margin="8,0,0,0"/>
-                            </StackPanel>
-                        </StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0" Text="{Binding StatusText}"
+                                       FontSize="12" Foreground="#5A5A5A"
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip="{Binding StatusText}"/>
+
+                            <ProgressBar Grid.Column="1" Width="150" Height="6"
+                                         Minimum="0" Maximum="1"
+                                         Value="{Binding Progress, Mode=OneWay}"
+                                         VerticalAlignment="Center"/>
+                        </Grid>
                     </Border>
-                    <ListBox ItemsSource="{Binding InstalledVersions}"
-                             SelectedItem="{Binding SelectedInstalled, Mode=TwoWay}"
-                             Background="Transparent" BorderThickness="0"
-                             Margin="4,8,4,0"
-                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                             VirtualizingPanel.IsVirtualizing="True"
-                             VirtualizingPanel.VirtualizationMode="Recycling">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <StackPanel Margin="6,5">
-                                    <TextBlock Text="{Binding Id}" FontSize="13" TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock Text="{Binding LoaderName}" FontSize="11" Foreground="#5A5A5A"/>
-                                </StackPanel>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
+
+                    <Grid>
+                        <ListBox ItemsSource="{Binding Instances}"
+                                 SelectedItem="{Binding SelectedInstance, Mode=TwoWay}"
+                                 Background="Transparent" BorderThickness="0"
+                                 ItemContainerStyle="{StaticResource InstanceItemStyle}"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 MouseDoubleClick="OnInstanceDoubleClick"
+                                 VirtualizingPanel.IsVirtualizing="True"
+                                 VirtualizingPanel.VirtualizationMode="Recycling">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Height="58" Margin="8,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="22"/>
+                                            <ColumnDefinition Width="40"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- 当前实例标记 -->
+                                        <Ellipse Grid.Column="0" Width="9" Height="9"
+                                                 VerticalAlignment="Center" HorizontalAlignment="Left">
+                                            <Ellipse.Style>
+                                                <Style TargetType="Ellipse">
+                                                    <Setter Property="Stroke" Value="#9A9A9A"/>
+                                                    <Setter Property="StrokeThickness" Value="1.2"/>
+                                                    <Setter Property="Fill" Value="Transparent"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                                                            <Setter Property="Fill" Value="#4C9A55"/>
+                                                            <Setter Property="Stroke" Value="#4C9A55"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Ellipse.Style>
+                                        </Ellipse>
+
+                                        <Image Grid.Column="1" Source="{StaticResource InstanceIcon}"
+                                               Width="28" Height="28" VerticalAlignment="Center"
+                                               RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+
+                                        <StackPanel Grid.Column="2" Margin="6,0,8,0" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Display}" FontSize="14"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="{Binding Subtitle}" FontSize="11"
+                                                       Foreground="#5A5A5A" Margin="0,3,0,0"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+
+                                        <Button Grid.Column="3" Style="{StaticResource SkinButton}"
+                                                Content="启动"
+                                                Width="58" Height="26" FontSize="12"
+                                                VerticalAlignment="Center"
+                                                Command="{Binding Owner.LaunchRowCommand}"
+                                                CommandParameter="{Binding}"/>
+
+                                        <Button Grid.Column="4" Style="{StaticResource MoreButton}"
+                                                Content="⋯"
+                                                VerticalAlignment="Center"
+                                                Click="OnMoreClick">
+                                            <Button.ContextMenu>
+                                                <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                                    <MenuItem Header="实例管理"
+                                                              Command="{Binding Owner.ManageCommand}"
+                                                              CommandParameter="{Binding}"/>
+                                                    <Separator/>
+                                                    <MenuItem Header="设为当前实例"
+                                                              Command="{Binding Owner.SetCurrentCommand}"
+                                                              CommandParameter="{Binding}"/>
+                                                    <MenuItem Header="实例设置"
+                                                              Command="{Binding Owner.InstanceSettingsCommand}"
+                                                              CommandParameter="{Binding}"/>
+                                                    <MenuItem Header="打开实例目录"
+                                                              Command="{Binding Owner.OpenFolderCommand}"
+                                                              CommandParameter="{Binding}"/>
+                                                    <MenuItem Header="校验并补全文件"
+                                                              Command="{Binding Owner.CompleteInstanceCommand}"
+                                                              CommandParameter="{Binding}"/>
+                                                    <Separator/>
+                                                    <MenuItem Header="删除实例"
+                                                              Command="{Binding Owner.DeleteCommand}"
+                                                              CommandParameter="{Binding}"/>
+                                                </ContextMenu>
+                                            </Button.ContextMenu>
+                                        </Button>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    Visibility="{Binding ShowEmptyHint, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="这个目录里还没有实例" FontSize="14" Foreground="#5A5A5A"
+                                       HorizontalAlignment="Center"/>
+                            <TextBlock Text="点左下角「安装新游戏」开始，或添加其它游戏文件夹。"
+                                       FontSize="12" Foreground="#8A8A8A" Margin="0,6,0,0"
+                                       HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Grid>
                 </DockPanel>
             </Border>
         </Grid>
 
-        <!-- 加载器安装：装到右侧选中实例的基底原版上 -->
-        <Border Grid.Row="3" Margin="0,10,0,0" Background="White" CornerRadius="6" Padding="12,10"
-                BorderBrush="{StaticResource ContentBorderBrush}" BorderThickness="1">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
+        <!-- ===== 安装新游戏 / 整合包弹窗 ===== -->
+        <Grid Grid.RowSpan="3"
+              Visibility="{Binding IsAnyDialogOpen, Converter={StaticResource BoolToVis}}"
+              Background="#66000000" Panel.ZIndex="20">
 
-                <TextBlock Grid.Column="0" Text="加载器" VerticalAlignment="Center" FontSize="13" Foreground="#1A1A1A"/>
-                <ComboBox Grid.Column="1" Width="110" Height="26" Margin="8,0,0,0" FontSize="13"
-                          ItemsSource="{Binding LoaderKinds}"
-                          SelectedItem="{Binding SelectedLoaderKind, Mode=TwoWay}"/>
-                <ComboBox Grid.Column="2" Width="150" Height="26" Margin="8,0,0,0" FontSize="13"
-                          ItemsSource="{Binding LoaderVersions}"
-                          SelectedItem="{Binding SelectedLoaderVersion, Mode=TwoWay}"
-                          DisplayMemberPath="Display"
-                          ToolTip="先点「获取版本」再选择"/>
-                <StackPanel Grid.Column="3" Orientation="Horizontal" Margin="8,0,0,0">
-                    <Button Style="{StaticResource SkinButton}"
-                            Command="{Binding LoadLoaderVersionsCommand}"
-                            Content="获取版本"
-                            Width="82" Height="26" FontSize="13"/>
-                    <Button Style="{StaticResource SkinButton}"
-                            Command="{Binding InstallLoaderCommand}"
-                            Content="安装加载器"
-                            Width="96" Height="26" FontSize="13" Margin="8,0,0,0"/>
+            <!-- 安装新游戏 -->
+            <Border Width="640" Background="White" CornerRadius="8" Padding="18,16"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    BorderBrush="#D8D8D8" BorderThickness="1"
+                    Visibility="{Binding IsInstallDialogOpen, Converter={StaticResource BoolToVis}}">
+                <StackPanel>
+                    <TextBlock Text="安装新游戏" FontSize="16" FontWeight="SemiBold"/>
+                    <TextBlock Text="原版、加载器与实例名可以一次配好；同一时间只能选一个加载器。"
+                               Margin="0,4,0,0" Style="{StaticResource BodyText}"/>
+
+                    <Grid Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="86"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="实例名称" FontSize="13" Foreground="#5A5A5A"
+                                   VerticalAlignment="Center"/>
+                        <TextBox Grid.Column="1" Height="30" FontSize="13" Padding="6,0"
+                                 VerticalContentAlignment="Center"
+                                 Text="{Binding NewInstanceName, UpdateSourceTrigger=PropertyChanged}"/>
+                    </Grid>
+
+                    <Grid Margin="0,10,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="86"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Minecraft" FontSize="13" Foreground="#5A5A5A"
+                                   VerticalAlignment="Center"/>
+                        <ComboBox Grid.Column="1" Width="220" Height="28" FontSize="13"
+                                  ItemsSource="{Binding MinecraftVersions}"
+                                  SelectedItem="{Binding SelectedMinecraftVersion, Mode=TwoWay}"/>
+                        <CheckBox Grid.Column="2" Content="显示快照" FontSize="12"
+                                  Foreground="#1A1A1A" Margin="12,0,0,0"
+                                  VerticalAlignment="Center"
+                                  IsChecked="{Binding IncludeSnapshots, Mode=TwoWay}"/>
+                    </Grid>
+
+                    <TextBlock Text="模组加载器（可选）" FontSize="12" Foreground="#7A7A7A"
+                               Margin="0,12,0,2"/>
+
+                    <ItemsControl ItemsSource="{Binding LoaderCards}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Columns="4"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Style="{StaticResource LoaderCardStyle}"
+                                        Command="{Binding DataContext.SelectLoaderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        CommandParameter="{Binding}">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Title}" FontSize="14" FontWeight="SemiBold"
+                                                   HorizontalAlignment="Center"/>
+                                        <TextBlock Text="{Binding Status}" FontSize="11" Foreground="#5A5A5A"
+                                                   Margin="0,5,0,0" HorizontalAlignment="Center"
+                                                   TextWrapping="Wrap" TextAlignment="Center"
+                                                   MaxWidth="130"/>
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <Grid Margin="0,8,0,0"
+                          Visibility="{Binding HasSelectedLoader, Converter={StaticResource BoolToVis}}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="86"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="加载器版本" FontSize="13" Foreground="#5A5A5A"
+                                   VerticalAlignment="Center"/>
+                        <ComboBox Grid.Column="1" Width="220" Height="28" FontSize="13"
+                                  ItemsSource="{Binding LoaderVersions}"
+                                  SelectedItem="{Binding SelectedLoaderVersion, Mode=TwoWay}"
+                                  DisplayMemberPath="Display"/>
+                        <TextBlock Grid.Column="2" Margin="12,0,0,0" VerticalAlignment="Center"
+                                   FontSize="11" Foreground="#8A8A8A"
+                                   Text="其它加载器会显示为不兼容"/>
+                    </Grid>
+
+                    <TextBlock Text="{Binding InstallStatus}" Margin="0,12,0,0"
+                               FontSize="12" Foreground="#5A5A5A" TextWrapping="Wrap" MinHeight="16"/>
+
+                    <ProgressBar Height="6" Margin="0,8,0,0" Minimum="0" Maximum="1"
+                                 Value="{Binding InstallProgress, Mode=OneWay}"
+                                 Visibility="{Binding IsInstalling, Converter={StaticResource BoolToVis}}"/>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+                        <Button Style="{StaticResource SkinButton}" Content="取消"
+                                Width="76" Height="28" FontSize="13"
+                                Command="{Binding CloseDialogsCommand}"/>
+                        <Button Style="{StaticResource SkinButton}" Content="安装"
+                                Width="76" Height="28" FontSize="13" Margin="8,0,0,0"
+                                Command="{Binding ConfirmInstallCommand}"
+                                IsEnabled="{Binding CanConfirmInstall}"/>
+                    </StackPanel>
                 </StackPanel>
-                <TextBlock Grid.Column="4" Margin="12,0,0,0" VerticalAlignment="Center"
-                           Style="{StaticResource BodyText}" Text="{Binding LoaderTargetText}"/>
-            </Grid>
-        </Border>
+            </Border>
 
-        <!-- 进度与状态 -->
-        <Grid Grid.Row="4" Margin="0,10,0,0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <ProgressBar Grid.Column="0" Height="6" Minimum="0" Maximum="1"
-                         Value="{Binding Progress, Mode=OneWay}" VerticalAlignment="Center"/>
-            <TextBlock Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center"
-                       Style="{StaticResource BodyText}" Text="{Binding StatusText}"/>
+            <!-- 安装整合包 -->
+            <Border Width="560" Background="White" CornerRadius="8" Padding="18,16"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    BorderBrush="#D8D8D8" BorderThickness="1"
+                    Visibility="{Binding IsModpackDialogOpen, Converter={StaticResource BoolToVis}}">
+                <StackPanel>
+                    <TextBlock Text="安装整合包" FontSize="16" FontWeight="SemiBold"/>
+                    <TextBlock Text="{Binding ModpackTitle}" Margin="0,8,0,0"
+                               FontSize="14" FontWeight="SemiBold"/>
+                    <TextBlock Text="{Binding ModpackDetail}" Margin="0,4,0,0"
+                               Style="{StaticResource BodyText}" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding ModpackNote}" Margin="0,6,0,0"
+                               FontSize="12" Foreground="#B26A00" TextWrapping="Wrap"
+                               Visibility="{Binding HasModpackNote, Converter={StaticResource BoolToVis}}"/>
+
+                    <TextBlock Text="实例名称" Margin="0,14,0,4" FontSize="13" Foreground="#5A5A5A"/>
+                    <TextBox Height="30" FontSize="13" Padding="6,0" VerticalContentAlignment="Center"
+                             Text="{Binding ModpackInstanceName, UpdateSourceTrigger=PropertyChanged}"/>
+
+                    <TextBlock Text="{Binding ModpackStatus}" Margin="0,10,0,0"
+                               FontSize="12" Foreground="#5A5A5A" TextWrapping="Wrap" MinHeight="16"/>
+
+                    <ProgressBar Height="6" Margin="0,8,0,0" Minimum="0" Maximum="1"
+                                 Value="{Binding ModpackProgress, Mode=OneWay}"
+                                 Visibility="{Binding IsModpackInstalling, Converter={StaticResource BoolToVis}}"/>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+                        <Button Style="{StaticResource SkinButton}" Content="取消"
+                                Width="76" Height="28" FontSize="13"
+                                Command="{Binding CloseDialogsCommand}"/>
+                        <Button Style="{StaticResource SkinButton}" Content="安装"
+                                Width="76" Height="28" FontSize="13" Margin="8,0,0,0"
+                                Command="{Binding ConfirmModpackCommand}"
+                                IsEnabled="{Binding CanConfirmModpack}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
         </Grid>
     </Grid>
 </UserControl>

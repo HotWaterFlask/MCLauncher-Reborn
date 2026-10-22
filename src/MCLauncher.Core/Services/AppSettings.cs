@@ -36,9 +36,12 @@ public sealed class AppSettings
 
     public string? ExtraGameArgs { get; set; }
 
-    public int DefaultWidth { get; set; }
+    public int DefaultWidth { get; set; } = 854;
 
-    public int DefaultHeight { get; set; }
+    public int DefaultHeight { get; set; } = 480;
+
+    /// <summary>游戏窗口类型：窗口化 / 全屏 / 最大化。</summary>
+    public GameWindowMode WindowMode { get; set; } = GameWindowMode.Windowed;
 
     /// <summary>默认是否对实例启用版本隔离。</summary>
     public bool DefaultIsolation { get; set; } = true;
@@ -58,6 +61,9 @@ public sealed class AppSettings
 
     /// <summary>当前选中的账号 UUID。</summary>
     public string? SelectedAccountUuid { get; set; }
+
+    /// <summary>已添加的外置登录认证服务器（默认带 LittleSkin）。</summary>
+    public List<AuthServerEntry> AuthServers { get; set; } = new() { AuthServerEntry.LittleSkin() };
 
     // ---- 凭据（均不由仓库分发，缺失时界面引导）----
     /// <summary>微软登录用 Azure 应用客户端 ID。</summary>

@@ -82,16 +82,20 @@ public sealed class ResourceRepository
                 }
             }
 
-            var pattern = kind switch
+            var patterns = kind switch
             {
-                ResourceKind.Mod => "*.jar",
-                ResourceKind.Schematic => "*.litematic",
-                _ => "*.zip",
+                ResourceKind.Mod => new[] { "*.jar" },
+                // 原理图有多种格式：Litematica / WorldEdit / Sponge / 原版结构。
+                ResourceKind.Schematic => new[] { "*.litematic", "*.schematic", "*.schem", "*.nbt" },
+                _ => new[] { "*.zip" },
             };
 
-            foreach (var file in Directory.EnumerateFiles(directory, pattern))
+            foreach (var pattern in patterns)
             {
-                result.Add(Build(kind, file, isDirectory: false));
+                foreach (var file in Directory.EnumerateFiles(directory, pattern))
+                {
+                    result.Add(Build(kind, file, isDirectory: false));
+                }
             }
 
             if (kind == ResourceKind.ResourcePack || kind == ResourceKind.Datapack)
@@ -107,7 +111,11 @@ public sealed class ResourceRepository
             {
                 if (!file.EndsWith(".jar" + DisabledSuffix, StringComparison.OrdinalIgnoreCase)
                     && !file.EndsWith(".zip" + DisabledSuffix, StringComparison.OrdinalIgnoreCase)
-                    && !file.EndsWith(".litematic" + DisabledSuffix, StringComparison.OrdinalIgnoreCase))
+                    && !file.EndsWith(".mcpack" + DisabledSuffix, StringComparison.OrdinalIgnoreCase)
+                    && !file.EndsWith(".litematic" + DisabledSuffix, StringComparison.OrdinalIgnoreCase)
+                    && !file.EndsWith(".schematic" + DisabledSuffix, StringComparison.OrdinalIgnoreCase)
+                    && !file.EndsWith(".schem" + DisabledSuffix, StringComparison.OrdinalIgnoreCase)
+                    && !file.EndsWith(".nbt" + DisabledSuffix, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
@@ -211,6 +219,56 @@ public sealed class ResourceRepository
         }
     }
 
+    /// <summary>
+    /// 把一个存档目录打成 zip 备份，文件名形如 <c>世界名_20261023_120000.zip</c>。
+    /// 返回备份文件路径；失败返回 null。
+    /// </summary>
+    public string? BackupWorld(LocalResource world, string backupsDirectory)
+    {
+        if (world.Kind != ResourceKind.World || !Directory.Exists(world.FilePath))
+        {
+            return null;
+        }
+
+        try
+        {
+            PathUtil.EnsureDirectory(backupsDirectory);
+
+            var baseName = SanitizeFileName(world.Title);
+            var stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+            var target = Path.Combine(backupsDirectory, $"{baseName}_{stamp}.zip");
+
+            var suffix = 2;
+            while (File.Exists(target))
+            {
+                target = Path.Combine(backupsDirectory, $"{baseName}_{stamp}_{suffix++}.zip");
+            }
+
+            ZipFile.CreateFromDirectory(world.FilePath, target, CompressionLevel.Optimal, includeBaseDirectory: false);
+            _log.Info($"已备份存档 {world.Title} → {target}");
+            return target;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _log.Warn($"备份存档失败：{world.FilePath}", ex);
+            return null;
+        }
+    }
+
+    private static string SanitizeFileName(string name)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        var builder = new System.Text.StringBuilder(name.Length);
+
+        foreach (var ch in name)
+        {
+            builder.Append(Array.IndexOf(invalid, ch) >= 0 ? '_' : ch);
+        }
+
+        var cleaned = builder.ToString().Trim().TrimEnd('.');
+        return string.IsNullOrWhiteSpace(cleaned) ? "world" : cleaned;
+    }
+
     /// <summary>把文件（或目录）导入到对应资源目录。</summary>
     public bool Import(string instanceDirectory, ResourceKind kind, string sourcePath, string? newFileName = null)
     {
@@ -289,6 +347,7 @@ public sealed class ResourceRepository
                     break;
                 case ResourceKind.ResourcePack:
                 case ResourceKind.Datapack:
+                case ResourceKind.ShaderPack:
                     ReadPackMetadata(resource, path);
                     break;
                 case ResourceKind.World:
@@ -328,10 +387,8 @@ public sealed class ResourceRepository
             return;
         }
 
-        // Fabric / Quilt：fabric.mod.json
-        var json = ArchiveUtil.ReadTextEntry(path, "fabric.mod.json")
-                   ?? ArchiveUtil.ReadTextEntry(path, "quilt.mod.json");
-
+        // Fabric：fabric.mod.json
+        var json = ArchiveUtil.ReadTextEntry(path, "fabric.mod.json");
         if (json is not null)
         {
             var mod = JsonUtil.Deserialize<FabricModMetadata>(json);
@@ -340,18 +397,55 @@ public sealed class ResourceRepository
                 resource.DisplayName = mod.Name ?? mod.Id ?? resource.DisplayName;
                 resource.Version = mod.Version;
                 resource.Description = mod.Description;
+                resource.Loader = "Fabric";
+                resource.IconBytes = ReadArchiveIcon(
+                    path,
+                    ReadIconPath(mod.Icon),
+                    mod.Id is null ? null : $"assets/{mod.Id}/icon.png",
+                    "icon.png",
+                    "logo.png");
                 return;
             }
         }
 
-        // Forge / NeoForge：META-INF/mods.toml 或 meta-inf/neoforge.mods.toml
-        var toml = ArchiveUtil.ReadTextEntry(path, "META-INF/mods.toml")
-                   ?? ArchiveUtil.ReadTextEntry(path, "META-INF/neoforge.mods.toml");
+        // Quilt：quilt.mod.json
+        var quiltJson = ArchiveUtil.ReadTextEntry(path, "quilt.mod.json");
+        if (quiltJson is not null)
+        {
+            var quilt = JsonUtil.Deserialize<QuiltModMetadata>(quiltJson)?.Loader;
+            if (quilt is not null)
+            {
+                resource.DisplayName = quilt.Metadata?.Name ?? quilt.Id ?? resource.DisplayName;
+                resource.Version = quilt.Version;
+                resource.Description = quilt.Metadata?.Description;
+                resource.Loader = "Quilt";
+                resource.IconBytes = ReadArchiveIcon(
+                    path,
+                    ReadIconPath(quilt.Metadata?.Icon ?? default),
+                    quilt.Id is null ? null : $"assets/{quilt.Id}/icon.png",
+                    "icon.png",
+                    "logo.png");
+                return;
+            }
+        }
+
+        // Forge / NeoForge：META-INF/mods.toml 或 META-INF/neoforge.mods.toml
+        var toml = ArchiveUtil.ReadTextEntry(path, "META-INF/mods.toml");
+        var loader = "Forge";
 
         if (toml is null)
         {
+            toml = ArchiveUtil.ReadTextEntry(path, "META-INF/neoforge.mods.toml");
+            loader = "NeoForge";
+        }
+
+        if (toml is null)
+        {
+            resource.IconBytes = ReadArchiveIcon(path, "icon.png", "logo.png");
             return;
         }
+
+        string? logoFile = null;
 
         foreach (var line in toml.Split('\n'))
         {
@@ -368,7 +462,92 @@ public sealed class ResourceRepository
             {
                 resource.Description = ExtractTomlValue(trimmed);
             }
+            else if (trimmed.StartsWith("logoFile", StringComparison.OrdinalIgnoreCase))
+            {
+                logoFile = ExtractTomlValue(trimmed);
+            }
         }
+
+        resource.Loader = loader;
+        resource.IconBytes = ReadArchiveIcon(path, logoFile, "icon.png", "logo.png");
+    }
+
+    private const int MaxIconBytes = 2 * 1024 * 1024;
+
+    /// <summary>从 jar / zip 里按候选路径找图标，找到第一个可用图片就返回。</summary>
+    private static byte[]? ReadArchiveIcon(string archivePath, params string?[] candidates)
+    {
+        if (!ArchiveUtil.LooksLikeZip(archivePath))
+        {
+            return null;
+        }
+
+        foreach (var candidate in candidates)
+        {
+            if (string.IsNullOrWhiteSpace(candidate))
+            {
+                continue;
+            }
+
+            var entry = candidate.Trim().TrimStart('/').Replace('\\', '/');
+            try
+            {
+                var bytes = ArchiveUtil.ReadBytesEntry(archivePath, entry);
+                if (IsUsableIcon(bytes))
+                {
+                    return bytes;
+                }
+            }
+            catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+            {
+            }
+        }
+
+        return null;
+    }
+
+    private static byte[]? ReadFileIcon(string path)
+    {
+        try
+        {
+            if (!File.Exists(path))
+            {
+                return null;
+            }
+
+            var bytes = File.ReadAllBytes(path);
+            return IsUsableIcon(bytes) ? bytes : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private static bool IsUsableIcon(byte[]? bytes) => bytes is { Length: > 0 and <= MaxIconBytes };
+
+    /// <summary>fabric.mod.json 的 icon 可以是字符串，也可能是「尺寸 → 路径」的对象。</summary>
+    private static string? ReadIconPath(JsonElement element)
+    {
+        if (element.ValueKind == JsonValueKind.String)
+        {
+            return element.GetString();
+        }
+
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        foreach (var property in element.EnumerateObject())
+        {
+            if (property.Value.ValueKind == JsonValueKind.String)
+            {
+                return property.Value.GetString();
+            }
+        }
+
+        return null;
     }
 
     private static string? ExtractTomlValue(string line)
@@ -385,9 +564,10 @@ public sealed class ResourceRepository
 
     private static void ReadPackMetadata(LocalResource resource, string path)
     {
+        var isDirectory = Directory.Exists(path);
         string? json = null;
 
-        if (Directory.Exists(path))
+        if (isDirectory)
         {
             var file = Path.Combine(path, "pack.mcmeta");
             if (File.Exists(file))
@@ -401,14 +581,17 @@ public sealed class ResourceRepository
                    ?? ArchiveUtil.ReadTextEntry(path, "pack/pack.mcmeta");
         }
 
-        if (json is null)
+        if (json is not null)
         {
-            return;
+            var pack = JsonUtil.Deserialize<PackMcMeta>(json);
+            resource.Description = ReadPackDescription(pack);
+            resource.Version = pack?.Pack?.PackFormat.ToString();
         }
 
-        var pack = JsonUtil.Deserialize<PackMcMeta>(json);
-        resource.Description = ReadPackDescription(pack);
-        resource.Version = pack?.Pack?.PackFormat.ToString();
+        // 资源包 / 光影包的封面图都叫 pack.png。
+        resource.IconBytes = isDirectory
+            ? ReadFileIcon(Path.Combine(path, "pack.png"))
+            : ReadArchiveIcon(path, "pack.png");
     }
 
     /// <summary>pack.mcmeta 的 description 既可能是字符串，也可能是 <c>{"translate": "..."}</c>。</summary>
@@ -440,6 +623,9 @@ public sealed class ResourceRepository
 
             resource.GameVersion = versionName;
         }
+
+        // 存档图标是存档目录根下的 64×64 icon.png。
+        resource.IconBytes = ReadFileIcon(Path.Combine(path, "icon.png"));
     }
 
     private static void ReadSchematicMetadata(LocalResource resource, string path)
@@ -477,6 +663,39 @@ public sealed class ResourceRepository
 
         [JsonPropertyName("description")]
         public string? Description { get; set; }
+
+        [JsonPropertyName("icon")]
+        public JsonElement Icon { get; set; }
+    }
+
+    private sealed class QuiltModMetadata
+    {
+        [JsonPropertyName("quilt_loader")]
+        public QuiltLoader? Loader { get; set; }
+    }
+
+    private sealed class QuiltLoader
+    {
+        [JsonPropertyName("id")]
+        public string? Id { get; set; }
+
+        [JsonPropertyName("version")]
+        public string? Version { get; set; }
+
+        [JsonPropertyName("metadata")]
+        public QuiltMetadata? Metadata { get; set; }
+    }
+
+    private sealed class QuiltMetadata
+    {
+        [JsonPropertyName("name")]
+        public string? Name { get; set; }
+
+        [JsonPropertyName("description")]
+        public string? Description { get; set; }
+
+        [JsonPropertyName("icon")]
+        public JsonElement Icon { get; set; }
     }
 
     private sealed class PackMcMeta
