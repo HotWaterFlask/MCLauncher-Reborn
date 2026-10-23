@@ -50,10 +50,18 @@ public sealed class DownloadBatchResult
 public sealed class DownloadBatch
 {
     private static readonly TimeSpan ReportInterval = TimeSpan.FromMilliseconds(100);
+    private static readonly TimeSpan SpeedWindow = TimeSpan.FromMilliseconds(400);
+
+    /// <summary>安装弹窗里最多同时展示几条文件进度。</summary>
+    private const int MaxActiveFiles = 5;
 
     private readonly HttpDownloader _downloader;
     private readonly ILogger _log;
+    private readonly object _reportLock = new();
     private long _lastReportTicks;
+    private long _speedWindowTicks;
+    private long _speedWindowBytes;
+    private double _lastSpeed;
 
     public DownloadBatch(HttpDownloader downloader, ILogger log)
     {
@@ -81,8 +89,18 @@ public sealed class DownloadBatch
         long downloadedBytes = 0;
         var failures = new ConcurrentQueue<DownloadFailure>();
 
+        // 正在下载的文件：key 是开始顺序，便于界面稳定地按启动顺序展示。
+        // 用普通字典 + 锁而不是 ConcurrentDictionary：后者在并发枚举时可能读到已被移除的空值。
+        var active = new Dictionary<int, ActiveFile>();
+        var activeLock = new object();
+        var activeSequence = 0;
+
         _lastReportTicks = 0;
-        Report(progress, total, 0, 0, 0, totalBytes, 0, "开始下载", force: true);
+        _speedWindowTicks = 0;
+        _speedWindowBytes = 0;
+        _lastSpeed = 0;
+
+        Report(progress, total, 0, 0, 0, totalBytes, 0, null, null, "开始下载", force: true);
 
         _log.Info($"开始批量下载：共 {total} 个文件，并发 {maxParallel}");
 
@@ -92,18 +110,30 @@ public sealed class DownloadBatch
             async (request, token) =>
             {
                 long localReported = 0;
+                var slot = Interlocked.Increment(ref activeSequence);
+                var entry = new ActiveFile(request.Name, request.Checker.Size);
+                lock (activeLock)
+                {
+                    active[slot] = entry;
+                }
 
                 var fileProgress = new InlineProgress<DownloadProgress>(p =>
                 {
+                    if (p.TotalBytes > 0)
+                    {
+                        Volatile.Write(ref entry.TotalBytes, p.TotalBytes);
+                    }
+
                     var delta = p.BytesReceived - localReported;
                     if (delta != 0)
                     {
                         localReported = p.BytesReceived;
+                        Volatile.Write(ref entry.BytesReceived, p.BytesReceived);
                         Interlocked.Add(ref downloadedBytes, delta);
                     }
 
                     Report(progress, total, Volatile.Read(ref completed), Volatile.Read(ref skipped), Volatile.Read(ref failed),
-                        totalBytes, Interlocked.Read(ref downloadedBytes), request.Name, force: false);
+                        totalBytes, Interlocked.Read(ref downloadedBytes), active, activeLock, request.Name, force: false);
                 });
 
                 DownloadOutcome outcome;
@@ -120,6 +150,13 @@ public sealed class DownloadBatch
                 catch (Exception ex)
                 {
                     outcome = DownloadOutcome.Failed(0, ex.Message);
+                }
+                finally
+                {
+                    lock (activeLock)
+                    {
+                        active.Remove(slot);
+                    }
                 }
 
                 if (outcome.Success)
@@ -151,7 +188,7 @@ public sealed class DownloadBatch
                 }
 
                 Report(progress, total, Volatile.Read(ref completed), Volatile.Read(ref skipped), Volatile.Read(ref failed),
-                    totalBytes, Interlocked.Read(ref downloadedBytes), request.Name, force: true);
+                    totalBytes, Interlocked.Read(ref downloadedBytes), active, activeLock, request.Name, force: true);
             }).ConfigureAwait(false);
 
         var result = new DownloadBatchResult
@@ -179,6 +216,28 @@ public sealed class DownloadBatch
         return result;
     }
 
+    private static IReadOnlyList<DownloadFileProgress> SnapshotActive(
+        Dictionary<int, ActiveFile> active,
+        object activeLock)
+    {
+        lock (activeLock)
+        {
+            if (active.Count == 0)
+            {
+                return Array.Empty<DownloadFileProgress>();
+            }
+
+            return active
+                .OrderBy(pair => pair.Key)
+                .Take(MaxActiveFiles)
+                .Select(pair => new DownloadFileProgress(
+                    pair.Value.Name,
+                    Volatile.Read(ref pair.Value.BytesReceived),
+                    Volatile.Read(ref pair.Value.TotalBytes)))
+                .ToArray();
+        }
+    }
+
     private void Report(
         IProgress<DownloadBatchProgress>? progress,
         int total,
@@ -187,6 +246,8 @@ public sealed class DownloadBatch
         int failed,
         long totalBytes,
         long downloadedBytes,
+        Dictionary<int, ActiveFile>? active,
+        object? activeLock,
         string? current,
         bool force)
     {
@@ -195,26 +256,70 @@ public sealed class DownloadBatch
             return;
         }
 
-        if (!force)
+        lock (_reportLock)
         {
-            var last = Volatile.Read(ref _lastReportTicks);
-            if (last != 0 && Stopwatch.GetElapsedTime(last) < ReportInterval)
+            var now = Stopwatch.GetTimestamp();
+
+            if (!force)
             {
-                return;
+                var last = _lastReportTicks;
+                if (last != 0 && Stopwatch.GetElapsedTime(last, now) < ReportInterval)
+                {
+                    return;
+                }
             }
+
+            _lastReportTicks = now;
+
+            if (_speedWindowTicks == 0)
+            {
+                _speedWindowTicks = now;
+                _speedWindowBytes = downloadedBytes;
+            }
+            else
+            {
+                var elapsed = Stopwatch.GetElapsedTime(_speedWindowTicks, now);
+                if (elapsed >= SpeedWindow)
+                {
+                    var delta = Math.Max(0, downloadedBytes - _speedWindowBytes);
+                    _lastSpeed = delta / elapsed.TotalSeconds;
+                    _speedWindowTicks = now;
+                    _speedWindowBytes = downloadedBytes;
+                }
+            }
+
+            var activeFiles = active is null || activeLock is null
+                ? Array.Empty<DownloadFileProgress>()
+                : SnapshotActive(active, activeLock);
+
+            progress.Report(new DownloadBatchProgress
+            {
+                Total = total,
+                Completed = completed,
+                Skipped = skipped,
+                Failed = failed,
+                TotalBytes = totalBytes,
+                DownloadedBytes = downloadedBytes,
+                Current = current,
+                ActiveFiles = activeFiles,
+                BytesPerSecond = _lastSpeed,
+            });
+        }
+    }
+
+    /// <summary>单个正在下载的文件状态；由并行线程并发更新。</summary>
+    private sealed class ActiveFile
+    {
+        public ActiveFile(string name, long totalBytes)
+        {
+            Name = name;
+            TotalBytes = totalBytes;
         }
 
-        Volatile.Write(ref _lastReportTicks, Stopwatch.GetTimestamp());
+        public string Name { get; }
 
-        progress.Report(new DownloadBatchProgress
-        {
-            Total = total,
-            Completed = completed,
-            Skipped = skipped,
-            Failed = failed,
-            TotalBytes = totalBytes,
-            DownloadedBytes = downloadedBytes,
-            Current = current,
-        });
+        public long TotalBytes;
+
+        public long BytesReceived;
     }
 }

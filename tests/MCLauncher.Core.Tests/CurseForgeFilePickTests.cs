@@ -1,4 +1,4 @@
-﻿using MCLauncher.Core.Models;
+using MCLauncher.Core.Models;
 using MCLauncher.Core.Services;
 using MCLauncher.Core.Utils;
 using MCLauncher.Core.Tests.Support;
@@ -74,6 +74,28 @@ public sealed class CurseForgeFilePickTests
         var picked = CurseForgeService.PickBestFile(files, ResourceKind.ResourcePack, "Fabric");
 
         Assert.Equal(2, picked!.Id);
+    }
+
+    [Fact]
+    public void 整合包映射到CurseForge的Modpacks分类()
+    {
+        Assert.Equal(4471, CurseForgeService.ClassIdFor(ResourceKind.Modpack));
+        Assert.True(CurseForgeService.SupportsDownload(ResourceKind.Modpack));
+    }
+
+    [Fact]
+    public void 整合包只挑选zip压缩包()
+    {
+        var files = new[]
+        {
+            MakeFile(1, "pack-notes.txt", 1, "2026-01-01T00:00:00Z", "1.20.1"),
+            MakeFile(2, "pack-a.zip", 1, "2026-01-01T00:00:00Z", "1.20.1"),
+            MakeFile(3, "pack-b.zip", 1, "2026-02-01T00:00:00Z", "1.20.1"),
+        };
+
+        var picked = CurseForgeService.PickBestFile(files, ResourceKind.Modpack, null);
+
+        Assert.Equal(3, picked!.Id);
     }
 
     [Fact]

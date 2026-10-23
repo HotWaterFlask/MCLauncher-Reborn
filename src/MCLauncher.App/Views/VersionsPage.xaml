@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:views="clr-namespace:MCLauncher.App.Views"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="720">
     <UserControl.Resources>
@@ -108,11 +109,12 @@
             </Setter>
         </Style>
 
-        <!-- 「⋯」按钮 -->
-        <Style x:Key="MoreButton" TargetType="Button">
-            <Setter Property="Width" Value="30"/>
+        <!-- 实例行的图标操作按钮 -->
+        <Style x:Key="IconActionButton" TargetType="Button">
+            <Setter Property="Width" Value="26"/>
             <Setter Property="Height" Value="26"/>
-            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
+            <Setter Property="FontSize" Value="12"/>
             <Setter Property="Foreground" Value="#5A5A5A"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
@@ -124,6 +126,46 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="#EEF3F9"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="DangerIconActionButton" TargetType="Button"
+               BasedOn="{StaticResource IconActionButton}">
+            <Setter Property="Foreground" Value="#C0392B"/>
+        </Style>
+
+        <!-- 整合包安装方式：整行可点，右侧箭头 -->
+        <Style x:Key="ModpackOptionButton" TargetType="Button">
+            <Setter Property="Foreground" Value="#1A1A1A"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="#FAFBFC" BorderBrush="#E2E6EC" BorderThickness="1"
+                                CornerRadius="5" Padding="14,10">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ContentPresenter Grid.Column="0" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" Text="&#xE76C;" FontFamily="Segoe MDL2 Assets"
+                                           FontSize="12" Foreground="#8A8A8A" VerticalAlignment="Center"
+                                           Margin="10,0,2,0"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#F2F7FD"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#2F6FB6"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#E3F0FA"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -284,7 +326,6 @@
                                             <ColumnDefinition Width="40"/>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
 
                                         <!-- 当前实例标记 -->
@@ -317,42 +358,45 @@
                                                        TextTrimming="CharacterEllipsis"/>
                                         </StackPanel>
 
-                                        <Button Grid.Column="3" Style="{StaticResource SkinButton}"
-                                                Content="启动"
-                                                Width="58" Height="26" FontSize="12"
-                                                VerticalAlignment="Center"
-                                                Command="{Binding Owner.LaunchRowCommand}"
-                                                CommandParameter="{Binding}"/>
-
-                                        <Button Grid.Column="4" Style="{StaticResource MoreButton}"
-                                                Content="⋯"
-                                                VerticalAlignment="Center"
-                                                Click="OnMoreClick">
-                                            <Button.ContextMenu>
-                                                <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
-                                                    <MenuItem Header="实例管理"
-                                                              Command="{Binding Owner.ManageCommand}"
-                                                              CommandParameter="{Binding}"/>
-                                                    <Separator/>
-                                                    <MenuItem Header="设为当前实例"
-                                                              Command="{Binding Owner.SetCurrentCommand}"
-                                                              CommandParameter="{Binding}"/>
-                                                    <MenuItem Header="实例设置"
-                                                              Command="{Binding Owner.InstanceSettingsCommand}"
-                                                              CommandParameter="{Binding}"/>
-                                                    <MenuItem Header="打开实例目录"
-                                                              Command="{Binding Owner.OpenFolderCommand}"
-                                                              CommandParameter="{Binding}"/>
-                                                    <MenuItem Header="校验并补全文件"
-                                                              Command="{Binding Owner.CompleteInstanceCommand}"
-                                                              CommandParameter="{Binding}"/>
-                                                    <Separator/>
-                                                    <MenuItem Header="删除实例"
-                                                              Command="{Binding Owner.DeleteCommand}"
-                                                              CommandParameter="{Binding}"/>
-                                                </ContextMenu>
-                                            </Button.ContextMenu>
-                                        </Button>
+                                        <!-- 图标操作：启动 / 管理 / 设为当前 / 设置 / 目录 / 校验 / 删除 -->
+                                        <StackPanel Grid.Column="3" Orientation="Horizontal"
+                                                    VerticalAlignment="Center">
+                                            <Button Style="{StaticResource IconActionButton}"
+                                                    Content="&#xE768;" ToolTip="启动"
+                                                    AutomationProperties.Name="启动实例"
+                                                    Command="{Binding Owner.LaunchRowCommand}"
+                                                    CommandParameter="{Binding}"/>
+                                            <Button Style="{StaticResource IconActionButton}"
+                                                    Content="&#xE90F;" ToolTip="实例管理"
+                                                    AutomationProperties.Name="实例管理"
+                                                    Command="{Binding Owner.ManageCommand}"
+                                                    CommandParameter="{Binding}"/>
+                                            <Button Style="{StaticResource IconActionButton}"
+                                                    Content="&#xE73E;" ToolTip="设为当前实例"
+                                                    AutomationProperties.Name="设为当前实例"
+                                                    Command="{Binding Owner.SetCurrentCommand}"
+                                                    CommandParameter="{Binding}"/>
+                                            <Button Style="{StaticResource IconActionButton}"
+                                                    Content="&#xE713;" ToolTip="实例设置"
+                                                    AutomationProperties.Name="实例设置"
+                                                    Command="{Binding Owner.InstanceSettingsCommand}"
+                                                    CommandParameter="{Binding}"/>
+                                            <Button Style="{StaticResource IconActionButton}"
+                                                    Content="&#xE8B7;" ToolTip="打开实例目录"
+                                                    AutomationProperties.Name="打开实例目录"
+                                                    Command="{Binding Owner.OpenFolderCommand}"
+                                                    CommandParameter="{Binding}"/>
+                                            <Button Style="{StaticResource IconActionButton}"
+                                                    Content="&#xE72C;" ToolTip="校验并补全文件"
+                                                    AutomationProperties.Name="校验并补全文件"
+                                                    Command="{Binding Owner.CompleteInstanceCommand}"
+                                                    CommandParameter="{Binding}"/>
+                                            <Button Style="{StaticResource DangerIconActionButton}"
+                                                    Content="&#xE711;" ToolTip="删除实例"
+                                                    AutomationProperties.Name="删除实例"
+                                                    Command="{Binding Owner.DeleteCommand}"
+                                                    CommandParameter="{Binding}"/>
+                                        </StackPanel>
                                     </Grid>
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
@@ -375,147 +419,312 @@
         <Grid Grid.RowSpan="3"
               Visibility="{Binding IsAnyDialogOpen, Converter={StaticResource BoolToVis}}"
               Background="#66000000" Panel.ZIndex="20">
+            <!-- 弹窗始终限制在窗口内：内容可滚动、按钮固定在底部，窗口再小也能点到安装 -->
+            <Grid Margin="24">
 
-            <!-- 安装新游戏 -->
-            <Border Width="640" Background="White" CornerRadius="8" Padding="18,16"
-                    HorizontalAlignment="Center" VerticalAlignment="Center"
-                    BorderBrush="#D8D8D8" BorderThickness="1"
-                    Visibility="{Binding IsInstallDialogOpen, Converter={StaticResource BoolToVis}}">
-                <StackPanel>
-                    <TextBlock Text="安装新游戏" FontSize="16" FontWeight="SemiBold"/>
-                    <TextBlock Text="原版、加载器与实例名可以一次配好；同一时间只能选一个加载器。"
-                               Margin="0,4,0,0" Style="{StaticResource BodyText}"/>
+                <!-- 安装新游戏 -->
+                <Border Width="640" Background="White" CornerRadius="8" Padding="18,16"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                        BorderBrush="#D8D8D8" BorderThickness="1"
+                        MaxHeight="{Binding ActualHeight, RelativeSource={RelativeSource AncestorType=Grid}}"
+                        Visibility="{Binding IsInstallDialogOpen, Converter={StaticResource BoolToVis}}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
 
-                    <Grid Margin="0,12,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="86"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="实例名称" FontSize="13" Foreground="#5A5A5A"
-                                   VerticalAlignment="Center"/>
-                        <TextBox Grid.Column="1" Height="30" FontSize="13" Padding="6,0"
-                                 VerticalContentAlignment="Center"
-                                 Text="{Binding NewInstanceName, UpdateSourceTrigger=PropertyChanged}"/>
+                        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel>
+                                <TextBlock Text="安装新游戏" FontSize="16" FontWeight="SemiBold"/>
+                                <TextBlock Text="原版、加载器与实例名可以一次配好；同一时间只能选一个加载器。"
+                                           Margin="0,4,0,0" Style="{StaticResource BodyText}"/>
+
+                                <Grid Margin="0,12,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="86"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="实例名称" FontSize="13" Foreground="#5A5A5A"
+                                               VerticalAlignment="Center"/>
+                                    <TextBox Grid.Column="1" Height="30" FontSize="13" Padding="6,0"
+                                             VerticalContentAlignment="Center"
+                                             Text="{Binding NewInstanceName, UpdateSourceTrigger=PropertyChanged}"/>
+                                </Grid>
+
+                                <Grid Margin="0,10,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="86"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Minecraft" FontSize="13" Foreground="#5A5A5A"
+                                               VerticalAlignment="Center"/>
+                                    <ComboBox Grid.Column="1" Width="220" Height="28" FontSize="13"
+                                              ItemsSource="{Binding MinecraftVersions}"
+                                              SelectedItem="{Binding SelectedMinecraftVersion, Mode=TwoWay}"/>
+                                    <CheckBox Grid.Column="2" Content="显示快照" FontSize="12"
+                                              Foreground="#1A1A1A" Margin="12,0,0,0"
+                                              VerticalAlignment="Center"
+                                              IsChecked="{Binding IncludeSnapshots, Mode=TwoWay}"/>
+                                </Grid>
+
+                                <TextBlock Text="模组加载器（可选）" FontSize="12" Foreground="#7A7A7A"
+                                           Margin="0,12,0,2"/>
+
+                                <ItemsControl ItemsSource="{Binding LoaderCards}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <UniformGrid Columns="4"/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Button Style="{StaticResource LoaderCardStyle}"
+                                                    Command="{Binding DataContext.SelectLoaderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding}">
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Title}" FontSize="14" FontWeight="SemiBold"
+                                                               HorizontalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding Status}" FontSize="11" Foreground="#5A5A5A"
+                                                               Margin="0,5,0,0" HorizontalAlignment="Center"
+                                                               TextWrapping="Wrap" TextAlignment="Center"
+                                                               MaxWidth="130"/>
+                                                </StackPanel>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <Grid Margin="0,8,0,0"
+                                      Visibility="{Binding HasSelectedLoader, Converter={StaticResource BoolToVis}}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="86"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="加载器版本" FontSize="13" Foreground="#5A5A5A"
+                                               VerticalAlignment="Center"/>
+                                    <ComboBox Grid.Column="1" Width="220" Height="28" FontSize="13"
+                                              ItemsSource="{Binding LoaderVersions}"
+                                              SelectedItem="{Binding SelectedLoaderVersion, Mode=TwoWay}"
+                                              DisplayMemberPath="Display"/>
+                                    <TextBlock Grid.Column="2" Margin="12,0,0,0" VerticalAlignment="Center"
+                                               FontSize="11" Foreground="#8A8A8A"
+                                               Text="其它加载器会显示为不兼容"/>
+                                </Grid>
+                            </StackPanel>
+                        </ScrollViewer>
+
+                        <StackPanel Grid.Row="1">
+                            <TextBlock Text="{Binding InstallStatus}" Margin="0,12,0,0"
+                                       FontSize="12" Foreground="#5A5A5A" TextWrapping="Wrap" MinHeight="16"/>
+
+                            <!-- 并发下载中的文件：与 HMCL 一样逐文件展示进度 -->
+                            <ItemsControl ItemsSource="{Binding InstallFiles}" Margin="0,4,0,0"
+                                          Visibility="{Binding IsInstalling, Converter={StaticResource BoolToVis}}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="0,2,0,0">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{Binding DisplayName}" FontSize="11"
+                                                           Foreground="#5A5A5A" TextTrimming="CharacterEllipsis"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding Detail}" FontSize="11"
+                                                           Foreground="#8A8A8A" Margin="8,0,0,0"/>
+                                            </Grid>
+                                            <ProgressBar Height="3" Margin="0,2,0,0" Minimum="0" Maximum="1"
+                                                         Value="{Binding Progress, Mode=OneWay}"
+                                                         BorderThickness="0" Background="#E8E8E8"
+                                                         Foreground="#4A6FA5"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <TextBlock Text="{Binding InstallSpeedText}" FontSize="11" Foreground="#8A8A8A"
+                                       Margin="0,4,0,0" HorizontalAlignment="Right"
+                                       Visibility="{Binding IsInstalling, Converter={StaticResource BoolToVis}}"/>
+
+                            <ProgressBar Height="6" Margin="0,8,0,0" Minimum="0" Maximum="1"
+                                         Value="{Binding InstallProgress, Mode=OneWay}"
+                                         Visibility="{Binding IsInstalling, Converter={StaticResource BoolToVis}}"/>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+                                <Button Style="{StaticResource SkinButton}" Content="取消"
+                                        Width="76" Height="28" FontSize="13"
+                                        Command="{Binding CloseDialogsCommand}"/>
+                                <Button Style="{StaticResource SkinButton}" Content="安装"
+                                        Width="76" Height="28" FontSize="13" Margin="8,0,0,0"
+                                        Command="{Binding ConfirmInstallCommand}"
+                                        IsEnabled="{Binding CanConfirmInstall}"/>
+                            </StackPanel>
+                        </StackPanel>
                     </Grid>
+                </Border>
 
-                    <Grid Margin="0,10,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="86"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="Minecraft" FontSize="13" Foreground="#5A5A5A"
-                                   VerticalAlignment="Center"/>
-                        <ComboBox Grid.Column="1" Width="220" Height="28" FontSize="13"
-                                  ItemsSource="{Binding MinecraftVersions}"
-                                  SelectedItem="{Binding SelectedMinecraftVersion, Mode=TwoWay}"/>
-                        <CheckBox Grid.Column="2" Content="显示快照" FontSize="12"
-                                  Foreground="#1A1A1A" Margin="12,0,0,0"
-                                  VerticalAlignment="Center"
-                                  IsChecked="{Binding IncludeSnapshots, Mode=TwoWay}"/>
-                    </Grid>
+                <!-- 安装整合包：选择安装方式 -->
+                <Border Width="520" Background="White" CornerRadius="8" Padding="18,16"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                        BorderBrush="#D8D8D8" BorderThickness="1"
+                        MaxHeight="{Binding ActualHeight, RelativeSource={RelativeSource AncestorType=Grid}}"
+                        Visibility="{Binding IsModpackPickerOpen, Converter={StaticResource BoolToVis}}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel>
+                                <TextBlock Text="安装整合包" FontSize="16" FontWeight="SemiBold"/>
+                                <TextBlock Text="选择一种安装方式" Margin="0,4,0,0" Style="{StaticResource BodyText}"/>
 
-                    <TextBlock Text="模组加载器（可选）" FontSize="12" Foreground="#7A7A7A"
-                               Margin="0,12,0,2"/>
-
-                    <ItemsControl ItemsSource="{Binding LoaderCards}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <UniformGrid Columns="4"/>
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Button Style="{StaticResource LoaderCardStyle}"
-                                        Command="{Binding DataContext.SelectLoaderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                        CommandParameter="{Binding}">
+                                <Button Style="{StaticResource ModpackOptionButton}" Margin="0,12,0,0"
+                                        AutomationProperties.Name="导入本地整合包文件"
+                                        Command="{Binding OpenLocalModpackCommand}">
                                     <StackPanel>
-                                        <TextBlock Text="{Binding Title}" FontSize="14" FontWeight="SemiBold"
-                                                   HorizontalAlignment="Center"/>
-                                        <TextBlock Text="{Binding Status}" FontSize="11" Foreground="#5A5A5A"
-                                                   Margin="0,5,0,0" HorizontalAlignment="Center"
-                                                   TextWrapping="Wrap" TextAlignment="Center"
-                                                   MaxWidth="130"/>
+                                        <TextBlock Text="导入本地整合包文件" FontSize="13.5" FontWeight="SemiBold"/>
+                                        <TextBlock Text="选择本地的 .zip / .mrpack 整合包并安装" FontSize="11.5"
+                                                   Foreground="#7A7A7A" Margin="0,3,0,0"/>
                                     </StackPanel>
                                 </Button>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
 
-                    <Grid Margin="0,8,0,0"
-                          Visibility="{Binding HasSelectedLoader, Converter={StaticResource BoolToVis}}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="86"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="加载器版本" FontSize="13" Foreground="#5A5A5A"
-                                   VerticalAlignment="Center"/>
-                        <ComboBox Grid.Column="1" Width="220" Height="28" FontSize="13"
-                                  ItemsSource="{Binding LoaderVersions}"
-                                  SelectedItem="{Binding SelectedLoaderVersion, Mode=TwoWay}"
-                                  DisplayMemberPath="Display"/>
-                        <TextBlock Grid.Column="2" Margin="12,0,0,0" VerticalAlignment="Center"
-                                   FontSize="11" Foreground="#8A8A8A"
-                                   Text="其它加载器会显示为不兼容"/>
+                                <Button Style="{StaticResource ModpackOptionButton}" Margin="0,8,0,0"
+                                        AutomationProperties.Name="从互联网下载整合包"
+                                        Command="{Binding OpenModpackUrlCommand}">
+                                    <StackPanel>
+                                        <TextBlock Text="从互联网下载整合包" FontSize="13.5" FontWeight="SemiBold"/>
+                                        <TextBlock Text="需要提供整合包的下载链接" FontSize="11.5"
+                                                   Foreground="#7A7A7A" Margin="0,3,0,0"/>
+                                    </StackPanel>
+                                </Button>
+
+                                <Button Style="{StaticResource ModpackOptionButton}" Margin="0,8,0,0"
+                                        AutomationProperties.Name="从 CurseForge 或 Modrinth 下载整合包"
+                                        Command="{Binding BrowseModpackCommand}">
+                                    <StackPanel>
+                                        <TextBlock Text="从 CurseForge / Modrinth 下载整合包" FontSize="13.5"
+                                                   FontWeight="SemiBold"/>
+                                        <TextBlock Text="可直接在跳转到的页面安装整合包" FontSize="11.5"
+                                                   Foreground="#7A7A7A" Margin="0,3,0,0"/>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </ScrollViewer>
+
+                        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+                            <Button Style="{StaticResource SkinButton}" Content="取消"
+                                    Width="76" Height="28" FontSize="13"
+                                    Command="{Binding CloseDialogsCommand}"/>
+                        </StackPanel>
                     </Grid>
+                </Border>
 
-                    <TextBlock Text="{Binding InstallStatus}" Margin="0,12,0,0"
-                               FontSize="12" Foreground="#5A5A5A" TextWrapping="Wrap" MinHeight="16"/>
+                <!-- 从互联网下载整合包 -->
+                <Border Width="500" Background="White" CornerRadius="8" Padding="18,16"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                        BorderBrush="#D8D8D8" BorderThickness="1"
+                        MaxHeight="{Binding ActualHeight, RelativeSource={RelativeSource AncestorType=Grid}}"
+                        Visibility="{Binding IsModpackUrlDialogOpen, Converter={StaticResource BoolToVis}}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel>
+                                <TextBlock Text="从互联网下载整合包" FontSize="16" FontWeight="SemiBold"/>
+                                <TextBlock Text="粘贴整合包的下载链接（.zip / .mrpack），下载完成后自动进入安装确认。"
+                                           Margin="0,4,0,0" Style="{StaticResource BodyText}" TextWrapping="Wrap"/>
 
-                    <ProgressBar Height="6" Margin="0,8,0,0" Minimum="0" Maximum="1"
-                                 Value="{Binding InstallProgress, Mode=OneWay}"
-                                 Visibility="{Binding IsInstalling, Converter={StaticResource BoolToVis}}"/>
+                                <TextBlock Text="下载链接" Margin="0,14,0,4" FontSize="13" Foreground="#5A5A5A"/>
+                                <TextBox Height="30" FontSize="13" Padding="6,0" VerticalContentAlignment="Center"
+                                         AutomationProperties.AutomationId="ModpackUrlBox"
+                                         Text="{Binding ModpackUrl, UpdateSourceTrigger=PropertyChanged}"
+                                         IsReadOnly="{Binding IsModpackDownloading}"
+                                         ToolTip="例如 https://example.com/pack.zip"/>
+                            </StackPanel>
+                        </ScrollViewer>
 
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
-                        <Button Style="{StaticResource SkinButton}" Content="取消"
-                                Width="76" Height="28" FontSize="13"
-                                Command="{Binding CloseDialogsCommand}"/>
-                        <Button Style="{StaticResource SkinButton}" Content="安装"
-                                Width="76" Height="28" FontSize="13" Margin="8,0,0,0"
-                                Command="{Binding ConfirmInstallCommand}"
-                                IsEnabled="{Binding CanConfirmInstall}"/>
-                    </StackPanel>
-                </StackPanel>
-            </Border>
+                        <StackPanel Grid.Row="1">
+                            <TextBlock Text="{Binding ModpackUrlStatus}" Margin="0,10,0,0"
+                                       FontSize="12" Foreground="#5A5A5A" TextWrapping="Wrap" MinHeight="16"/>
+                            <ProgressBar Height="6" Margin="0,8,0,0" Minimum="0" Maximum="1"
+                                         Value="{Binding ModpackDownloadProgress, Mode=OneWay}"
+                                         Visibility="{Binding IsModpackDownloading, Converter={StaticResource BoolToVis}}"/>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+                                <Button Style="{StaticResource SkinButton}" Content="取消"
+                                        Width="76" Height="28" FontSize="13"
+                                        Command="{Binding CloseDialogsCommand}"/>
+                                <Button Style="{StaticResource SkinButton}" Content="下载"
+                                        AutomationProperties.Name="下载整合包"
+                                        Width="76" Height="28" FontSize="13" Margin="8,0,0,0"
+                                        Command="{Binding DownloadModpackUrlCommand}"
+                                        IsEnabled="{Binding CanDownloadModpackUrl}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
+                </Border>
 
-            <!-- 安装整合包 -->
-            <Border Width="560" Background="White" CornerRadius="8" Padding="18,16"
-                    HorizontalAlignment="Center" VerticalAlignment="Center"
-                    BorderBrush="#D8D8D8" BorderThickness="1"
-                    Visibility="{Binding IsModpackDialogOpen, Converter={StaticResource BoolToVis}}">
-                <StackPanel>
-                    <TextBlock Text="安装整合包" FontSize="16" FontWeight="SemiBold"/>
-                    <TextBlock Text="{Binding ModpackTitle}" Margin="0,8,0,0"
-                               FontSize="14" FontWeight="SemiBold"/>
-                    <TextBlock Text="{Binding ModpackDetail}" Margin="0,4,0,0"
-                               Style="{StaticResource BodyText}" TextWrapping="Wrap"/>
-                    <TextBlock Text="{Binding ModpackNote}" Margin="0,6,0,0"
-                               FontSize="12" Foreground="#B26A00" TextWrapping="Wrap"
-                               Visibility="{Binding HasModpackNote, Converter={StaticResource BoolToVis}}"/>
+                <!-- 安装整合包 -->
+                <Border Width="560" Background="White" CornerRadius="8" Padding="18,16"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                        BorderBrush="#D8D8D8" BorderThickness="1"
+                        MaxHeight="{Binding ActualHeight, RelativeSource={RelativeSource AncestorType=Grid}}"
+                        Visibility="{Binding IsModpackDialogOpen, Converter={StaticResource BoolToVis}}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel>
+                                <TextBlock Text="安装整合包" FontSize="16" FontWeight="SemiBold"/>
+                                <TextBlock Text="{Binding ModpackTitle}" Margin="0,8,0,0"
+                                           FontSize="14" FontWeight="SemiBold"/>
+                                <TextBlock Text="{Binding ModpackDetail}" Margin="0,4,0,0"
+                                           Style="{StaticResource BodyText}" TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding ModpackNote}" Margin="0,6,0,0"
+                                           FontSize="12" Foreground="#B26A00" TextWrapping="Wrap"
+                                           Visibility="{Binding HasModpackNote, Converter={StaticResource BoolToVis}}"/>
 
-                    <TextBlock Text="实例名称" Margin="0,14,0,4" FontSize="13" Foreground="#5A5A5A"/>
-                    <TextBox Height="30" FontSize="13" Padding="6,0" VerticalContentAlignment="Center"
-                             Text="{Binding ModpackInstanceName, UpdateSourceTrigger=PropertyChanged}"/>
+                                <TextBlock Text="实例名称" Margin="0,14,0,4" FontSize="13" Foreground="#5A5A5A"/>
+                                <TextBox Height="30" FontSize="13" Padding="6,0" VerticalContentAlignment="Center"
+                                         Text="{Binding ModpackInstanceName, UpdateSourceTrigger=PropertyChanged}"/>
+                            </StackPanel>
+                        </ScrollViewer>
 
-                    <TextBlock Text="{Binding ModpackStatus}" Margin="0,10,0,0"
-                               FontSize="12" Foreground="#5A5A5A" TextWrapping="Wrap" MinHeight="16"/>
+                        <StackPanel Grid.Row="1">
+                            <TextBlock Text="{Binding ModpackStatus}" Margin="0,10,0,0"
+                                       FontSize="12" Foreground="#5A5A5A" TextWrapping="Wrap" MinHeight="16"/>
+                            <ProgressBar Height="6" Margin="0,8,0,0" Minimum="0" Maximum="1"
+                                         Value="{Binding ModpackProgress, Mode=OneWay}"
+                                         Visibility="{Binding IsModpackInstalling, Converter={StaticResource BoolToVis}}"/>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+                                <Button Style="{StaticResource SkinButton}" Content="取消"
+                                        Width="76" Height="28" FontSize="13"
+                                        Command="{Binding CloseDialogsCommand}"/>
+                                <Button Style="{StaticResource SkinButton}" Content="安装"
+                                        Width="76" Height="28" FontSize="13" Margin="8,0,0,0"
+                                        Command="{Binding ConfirmModpackCommand}"
+                                        IsEnabled="{Binding CanConfirmModpack}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Grid>
 
-                    <ProgressBar Height="6" Margin="0,8,0,0" Minimum="0" Maximum="1"
-                                 Value="{Binding ModpackProgress, Mode=OneWay}"
-                                 Visibility="{Binding IsModpackInstalling, Converter={StaticResource BoolToVis}}"/>
-
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
-                        <Button Style="{StaticResource SkinButton}" Content="取消"
-                                Width="76" Height="28" FontSize="13"
-                                Command="{Binding CloseDialogsCommand}"/>
-                        <Button Style="{StaticResource SkinButton}" Content="安装"
-                                Width="76" Height="28" FontSize="13" Margin="8,0,0,0"
-                                Command="{Binding ConfirmModpackCommand}"
-                                IsEnabled="{Binding CanConfirmModpack}"/>
-                    </StackPanel>
-                </StackPanel>
-            </Border>
+        <!-- ===== 整合包在线浏览（CurseForge / Modrinth） ===== -->
+        <Grid Grid.RowSpan="3" Panel.ZIndex="30" DataContext="{Binding Download}"
+              Visibility="{Binding IsOpen, Converter={StaticResource BoolToVis}}">
+            <views:ResourceDownloadView/>
         </Grid>
     </Grid>
 </UserControl>

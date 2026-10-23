@@ -11,13 +11,16 @@ public sealed class ResourceDownloadRequest
 {
     public required ResourceKind Kind { get; init; }
 
-    public required CurseForgeFile File { get; init; }
+    public required ResourceFile File { get; init; }
 
     /// <summary>实例目录（资源会落到对应的 mods / resourcepacks / shaderpacks / saves 下）。</summary>
     public required string InstanceDirectory { get; init; }
 
     /// <summary>更新时传入原文件路径；为空表示新增下载。</summary>
     public string? ReplacePath { get; init; }
+
+    /// <summary>自定义文件名（安装到实例时可由用户改名）；为空时使用文件原名。</summary>
+    public string? TargetFileName { get; init; }
 }
 
 public sealed class ResourceDownloadResult
@@ -68,16 +71,53 @@ public sealed class ResourceDownloadService
             : await DownloadFileAsync(request, directory, progress, ct).ConfigureAwait(false);
     }
 
+    /// <summary>把文件原样下载到用户选择的目录（不安装进实例）。</summary>
+    public async Task<ResourceDownloadResult> DownloadToFolderAsync(
+        ResourceFile file,
+        string directory,
+        IProgress<InstallProgress>? progress,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(file.DownloadUrl))
+        {
+            return ResourceDownloadResult.Fail("该项目没有开放第三方下载，请到资源站手动下载。");
+        }
+
+        if (!Directory.Exists(directory))
+        {
+            return ResourceDownloadResult.Fail("下载目录不存在。");
+        }
+
+        var fileName = Path.GetFileName(file.FileName);
+        if (!PathUtil.IsValidFileName(fileName))
+        {
+            return ResourceDownloadResult.Fail($"文件名不合法：{file.FileName}");
+        }
+
+        var target = UniqueTarget(directory, fileName);
+        var result = await DownloadFileCoreAsync(file, target, target, progress, ct).ConfigureAwait(false);
+
+        if (result.Success)
+        {
+            _log.Info($"已下载文件：{target}");
+        }
+
+        return result;
+    }
+
     private async Task<ResourceDownloadResult> DownloadFileAsync(
         ResourceDownloadRequest request,
         string directory,
         IProgress<InstallProgress>? progress,
         CancellationToken ct)
     {
-        var fileName = Path.GetFileName(request.File.FileName);
+        var fileName = string.IsNullOrWhiteSpace(request.TargetFileName)
+            ? Path.GetFileName(request.File.FileName)
+            : Path.GetFileName(request.TargetFileName.Trim());
+
         if (!PathUtil.IsValidFileName(fileName))
         {
-            return ResourceDownloadResult.Fail($"文件名不合法：{request.File.FileName}");
+            return ResourceDownloadResult.Fail($"文件名不合法：{fileName}");
         }
 
         string target;
@@ -96,11 +136,50 @@ public sealed class ResourceDownloadService
             target = Path.Combine(directory, targetName);
             temp = target + ".download";
         }
+        else if (!string.IsNullOrWhiteSpace(request.TargetFileName))
+        {
+            target = Path.Combine(directory, fileName);
+            if (File.Exists(target)
+                || Directory.Exists(target)
+                || File.Exists(target + ResourceRepository.DisabledSuffix))
+            {
+                return ResourceDownloadResult.Fail($"已存在同名文件：{fileName}");
+            }
+
+            temp = target;
+        }
         else
         {
             target = UniqueTarget(directory, fileName);
             temp = target;
         }
+
+        var result = await DownloadFileCoreAsync(request.File, temp, target, progress, ct)
+            .ConfigureAwait(false);
+
+        if (!result.Success)
+        {
+            return result;
+        }
+
+        if (request.ReplacePath is { Length: > 0 } replacedPath
+            && !PathUtil.IsSamePath(replacedPath, target))
+        {
+            TryDeleteFile(replacedPath);
+        }
+
+        _log.Info($"已下载 {ResourceRepository.DisplayName(request.Kind)}：{fileName}");
+        return result;
+    }
+
+    private async Task<ResourceDownloadResult> DownloadFileCoreAsync(
+        ResourceFile file,
+        string tempPath,
+        string targetPath,
+        IProgress<InstallProgress>? progress,
+        CancellationToken ct)
+    {
+        var fileName = Path.GetFileName(file.FileName);
 
         var progressAdapter = progress is null
             ? null
@@ -121,9 +200,9 @@ public sealed class ResourceDownloadService
         try
         {
             outcome = await _downloader.DownloadAsync(
-                    _resolver.Resolve(request.File.DownloadUrl!, DownloadUrlKind.ModPlatform),
-                    temp,
-                    FileChecker.Of(request.File.Sha1, request.File.FileLength),
+                    _resolver.Resolve(file.DownloadUrl!, DownloadUrlKind.ModPlatform),
+                    tempPath,
+                    FileChecker.Of(file.Sha1, file.FileLength),
                     progressAdapter,
                     ct)
                 .ConfigureAwait(false);
@@ -145,24 +224,18 @@ public sealed class ResourceDownloadService
 
         try
         {
-            if (!PathUtil.IsSamePath(temp, target))
+            if (!PathUtil.IsSamePath(tempPath, targetPath))
             {
-                File.Move(temp, target, overwrite: true);
-
-                if (File.Exists(request.ReplacePath) && !PathUtil.IsSamePath(request.ReplacePath, target))
-                {
-                    File.Delete(request.ReplacePath);
-                }
+                File.Move(tempPath, targetPath, overwrite: true);
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _log.Warn($"替换资源文件失败：{target}", ex);
-            return ResourceDownloadResult.Fail("文件已下载，但替换失败：" + ex.Message);
+            _log.Warn($"保存资源文件失败：{targetPath}", ex);
+            return ResourceDownloadResult.Fail("文件已下载，但保存失败：" + ex.Message);
         }
 
-        _log.Info($"已下载 {ResourceRepository.DisplayName(request.Kind)}：{fileName}");
-        return ResourceDownloadResult.Ok(target);
+        return ResourceDownloadResult.Ok(targetPath);
     }
 
     private async Task<ResourceDownloadResult> DownloadWorldAsync(

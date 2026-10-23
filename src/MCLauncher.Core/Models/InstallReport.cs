@@ -42,6 +42,12 @@ public sealed class InstallProgress
 
     public string? Current { get; init; }
 
+    /// <summary>当前并发下载的文件（按开始顺序，最多若干个）。</summary>
+    public IReadOnlyList<DownloadFileProgress> ActiveFiles { get; init; } = Array.Empty<DownloadFileProgress>();
+
+    /// <summary>实时下载速度（字节/秒）。</summary>
+    public double BytesPerSecond { get; init; }
+
     public double Fraction => Total > 0 ? Math.Clamp((double)Completed / Total, 0d, 1d) : 0d;
 
     public override string ToString() => $"{Stage} {Completed}/{Total}";

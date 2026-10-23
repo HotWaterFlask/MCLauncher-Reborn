@@ -79,6 +79,9 @@ public sealed class AuthServerItem
 {
     public required AuthServerEntry Entry { get; init; }
 
+    /// <summary>下拉框末尾的「自定义」占位项，选中后由调用方展开地址输入。</summary>
+    public bool IsCustom { get; init; }
+
     public string Name => Entry.Name;
 
     /// <summary>去掉协议与路径后的主机名，作为副标题。</summary>
@@ -89,6 +92,8 @@ public sealed class AuthServerItem
             return Uri.TryCreate(Entry.Url, UriKind.Absolute, out var uri) ? uri.Host : Entry.Url;
         }
     }
+
+    public override string ToString() => Name;
 }
 
 /// <summary>账号页：离线 / 微软正版 / 外置登录三种账号的统一管理。</summary>
@@ -107,6 +112,12 @@ public sealed class AccountsViewModel : ViewModelBase
     private CancellationTokenSource? _loginCts;
     private string? _deviceCodeText;
     private string? _deviceCodeLink;
+
+    /// <summary>自动复制验证码后停留多久再打开浏览器（让用户看清提示）。</summary>
+    private static readonly TimeSpan DeviceCodePageOpenDelay = TimeSpan.FromSeconds(3);
+
+    /// <summary>倒计时期间屏蔽登录阶段文案，避免「等待授权」立刻盖掉自动复制提示。</summary>
+    private bool _msProgressMuted;
 
     private bool _isOfflineDialogOpen;
     private bool _isExternalDialogOpen;
@@ -355,8 +366,16 @@ public sealed class AccountsViewModel : ViewModelBase
     public string ExternalError
     {
         get => _externalError;
-        private set => SetProperty(ref _externalError, value);
+        private set
+        {
+            if (SetProperty(ref _externalError, value))
+            {
+                OnPropertyChanged(nameof(HasExternalError));
+            }
+        }
     }
+
+    public bool HasExternalError => !string.IsNullOrWhiteSpace(ExternalError);
 
     public bool HasExternalHomepage => !string.IsNullOrWhiteSpace(_externalHomepage);
 
@@ -429,14 +448,14 @@ public sealed class AccountsViewModel : ViewModelBase
     public bool HasMsClientId => _stack.Config.ResolveMsClientId() is not null;
 
     public string MsClientIdHint => HasMsClientId
-        ? "已配置客户端 ID，可进行微软正版登录。"
-        : "尚未配置微软客户端 ID：请到「设置」页填入 Azure 应用客户端 ID 后再登录。";
+        ? "已启用微软正版登录。"
+        : "当前版本未配置微软登录客户端 ID，无法使用微软正版登录；请使用离线或外置登录账户。";
 
     public string MsSetupHint => _stack.MicrosoftAuth.DescribeSetup();
 
     public string SelectedAccountText => _stack.Accounts.Selected is { } account
         ? $"当前账号：{account}"
-        : "当前没有可用账号（启动游戏时会自动创建一个离线账号）";
+        : "当前没有可用账号（请先添加一个账号）";
 
     // ---------------------------------------------------------------- 命令
 
@@ -1025,6 +1044,48 @@ public sealed class AccountsViewModel : ViewModelBase
 
     // ---------------------------------------------------------------- 认证服务器管理
 
+    /// <summary>选中认证服务器（初始化设置登记自定义地址后直接用它登录）。</summary>
+    public void SelectAuthServer(AuthServerItem server) => SelectedAuthServer = server;
+
+    /// <summary>
+    /// 校验并登记一个认证服务器；相同地址已存在时更新名称。
+    /// 账号页与初始化设置共用，登记后账号页也能继续使用。
+    /// </summary>
+    public async Task<AuthServerItem> RegisterServerAsync(string name, string url)
+    {
+        var trimmed = url.Trim();
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            throw new AuthlibAuthException("请输入 http(s) 开头的 API 根地址");
+        }
+
+        var metadata = await _stack.AuthlibAuth.FetchMetadataAsync(trimmed);
+        var normalized = AuthlibAuthService.NormalizeUrl(trimmed);
+        var resolvedName = string.IsNullOrWhiteSpace(name)
+            ? metadata.Name ?? uri.Host
+            : name.Trim();
+
+        var entry = _stack.Config.Settings.AuthServers.FirstOrDefault(
+            server => string.Equals(server.Url, normalized, StringComparison.OrdinalIgnoreCase));
+
+        if (entry is null)
+        {
+            entry = new AuthServerEntry { Name = resolvedName, Url = normalized };
+            _stack.Config.Settings.AuthServers.Add(entry);
+        }
+        else
+        {
+            entry.Name = resolvedName;
+        }
+
+        _stack.Config.Save();
+        RefreshAuthServers();
+
+        return AuthServers.First(item => string.Equals(
+            item.Entry.Url, normalized, StringComparison.OrdinalIgnoreCase));
+    }
+
     private async Task AddServerAsync()
     {
         ServerError = string.Empty;
@@ -1112,10 +1173,15 @@ public sealed class AccountsViewModel : ViewModelBase
                 {
                     DeviceCodeText = p.UserCode;
                     DeviceCodeLink = p.LinkUri;
-                    StatusText = "浏览器已打开登录页，请粘贴验证码并确认授权";
-                    OpenDeviceCodePage();
+                    CopyAndOpenDeviceCodePageAsync(p.UserCode);
                 }),
-                new Progress<MsAuthProgress>(p => StatusText = p.Stage),
+                new Progress<MsAuthProgress>(p =>
+                {
+                    if (!_msProgressMuted)
+                    {
+                        StatusText = p.Stage;
+                    }
+                }),
                 _loginCts.Token);
 
             ApplySignedIn(account);
@@ -1136,6 +1202,7 @@ public sealed class AccountsViewModel : ViewModelBase
         }
         finally
         {
+            _msProgressMuted = false;
             DeviceCodeText = string.Empty;
             DeviceCodeLink = string.Empty;
             _loginCts?.Dispose();
@@ -1161,15 +1228,60 @@ public sealed class AccountsViewModel : ViewModelBase
             return;
         }
 
+        StatusText = TryCopyDeviceCode(_deviceCodeText!)
+            ? "验证码已复制到剪贴板。"
+            : "复制失败，请手动选中验证码复制。";
+    }
+
+    /// <summary>
+    /// 拿到设备码后先把验证码自动复制并提示，停留 3 秒让用户看到，
+    /// 再打开微软验证页，避免浏览器抢走焦点后用户不知道验证码已复制好。
+    /// </summary>
+    private async void CopyAndOpenDeviceCodePageAsync(string code)
+    {
+        _msProgressMuted = true;
+        StatusText = TryCopyDeviceCode(code)
+            ? "验证码已自动复制，3 秒后打开浏览器登录页…"
+            : "自动复制失败，3 秒后打开浏览器登录页，请手动记下验证码…";
+
         try
         {
-            Clipboard.SetText(_deviceCodeText!);
-            StatusText = "验证码已复制到剪贴板。";
+            var token = _loginCts?.Token ?? CancellationToken.None;
+            try
+            {
+                await Task.Delay(DeviceCodePageOpenDelay, token);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+
+            // 登录已取消或已结束（验证码被清空）时不再打开浏览器。
+            if (token.IsCancellationRequested || !HasDeviceCode || DeviceCodeText != code)
+            {
+                return;
+            }
+
+            StatusText = "浏览器已打开登录页，请粘贴验证码并确认授权";
+            OpenDeviceCodePage();
+        }
+        finally
+        {
+            _msProgressMuted = false;
+        }
+    }
+
+    private bool TryCopyDeviceCode(string code)
+    {
+        try
+        {
+            Clipboard.SetText(code);
+            return true;
         }
         catch (Exception ex)
         {
             _stack.Log.Warn("复制验证码失败", ex);
-            StatusText = "复制失败：" + ex.Message;
+            return false;
         }
     }
 

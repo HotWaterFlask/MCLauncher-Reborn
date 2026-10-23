@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Media;
 using MCLauncher.App.Shell;
 using MCLauncher.App.ViewModels;
 using MCLauncher.Core.Abstractions;
@@ -14,7 +15,8 @@ namespace MCLauncher.App;
 /// </summary>
 public partial class App : Application
 {
-    private const string AppFolderName = "MCLauncher-Reborn";
+    /// <summary>便携式配置目录：放在启动器所在目录，不再写入用户 AppData。</summary>
+    private const string AppFolderName = ".fmmcl";
 
     public static ServiceContainer Services { get; } = new();
 
@@ -48,28 +50,53 @@ public partial class App : Application
             Stack = stack;
             Services.RegisterSingleton(stack);
 
-            // 没有账号时自动建一个离线账号，保证「启动游戏」开箱可用。
-            var account = stack.Accounts.EnsureUsable();
+            // 首次启动不再自动创建离线账号，交给初始化设置让用户自己添加。
+            var setup = new SetupViewModel(stack, needsSetup: !config.Settings.SetupCompleted);
             config.Save();
-            log.Info($"当前账号：{account}");
+
+            var account = stack.Accounts.Selected;
+            log.Info(account is null ? "尚未添加账号，等待初始化设置" : $"当前账号：{account}");
 
             // 预热版本清单：失败不影响启动（内部已有缓存回退）。
             _ = PrefetchManifestAsync(stack, log);
 
             // ---- 页面与导航 ----
             var pageFactory = new PageFactory(stack);
+            var homePage = pageFactory.Create(PageFactory.HomePageId);
+            var crashOverlay = new CrashOverlayViewModel(stack);
+
             var shellViewModel = new ShellViewModel(
                 PageFactory.NavItems,
                 pageFactory.Create,
-                pageFactory.Create(PageFactory.HomePageId),
+                homePage,
                 config.Settings.WindowWidth,
-                config.Settings.WindowHeight);
+                config.Settings.WindowHeight,
+                crashOverlay,
+                setup);
+
+            // 崩溃界面的「重新启动」：回到首页并用当前实例再启动一次。
+            crashOverlay.RestartAction = () =>
+            {
+                shellViewModel.NavigateTo(PageFactory.HomePageId);
+                if (homePage is HomeViewModel home)
+                {
+                    home.RelaunchSelected();
+                }
+            };
+
+            stack.GameCrashed += (_, args) => crashOverlay.Show(args);
 
             pageFactory.AttachNavigator(shellViewModel.NavigateTo);
             pageFactory.AttachPageNavigator(shellViewModel.NavigateToPage);
             Services.RegisterSingleton(shellViewModel);
 
             var window = new MainWindow { DataContext = shellViewModel };
+
+            // 背景：启动器目录下的 bgskin 里有图片就随机取一张，否则用内置默认底图。
+            window.Background = new ImageBrush(BackgroundPicker.Pick(AppContext.BaseDirectory, log))
+            {
+                Stretch = Stretch.Fill,
+            };
 
             // 显式设置初始尺寸：Window.Width/Height 的绑定在 DataContext 赋值时序上不可靠，
             // 这里直接按配置赋初值，低于最小尺寸时钳到 720×450。
@@ -116,9 +143,8 @@ public partial class App : Application
         }
     }
 
-    private static string GetConfigDirectory() => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        AppFolderName);
+    private static string GetConfigDirectory() =>
+        Path.Combine(AppContext.BaseDirectory, AppFolderName);
 
     private static string GetLogDirectory() => Path.Combine(GetConfigDirectory(), "logs");
 }

@@ -178,5 +178,12 @@ public sealed class ResourceRepositoryTests
         Assert.Equal("saves", ResourceRepository.DirectoryName(ResourceKind.World));
         Assert.Equal("schematics", ResourceRepository.DirectoryName(ResourceKind.Schematic));
         Assert.Equal("datapacks", ResourceRepository.DirectoryName(ResourceKind.Datapack));
+        Assert.Equal("modpacks", ResourceRepository.DirectoryName(ResourceKind.Modpack));
+    }
+
+    [Fact]
+    public void 整合包有独立的显示名()
+    {
+        Assert.Equal("整合包", ResourceRepository.DisplayName(ResourceKind.Modpack));
     }
 }

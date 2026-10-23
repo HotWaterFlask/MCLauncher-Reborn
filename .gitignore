@@ -8,3 +8,9 @@ obj/
 
 # 本机私有凭据（真实 API Key / 客户端 ID），绝不入库
 src/MCLauncher.Core/Secrets/LocalSecrets.cs
+
+# 便携式配置目录（含账号令牌与 API Key），绝不入库
+.fmmcl/
+
+# 发布产物
+artifacts/

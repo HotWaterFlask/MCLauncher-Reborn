@@ -48,6 +48,18 @@ public sealed class InstalledVersionInfo
     public override string ToString() => Display;
 }
 
+/// <summary>游戏异常退出（已带崩溃分析结果）。</summary>
+public sealed class GameCrashedEventArgs : EventArgs
+{
+    public required CrashReport Report { get; init; }
+
+    public required string InstanceId { get; init; }
+
+    public required string InstanceName { get; init; }
+
+    public string InstanceDirectory { get; init; } = string.Empty;
+}
+
 /// <summary>
 /// 启动器运行时装配：把 Core 的全部服务组装好，并持有当前会话状态
 /// （游戏根目录、账号、启动日志缓冲）。界面层只跟它打交道。
@@ -101,6 +113,9 @@ public sealed class LauncherStack : IDisposable
     /// <summary>CurseForge 检索、文件查询与指纹匹配。</summary>
     public required CurseForgeService CurseForge { get; init; }
 
+    /// <summary>Modrinth 检索与文件挑选（免 API Key）。</summary>
+    public required ModrinthService Modrinth { get; init; }
+
     public required ResourceDownloadService ResourceDownloads { get; init; }
 
     public required ResourceUpdateService ResourceUpdates { get; init; }
@@ -110,6 +125,9 @@ public sealed class LauncherStack : IDisposable
 
     /// <summary>版本列表 / 账号 / 设置发生变化时触发，供各页面刷新。</summary>
     public event EventHandler? Changed;
+
+    /// <summary>游戏异常退出并完成崩溃分析后触发，由外壳弹出崩溃界面。</summary>
+    public event EventHandler<GameCrashedEventArgs>? GameCrashed;
 
     /// <summary>当前游戏根目录（<c>.minecraft</c>）。</summary>
     public string GameRoot =>
@@ -168,12 +186,15 @@ public sealed class LauncherStack : IDisposable
             Resources = resources,
             ServerList = new ServerListService(log),
             CurseForge = curseForge,
+            Modrinth = new ModrinthService(downloader, resolver, log),
             ResourceDownloads = new ResourceDownloadService(downloader, resolver, log),
             ResourceUpdates = new ResourceUpdateService(curseForge, log),
         };
     }
 
     public void RaiseChanged() => Changed?.Invoke(this, EventArgs.Empty);
+
+    public void NotifyGameCrashed(GameCrashedEventArgs args) => GameCrashed?.Invoke(this, args);
 
     // ---------------------------------------------------------------- 游戏目录
 
@@ -274,7 +295,7 @@ public sealed class LauncherStack : IDisposable
         var result = new List<InstalledVersionInfo>();
         var gameRoot = GameRoot;
 
-        foreach (var id in Repository.ListInstalledIds(gameRoot))
+        foreach (var id in Instances.ListVisibleInstanceIds(gameRoot))
         {
             var json = Repository.TryLoad(gameRoot, id);
             if (json is null)
@@ -289,7 +310,7 @@ public sealed class LauncherStack : IDisposable
             {
                 Id = id,
                 DisplayName = config.DisplayName,
-                BaseVersionId = json.InheritsFrom,
+                BaseVersionId = json.InheritsFrom ?? config.GameVersion,
                 Type = json.Type,
                 LoaderName = loaderName,
                 LoaderVersion = loaderVersion,
@@ -491,6 +512,47 @@ public sealed class LauncherStack : IDisposable
 
         RaiseChanged();
         return report;
+    }
+
+    /// <summary>
+    /// 确保版本的继承链完整：缺少的基底原版会自动从版本清单补装。
+    /// 基底被删除后启动加载器实例时走这里自愈，而不是直接报「找不到被继承的版本」。
+    /// 返回本次补装的基底版本 id。
+    /// </summary>
+    public async Task<IReadOnlyList<string>> EnsureInheritanceChainAsync(
+        string versionId,
+        IProgress<InstallProgress>? progress = null,
+        CancellationToken ct = default)
+    {
+        var missing = new List<string>();
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var inheritedFrom = Repository.TryLoad(GameRoot, versionId)?.InheritsFrom;
+
+        while (!string.IsNullOrWhiteSpace(inheritedFrom) && visited.Add(inheritedFrom))
+        {
+            var parent = Repository.TryLoad(GameRoot, inheritedFrom);
+            if (parent is null)
+            {
+                missing.Add(inheritedFrom);
+                break;
+            }
+
+            inheritedFrom = parent.InheritsFrom;
+        }
+
+        // 从最外层基底开始装，保证补装后的链是完整的。
+        for (var i = missing.Count - 1; i >= 0; i--)
+        {
+            var baseId = missing[i];
+            var report = await InstallVersionAsync(baseId, progress, ct).ConfigureAwait(false);
+            if (!report.Success)
+            {
+                throw new InvalidOperationException(
+                    $"基底版本 {baseId} 补装失败：{report.Failed} 个文件未能下载");
+            }
+        }
+
+        return missing;
     }
 
     public InstallOptions BuildInstallOptions() => new()

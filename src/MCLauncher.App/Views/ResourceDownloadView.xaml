@@ -26,17 +26,143 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- 扁平行按钮：版本行、分组标题、前置项目行共用 -->
+        <Style x:Key="VersionRowButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                CornerRadius="4" Padding="6,5">
+                            <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#F2F6FC"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#E4EDF8"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="TagPill" TargetType="Border">
+            <Setter Property="Background" Value="#E8EEF7"/>
+            <Setter Property="CornerRadius" Value="3"/>
+            <Setter Property="Padding" Value="5,1"/>
+            <Setter Property="Margin" Value="0,0,4,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <!-- 详情页里的版本行 -->
+        <DataTemplate x:Key="VersionRowTemplate">
+            <Button Style="{StaticResource VersionRowButton}"
+                    AutomationProperties.AutomationId="VersionRow"
+                    Command="{Binding DataContext.SelectVersionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                    CommandParameter="{Binding}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold"
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" MaxWidth="330"/>
+                            <Border Style="{StaticResource TagPill}" Background="#EDF5EA" Margin="8,0,0,0">
+                                <TextBlock Text="{Binding TypeText}" FontSize="10" Foreground="#3F7A46"/>
+                            </Border>
+                            <Border Style="{StaticResource TagPill}"
+                                    Visibility="{Binding HasLoaderText, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="{Binding LoaderText}" FontSize="10" Foreground="#3F628E"/>
+                            </Border>
+                        </StackPanel>
+                        <TextBlock Text="{Binding DateText}" FontSize="10" Foreground="#9A9A9A" Margin="0,2,0,0"/>
+                    </StackPanel>
+
+                    <TextBlock Grid.Column="1" Text="&#xE76C;" FontFamily="Segoe MDL2 Assets"
+                               FontSize="11" Foreground="#A0A0A0" VerticalAlignment="Center" Margin="6,0,2,0"/>
+                </Grid>
+            </Button>
+        </DataTemplate>
+
+        <!-- 前置项目行 -->
+        <DataTemplate x:Key="DependencyRowTemplate">
+            <Button Style="{StaticResource VersionRowButton}"
+                    Command="{Binding DataContext.OpenDependencyCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                    CommandParameter="{Binding}">
+                <Grid Height="42">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="38"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Grid Grid.Column="0" Width="30" Height="30" VerticalAlignment="Center">
+                        <Border Background="#EEF2F7" CornerRadius="4">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasIcon}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <TextBlock Text="&#xE7B8;" FontFamily="Segoe MDL2 Assets" FontSize="14"
+                                       Foreground="#7A93B5"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <Image Source="{Binding Icon}" Stretch="Uniform"
+                               RenderOptions.BitmapScalingMode="HighQuality"
+                               Visibility="{Binding HasIcon, Converter={StaticResource BoolToVis}}"/>
+                    </Grid>
+
+                    <StackPanel Grid.Column="1" Margin="8,0,6,0" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="SemiBold"
+                                   TextTrimming="CharacterEllipsis" MaxWidth="330"/>
+                        <TextBlock Text="{Binding Summary}" FontSize="10" Foreground="#8A8A8A"
+                                   Margin="0,2,0,0" TextTrimming="CharacterEllipsis" MaxWidth="330"/>
+                    </StackPanel>
+
+                    <TextBlock Grid.Column="2" Text="&#xE76C;" FontFamily="Segoe MDL2 Assets"
+                               FontSize="11" Foreground="#A0A0A0" VerticalAlignment="Center"/>
+                </Grid>
+            </Button>
+        </DataTemplate>
+
+        <!-- 项目分类标签 -->
+        <DataTemplate x:Key="CategoryPillTemplate">
+            <Border Style="{StaticResource TagPill}">
+                <TextBlock Text="{Binding}" FontSize="10" Foreground="#3F628E"/>
+            </Border>
+        </DataTemplate>
     </UserControl.Resources>
 
     <Grid Background="#66000000">
+        <!-- ==================== 检索列表 ==================== -->
         <Border Width="660" MaxHeight="430" Background="White" CornerRadius="8" Padding="16,12"
                 HorizontalAlignment="Center" VerticalAlignment="Center"
-                BorderBrush="#D8D8D8" BorderThickness="1">
+                BorderBrush="#D8D8D8" BorderThickness="1"
+                Visibility="{Binding IsSearchMode, Converter={StaticResource BoolToVis}}">
             <DockPanel>
                 <!-- 标题 -->
                 <Grid DockPanel.Dock="Top">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding SubtitleText}" FontSize="11" Foreground="#8A8A8A"
+                                   Margin="10,0,0,0" VerticalAlignment="Center"/>
                         <TextBlock Text="{Binding PageText}" FontSize="11" Foreground="#7A7A7A"
                                    Margin="10,0,0,0" VerticalAlignment="Center"/>
                     </StackPanel>
@@ -52,6 +178,7 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
                     <TextBox Grid.Column="0" Height="26" FontSize="12" Padding="6,0"
@@ -60,18 +187,25 @@
                              ToolTip="按项目名称搜索，支持中英文">
                     </TextBox>
 
-                    <ComboBox Grid.Column="1" Width="108" Height="26" FontSize="12" Margin="8,0,0,0"
+                    <ComboBox Grid.Column="1" Width="104" Height="26" FontSize="12" Margin="8,0,0,0"
+                              ItemsSource="{Binding Sources}"
+                              DisplayMemberPath="Label"
+                              SelectedItem="{Binding SelectedSource, Mode=TwoWay}"
+                              IsEnabled="{Binding CanSelectSource}"
+                              ToolTip="安装源：默认 Modrinth，可切换 CurseForge"/>
+
+                    <ComboBox Grid.Column="2" Width="96" Height="26" FontSize="12" Margin="8,0,0,0"
                               ItemsSource="{Binding GameVersionOptions}"
                               SelectedItem="{Binding SelectedGameVersion, Mode=TwoWay}"
                               ToolTip="筛选支持该游戏版本的项目"/>
 
-                    <ComboBox Grid.Column="2" Width="108" Height="26" FontSize="12" Margin="8,0,0,0"
+                    <ComboBox Grid.Column="3" Width="96" Height="26" FontSize="12" Margin="8,0,0,0"
                               ItemsSource="{Binding SortOptions}"
                               DisplayMemberPath="Label"
                               SelectedItem="{Binding SelectedSort, Mode=TwoWay}"
                               ToolTip="排序方式"/>
 
-                    <Button Grid.Column="3" Style="{StaticResource SkinButton}"
+                    <Button Grid.Column="4" Style="{StaticResource SkinButton}"
                             Command="{Binding SearchCommand}" Content="搜索"
                             Width="66" Height="26" FontSize="12" Margin="8,0,0,0"/>
                 </Grid>
@@ -113,6 +247,7 @@
                                         <ColumnDefinition Width="44"/>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
 
                                     <Grid Grid.Column="0" Width="36" Height="36" VerticalAlignment="Center">
@@ -140,7 +275,7 @@
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold"
                                                        VerticalAlignment="Center"
-                                                       TextTrimming="CharacterEllipsis" MaxWidth="260"/>
+                                                       TextTrimming="CharacterEllipsis" MaxWidth="240"/>
                                             <ItemsControl ItemsSource="{Binding Categories}" Margin="8,0,0,0"
                                                           VerticalAlignment="Center">
                                                 <ItemsControl.ItemsPanel>
@@ -161,13 +296,19 @@
                                         </StackPanel>
                                         <TextBlock Text="{Binding Summary}" FontSize="10" Foreground="#8A8A8A"
                                                    Margin="0,3,0,0" TextTrimming="CharacterEllipsis"
-                                                   MaxWidth="430"/>
+                                                   MaxWidth="400"/>
                                         <TextBlock Text="{Binding DownloadText}" FontSize="10"
                                                    Foreground="#A0A0A0" Margin="0,2,0,0"/>
                                     </StackPanel>
 
                                     <Button Grid.Column="2" Style="{StaticResource SkinButton}"
-                                            Content="下载" Width="64" Height="26" FontSize="12"
+                                            Content="选择版本" Width="76" Height="26" FontSize="12"
+                                            VerticalAlignment="Center" Margin="0,0,6,0"
+                                            Command="{Binding ElementName=Root, Path=DataContext.OpenDetailCommand}"
+                                            CommandParameter="{Binding}"/>
+
+                                    <Button Grid.Column="3" Style="{StaticResource SkinButton}"
+                                            Content="下载" Width="58" Height="26" FontSize="12"
                                             VerticalAlignment="Center"
                                             Command="{Binding ElementName=Root, Path=DataContext.DownloadCommand}"
                                             CommandParameter="{Binding}"/>
@@ -178,5 +319,244 @@
                 </Border>
             </DockPanel>
         </Border>
+
+        <!-- ==================== 项目详情 ==================== -->
+        <Border Width="660" MaxHeight="430" Background="White" CornerRadius="8" Padding="16,12"
+                HorizontalAlignment="Center" VerticalAlignment="Center"
+                BorderBrush="#D8D8D8" BorderThickness="1"
+                Visibility="{Binding IsDetailMode, Converter={StaticResource BoolToVis}}">
+            <DockPanel>
+                <!-- 顶栏 -->
+                <Grid DockPanel.Dock="Top">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Style="{StaticResource SkinButton}" Content="← 返回" Width="72" Height="26"
+                                FontSize="12" Command="{Binding BackCommand}"
+                                ToolTip="返回上一级或检索列表"/>
+                        <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold"
+                                   Margin="10,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <Button HorizontalAlignment="Right" Style="{StaticResource SkinButton}"
+                            Command="{Binding CloseCommand}" Content="关闭"
+                            Width="66" Height="26" FontSize="12"/>
+                </Grid>
+
+                <!-- 项目信息卡 -->
+                <Border DockPanel.Dock="Top" Background="#F7F8FA" CornerRadius="6"
+                        Padding="10,8" Margin="0,10,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="50"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Grid Grid.Column="0" Width="44" Height="44" VerticalAlignment="Center">
+                            <Border Background="#E9EEF4" CornerRadius="5">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasDetailIcon}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <TextBlock Text="&#xE7B8;" FontFamily="Segoe MDL2 Assets" FontSize="20"
+                                           Foreground="#7A93B5"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <Image Source="{Binding DetailIcon}" Stretch="Uniform"
+                                   RenderOptions.BitmapScalingMode="HighQuality"
+                                   Visibility="{Binding HasDetailIcon, Converter={StaticResource BoolToVis}}"/>
+                        </Grid>
+
+                        <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding DetailName}" FontSize="13.5" FontWeight="SemiBold"
+                                           VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" MaxWidth="300"/>
+                                <ItemsControl ItemsSource="{Binding DetailCategories}"
+                                              ItemTemplate="{StaticResource CategoryPillTemplate}"
+                                              Margin="8,0,0,0" VerticalAlignment="Center">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Orientation="Horizontal"/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                </ItemsControl>
+                            </StackPanel>
+                            <TextBlock Text="{Binding DetailSummary}" FontSize="10.5" Foreground="#7A7A7A"
+                                       Margin="0,3,0,0" TextWrapping="Wrap" MaxHeight="30"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text="{Binding DetailMetaText}" FontSize="10" Foreground="#A0A0A0"
+                                       Margin="0,3,0,0"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- 底部状态 -->
+                <TextBlock DockPanel.Dock="Bottom" Text="{Binding DetailStatusText}" FontSize="11"
+                           Foreground="#5A5A5A" Margin="0,8,0,0"
+                           TextTrimming="CharacterEllipsis" ToolTip="{Binding DetailStatusText}"/>
+
+                <!-- 版本列表 -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,10,0,0"
+                              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel>
+                        <!-- 推荐版本 -->
+                        <StackPanel Visibility="{Binding HasRecommended, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="{Binding RecommendedHeader}" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="#5A5A5A" Margin="2,0,0,3"/>
+                            <Border Background="#F2F7FF" CornerRadius="5" Padding="4,2">
+                                <ItemsControl ItemsSource="{Binding RecommendedVersions}"
+                                              ItemTemplate="{StaticResource VersionRowTemplate}"/>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- 按 Minecraft 版本分组 -->
+                        <ItemsControl ItemsSource="{Binding VersionGroups}" Margin="0,8,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,0,0,2">
+                                        <Button Style="{StaticResource VersionRowButton}"
+                                                Command="{Binding ToggleCommand}">
+                                            <Grid>
+                                                <TextBlock Text="{Binding Header}" FontSize="12"
+                                                           FontWeight="SemiBold" Foreground="#3A3A3A"/>
+                                                <StackPanel Orientation="Horizontal"
+                                                            HorizontalAlignment="Right">
+                                                    <TextBlock Text="{Binding CountText}" FontSize="10"
+                                                               Foreground="#9A9A9A" VerticalAlignment="Center"
+                                                               Margin="0,0,8,0"/>
+                                                    <TextBlock Text="{Binding ChevronGlyph}"
+                                                               FontFamily="Segoe MDL2 Assets" FontSize="10"
+                                                               Foreground="#8A8A8A" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Button>
+
+                                        <ItemsControl ItemsSource="{Binding Versions}"
+                                                      ItemTemplate="{StaticResource VersionRowTemplate}"
+                                                      Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+            </DockPanel>
+        </Border>
+
+        <!-- ==================== 版本下载 / 前置提示 ==================== -->
+        <Grid Background="#66000000"
+              Visibility="{Binding IsVersionDialogOpen, Converter={StaticResource BoolToVis}}">
+            <Border Width="520" MaxHeight="420" Background="White" CornerRadius="8" Padding="16,14"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    BorderBrush="#D8D8D8" BorderThickness="1">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top">
+                        <TextBlock Text="{Binding VersionDialogTitle}" FontSize="14" FontWeight="SemiBold"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,7,0,0">
+                            <TextBlock Text="{Binding DialogVersion.Name}" FontSize="12" FontWeight="SemiBold"
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" MaxWidth="300"/>
+                            <Border Style="{StaticResource TagPill}" Background="#EDF5EA" Margin="8,0,0,0">
+                                <TextBlock Text="{Binding DialogVersion.TypeText}" FontSize="10"
+                                           Foreground="#3F7A46"/>
+                            </Border>
+                            <Border Style="{StaticResource TagPill}"
+                                    Visibility="{Binding DialogVersion.HasLoaderText, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="{Binding DialogVersion.LoaderText}" FontSize="10"
+                                           Foreground="#3F628E"/>
+                            </Border>
+                        </StackPanel>
+                        <TextBlock Text="{Binding VersionDialogMeta}" FontSize="10" Foreground="#9A9A9A"
+                                   Margin="0,3,0,0"/>
+                        <TextBlock Text="整合包会创建为独立实例，当前实例不受影响。" FontSize="10"
+                                   Foreground="#8A5A2A" Margin="0,3,0,0"
+                                   Visibility="{Binding IsModpackMode, Converter={StaticResource BoolToVis}}"/>
+                    </StackPanel>
+
+                    <!-- 底部：进度、状态与操作 -->
+                    <StackPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+                        <ProgressBar Height="5" Minimum="0" Maximum="1" Margin="0,0,0,6"
+                                     Value="{Binding DownloadProgress, Mode=OneWay}"
+                                     Visibility="{Binding IsDownloading, Converter={StaticResource BoolToVis}}"/>
+                        <TextBlock Text="{Binding VersionDialogStatus}" FontSize="11" Foreground="#5A5A5A"
+                                   TextTrimming="CharacterEllipsis" Margin="0,0,0,6"
+                                   ToolTip="{Binding VersionDialogStatus}"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Style="{StaticResource SkinButton}" Content="{Binding InstallButtonText}"
+                                    Width="118" Height="28" FontSize="12"
+                                    Command="{Binding InstallToInstanceCommand}"/>
+                            <Button Style="{StaticResource SkinButton}" Content="下载到本地文件夹"
+                                    Width="128" Height="28" FontSize="12" Margin="8,0,0,0"
+                                    Command="{Binding DownloadToFolderCommand}"/>
+                            <Button Style="{StaticResource SkinButton}" Content="取消"
+                                    Width="66" Height="28" FontSize="12" Margin="8,0,0,0"
+                                    Command="{Binding CancelVersionDialogCommand}"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- 前置内容 -->
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="220" Margin="0,10,0,0"
+                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel>
+                            <TextBlock Text="正在获取前置内容…" FontSize="11" Foreground="#7A7A7A"
+                                       Visibility="{Binding IsResolvingDependencies, Converter={StaticResource BoolToVis}}"/>
+
+                            <Border Background="#F7F8FA" CornerRadius="5" Padding="8,6" Margin="0,0,0,6"
+                                    Visibility="{Binding HasRequiredDependencies, Converter={StaticResource BoolToVis}}">
+                                <StackPanel>
+                                    <TextBlock Text="必需的前置内容（必须另外下载，缺失可能会导致游戏无法启动）"
+                                               FontSize="10.5" Foreground="#8A5A2A"
+                                               HorizontalAlignment="Center" Margin="0,0,0,4"/>
+                                    <ItemsControl ItemsSource="{Binding RequiredDependencies}"
+                                                  ItemTemplate="{StaticResource DependencyRowTemplate}"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Background="#F7F8FA" CornerRadius="5" Padding="8,6"
+                                    Visibility="{Binding HasOptionalDependencies, Converter={StaticResource BoolToVis}}">
+                                <StackPanel>
+                                    <TextBlock Text="可选的前置内容（若缺失游戏能够正常运行，但功能可能缺失）"
+                                               FontSize="10.5" Foreground="#7A7A7A"
+                                               HorizontalAlignment="Center" Margin="0,0,0,4"/>
+                                    <ItemsControl ItemsSource="{Binding OptionalDependencies}"
+                                                  ItemTemplate="{StaticResource DependencyRowTemplate}"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+        </Grid>
+
+        <!-- ==================== 文件名 ==================== -->
+        <Grid Background="#66000000"
+              Visibility="{Binding IsFileNameDialogOpen, Converter={StaticResource BoolToVis}}">
+            <Border Width="380" Background="White" CornerRadius="8" Padding="18,16"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    BorderBrush="#D8D8D8" BorderThickness="1">
+                <StackPanel>
+                    <TextBlock Text="文件名" FontSize="14" FontWeight="SemiBold"/>
+                    <TextBox x:Name="FileNameBox" Height="28" Margin="0,10,0,0" FontSize="12"
+                             Padding="6,0" VerticalContentAlignment="Center"
+                             Text="{Binding FileNameInput, UpdateSourceTrigger=PropertyChanged}"/>
+                    <TextBlock Text="{Binding FileNameError}" FontSize="10.5" Foreground="#D0564B"
+                               Margin="0,4,0,0" MinHeight="14"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                        <Button Style="{StaticResource SkinButton}" Content="确定"
+                                Width="70" Height="28" FontSize="12"
+                                IsEnabled="{Binding CanConfirmFileName}"
+                                Command="{Binding ConfirmFileNameCommand}"/>
+                        <Button Style="{StaticResource SkinButton}" Content="取消"
+                                Width="70" Height="28" FontSize="12" Margin="8,0,0,0"
+                                Command="{Binding CancelFileNameCommand}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Grid>
     </Grid>
 </UserControl>

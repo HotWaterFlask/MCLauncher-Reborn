@@ -5,7 +5,9 @@ using System.Windows;
 using System.Windows.Input;
 using MCLauncher.App.ViewModels.Mvvm;
 using MCLauncher.Core.Models;
+using MCLauncher.Core.Network;
 using MCLauncher.Core.Services;
+using MCLauncher.Core.Utils;
 
 namespace MCLauncher.App.ViewModels;
 
@@ -76,6 +78,60 @@ public sealed class LoaderCardItem : ViewModelBase
     }
 }
 
+/// <summary>安装弹窗里的一行并发下载进度。</summary>
+public sealed class InstallFileItem : ViewModelBase
+{
+    private double _progress;
+    private string _detail = string.Empty;
+
+    public InstallFileItem(string name)
+    {
+        Name = name;
+        DisplayName = Path.GetFileName(name);
+    }
+
+    /// <summary>下载请求里的完整名称。</summary>
+    public string Name { get; }
+
+    /// <summary>界面上只显示文件名。</summary>
+    public string DisplayName { get; }
+
+    public double Progress
+    {
+        get => _progress;
+        private set => SetProperty(ref _progress, value);
+    }
+
+    /// <summary>已下载 / 总大小。</summary>
+    public string Detail
+    {
+        get => _detail;
+        private set => SetProperty(ref _detail, value);
+    }
+
+    public void Update(long received, long total)
+    {
+        Progress = total > 0 ? Math.Clamp((double)received / total, 0d, 1d) : 0d;
+        Detail = total > 0
+            ? $"{FormatBytes(received)} / {FormatBytes(total)}"
+            : FormatBytes(received);
+    }
+
+    public static string FormatBytes(double bytes)
+    {
+        var value = Math.Max(0, bytes);
+        string[] units = { "B", "KB", "MB", "GB" };
+        var unit = 0;
+        while (value >= 1024 && unit < units.Length - 1)
+        {
+            value /= 1024;
+            unit++;
+        }
+
+        return unit == 0 ? $"{value:0} B" : $"{value:0.0} {units[unit]}";
+    }
+}
+
 /// <summary>
 /// 实例页：左侧游戏目录（本地 .minecraft / 官方启动器目录 / 自定义目录），
 /// 右侧实例列表。安装新游戏可以同时装加载器，安装整合包支持本地压缩包。
@@ -91,6 +147,7 @@ public sealed class VersionsViewModel : ViewModelBase
     private readonly AsyncRelayCommand _installGameCommand;
     private readonly AsyncRelayCommand _installModpackCommand;
     private readonly AsyncRelayCommand _openInstallDialogCommand;
+    private readonly AsyncRelayCommand _downloadModpackUrlCommand;
 
     private readonly List<InstalledVersionInfo> _allInstances = new();
     private IReadOnlyList<VersionManifestEntry> _allVersions = Array.Empty<VersionManifestEntry>();
@@ -113,9 +170,13 @@ public sealed class VersionsViewModel : ViewModelBase
     private string _installStatus = string.Empty;
     private bool _isInstalling;
     private double _installProgress;
+    private string _installSpeedText = string.Empty;
+    private readonly Dictionary<string, InstallFileItem> _installFileRows = new(StringComparer.Ordinal);
     private bool _isLoadingLoaderVersions;
 
     private bool _isModpackDialogOpen;
+    private bool _isModpackPickerOpen;
+    private bool _isModpackUrlDialogOpen;
     private string _modpackPath = string.Empty;
     private ModpackInfo? _modpackInfo;
     private string _modpackTitle = string.Empty;
@@ -125,6 +186,11 @@ public sealed class VersionsViewModel : ViewModelBase
     private string _modpackStatus = string.Empty;
     private bool _isModpackInstalling;
     private double _modpackProgress;
+    private string _modpackUrl = string.Empty;
+    private string _modpackUrlStatus = string.Empty;
+    private bool _isModpackDownloading;
+    private double _modpackDownloadProgress;
+    private CancellationTokenSource? _modpackDownloadCts;
 
     private bool _suppressStackChanged;
 
@@ -158,9 +224,16 @@ public sealed class VersionsViewModel : ViewModelBase
         ManageCommand = new RelayCommand<InstanceRowItem>(ManageInstance);
         CompleteInstanceCommand = new RelayCommand<InstanceRowItem>(row => _ = CompleteInstanceAsync(row));
         OpenGlobalSettingsCommand = new RelayCommand(_openGlobalSettings);
-        OpenModpackCommand = new AsyncRelayCommand(OpenModpackAsync);
+        OpenModpackCommand = new RelayCommand(OpenModpackPicker);
+        OpenLocalModpackCommand = new AsyncRelayCommand(ImportLocalModpackAsync);
+        OpenModpackUrlCommand = new RelayCommand(OpenModpackUrlDialog);
+        BrowseModpackCommand = new RelayCommand(OpenModpackBrowser);
         SelectLoaderCommand = new RelayCommand<LoaderCardItem>(SelectLoader);
         CloseDialogsCommand = new RelayCommand(CloseDialogs);
+
+        Download = new ResourceDownloadViewModel(stack);
+        Download.ModpackDownloaded += archive =>
+            UiThread.Post(() => _ = ShowModpackConfirmAsync(archive));
 
         _openInstallDialogCommand = new AsyncRelayCommand(OpenInstallDialogAsync);
         OpenInstallCommand = _openInstallDialogCommand;
@@ -168,6 +241,8 @@ public sealed class VersionsViewModel : ViewModelBase
         ConfirmInstallCommand = _installGameCommand;
         _installModpackCommand = new AsyncRelayCommand(InstallModpackAsync, () => CanConfirmModpack);
         ConfirmModpackCommand = _installModpackCommand;
+        _downloadModpackUrlCommand = new AsyncRelayCommand(DownloadModpackFromUrlAsync, () => CanDownloadModpackUrl);
+        DownloadModpackUrlCommand = _downloadModpackUrlCommand;
 
         foreach (var kind in new[] { ModLoaderKind.Forge, ModLoaderKind.NeoForge, ModLoaderKind.Fabric, ModLoaderKind.Quilt })
         {
@@ -402,6 +477,16 @@ public sealed class VersionsViewModel : ViewModelBase
         private set => SetProperty(ref _installProgress, value);
     }
 
+    /// <summary>安装过程中正在并发下载的文件。</summary>
+    public ObservableCollection<InstallFileItem> InstallFiles { get; } = new();
+
+    /// <summary>实时下载速度文案。</summary>
+    public string InstallSpeedText
+    {
+        get => _installSpeedText;
+        private set => SetProperty(ref _installSpeedText, value);
+    }
+
     public bool CanConfirmInstall =>
         !IsInstalling &&
         !_isLoadingLoaderVersions &&
@@ -421,6 +506,75 @@ public sealed class VersionsViewModel : ViewModelBase
             }
         }
     }
+
+    /// <summary>三步选择弹窗：本地导入 / 链接下载 / 在线浏览。</summary>
+    public bool IsModpackPickerOpen
+    {
+        get => _isModpackPickerOpen;
+        private set
+        {
+            if (SetProperty(ref _isModpackPickerOpen, value))
+            {
+                OnPropertyChanged(nameof(IsAnyDialogOpen));
+            }
+        }
+    }
+
+    /// <summary>从互联网下载整合包的弹窗。</summary>
+    public bool IsModpackUrlDialogOpen
+    {
+        get => _isModpackUrlDialogOpen;
+        private set
+        {
+            if (SetProperty(ref _isModpackUrlDialogOpen, value))
+            {
+                OnPropertyChanged(nameof(IsAnyDialogOpen));
+            }
+        }
+    }
+
+    public string ModpackUrl
+    {
+        get => _modpackUrl;
+        set
+        {
+            if (!SetProperty(ref _modpackUrl, value))
+            {
+                return;
+            }
+
+            OnPropertyChanged(nameof(CanDownloadModpackUrl));
+            _downloadModpackUrlCommand?.RaiseCanExecuteChanged();
+        }
+    }
+
+    public string ModpackUrlStatus
+    {
+        get => _modpackUrlStatus;
+        private set => SetProperty(ref _modpackUrlStatus, value);
+    }
+
+    public bool IsModpackDownloading
+    {
+        get => _isModpackDownloading;
+        private set
+        {
+            if (SetProperty(ref _isModpackDownloading, value))
+            {
+                OnPropertyChanged(nameof(CanDownloadModpackUrl));
+                _downloadModpackUrlCommand?.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
+    public double ModpackDownloadProgress
+    {
+        get => _modpackDownloadProgress;
+        private set => SetProperty(ref _modpackDownloadProgress, value);
+    }
+
+    public bool CanDownloadModpackUrl =>
+        !IsModpackDownloading && !string.IsNullOrWhiteSpace(_modpackUrl);
 
     public string ModpackTitle
     {
@@ -479,7 +633,8 @@ public sealed class VersionsViewModel : ViewModelBase
         !string.IsNullOrWhiteSpace(_modpackInfo.GameVersion);
 
     /// <summary>任意弹窗打开时为 true，用于显示遮罩。</summary>
-    public bool IsAnyDialogOpen => IsInstallDialogOpen || IsModpackDialogOpen;
+    public bool IsAnyDialogOpen =>
+        IsInstallDialogOpen || IsModpackDialogOpen || IsModpackPickerOpen || IsModpackUrlDialogOpen;
 
     // ---------------------------------------------------------------- 命令
 
@@ -508,6 +663,20 @@ public sealed class VersionsViewModel : ViewModelBase
     public ICommand OpenInstallCommand { get; }
 
     public ICommand OpenModpackCommand { get; }
+
+    /// <summary>从本地文件导入整合包。</summary>
+    public ICommand OpenLocalModpackCommand { get; }
+
+    /// <summary>从互联网下载整合包。</summary>
+    public ICommand OpenModpackUrlCommand { get; }
+
+    /// <summary>到 CurseForge / Modrinth 浏览并安装整合包。</summary>
+    public ICommand BrowseModpackCommand { get; }
+
+    public ICommand DownloadModpackUrlCommand { get; }
+
+    /// <summary>整合包在线浏览与下载（复用资源下载界面）。</summary>
+    public ResourceDownloadViewModel Download { get; }
 
     public ICommand SelectLoaderCommand { get; }
 
@@ -1076,20 +1245,31 @@ public sealed class VersionsViewModel : ViewModelBase
 
         IsInstalling = true;
         InstallProgress = 0;
+        ClearInstallFiles();
         InstallStatus = $"准备安装 {gameVersion}…";
 
         try
         {
-            await EnsureBaseVersionAsync(gameVersion!,
-                new Progress<InstallProgress>(ReportInstallProgress));
-
             var trimmedName = NewInstanceName.Trim();
             var loaderName = card?.Title;
 
             if (card is null &&
                 (trimmedName.Length == 0 || string.Equals(trimmedName, gameVersion, StringComparison.OrdinalIgnoreCase)))
             {
-                // 不装加载器且名字就是版本号：直接使用已安装的原版，不再复制一份。
+                // 不装加载器且名字就是版本号：直接安装到 versions/<版本号>，并登记成显式实例。
+                InstallStatus = $"正在安装原版 {gameVersion}…";
+                var baseVersion = await FetchBaseVersionAsync(gameVersion!);
+                var vanillaReport = await _stack.Installer.InstallInstanceAsync(
+                    _stack.GameRoot, gameVersion!, baseVersion, null,
+                    _stack.BuildInstallOptions(), new Progress<InstallProgress>(ReportInstallProgress));
+
+                if (!vanillaReport.Success)
+                {
+                    throw new InvalidOperationException(
+                        $"原版 {gameVersion} 安装失败：{vanillaReport.Failed} 个文件未能下载");
+                }
+
+                _stack.Instances.RegisterVersionAsInstance(_stack.GameRoot, gameVersion!);
                 _stack.Config.Settings.SelectedInstanceId = gameVersion;
                 _stack.Config.Save();
                 InstallStatus = $"已安装原版 {gameVersion}，并设为当前实例。";
@@ -1098,18 +1278,65 @@ public sealed class VersionsViewModel : ViewModelBase
             {
                 var fallback = card is null
                     ? gameVersion!
-                    : $"{gameVersion}-{loaderName}";
+                    : $"{loaderName}{gameVersion}";
                 var instanceId = _stack.Instances.CreateUniqueInstanceId(
                     _stack.GameRoot, trimmedName, fallback);
 
-                if (card is null)
+                if (card is null || card.Kind is ModLoaderKind.Fabric or ModLoaderKind.Quilt)
                 {
-                    InstallStatus = $"正在创建实例 {instanceId}…";
-                    _stack.Instances.CreateProfileInstance(
-                        _stack.GameRoot, instanceId, gameVersion!, instanceId);
+                    // 原版与加载器在内存里合并，直接写进实例目录，再一次性并发下载全部文件；
+                    // versions 下不会出现临时原版基底目录。
+                    InstallStatus = card is null
+                        ? $"正在安装原版 {gameVersion}…"
+                        : $"正在安装 {loaderName} {loaderVersion}…";
+
+                    var baseVersion = await FetchBaseVersionAsync(gameVersion!);
+                    var loaderProfile = card is null
+                        ? null
+                        : await _stack.ModLoaders.GetFabricLikeProfileAsync(
+                            card.Kind, gameVersion!, loaderVersion!);
+
+                    try
+                    {
+                        var report = await _stack.Installer.InstallInstanceAsync(
+                            _stack.GameRoot, instanceId, baseVersion, loaderProfile,
+                            _stack.BuildInstallOptions(), new Progress<InstallProgress>(ReportInstallProgress));
+
+                        if (!report.Success)
+                        {
+                            throw new InvalidOperationException(
+                                $"安装失败：{report.Failed} 个文件未能下载");
+                        }
+                    }
+                    catch
+                    {
+                        // 半成品会以「实例」身份出现在列表里，失败就整个删掉；
+                        // libraries / assets 是跨版本共享的，不受影响。
+                        try
+                        {
+                            _stack.Instances.Delete(_stack.GameRoot, instanceId);
+                        }
+                        catch (Exception cleanup)
+                        {
+                            _stack.Log.Warn($"清理未完成的实例 {instanceId} 失败", cleanup);
+                        }
+
+                        throw;
+                    }
+
+                    _stack.Instances.RegisterSelfContainedInstance(
+                        _stack.GameRoot,
+                        instanceId,
+                        gameVersion!,
+                        baseVersion,
+                        card is null ? null : $"{loaderName} {loaderVersion}",
+                        instanceId);
                 }
                 else
                 {
+                    var baseInstalledNow = await EnsureBaseVersionAsync(gameVersion!,
+                        new Progress<InstallProgress>(ReportInstallProgress));
+
                     InstallStatus = $"正在安装 {loaderName} {loaderVersion}…";
                     var result = await _stack.ModLoaders.InstallAsync(
                         new LoaderInstallRequest
@@ -1134,7 +1361,8 @@ public sealed class VersionsViewModel : ViewModelBase
                         instanceId,
                         gameVersion!,
                         $"{loaderName} {loaderVersion}",
-                        instanceId);
+                        instanceId,
+                        deleteBaseVersion: baseInstalledNow);
                 }
 
                 _stack.Config.Settings.SelectedInstanceId = instanceId;
@@ -1156,14 +1384,33 @@ public sealed class VersionsViewModel : ViewModelBase
         finally
         {
             IsInstalling = false;
+            ClearInstallFiles();
         }
     }
 
-    private async Task EnsureBaseVersionAsync(string gameVersion, IProgress<InstallProgress> progress)
+    /// <summary>
+    /// 取原版版本 JSON：本地已安装就直接用，否则从版本清单拉取。
+    /// 这样安装实例前不需要先把原版装进 versions。
+    /// </summary>
+    private async Task<GameVersionJson> FetchBaseVersionAsync(string gameVersion)
+    {
+        var installed = _stack.Repository.TryLoad(_stack.GameRoot, gameVersion);
+        if (installed is { InheritsFrom: null })
+        {
+            return installed;
+        }
+
+        var entry = await _stack.Manifests.FindAsync(gameVersion)
+                    ?? throw new InvalidOperationException($"版本清单里找不到 Minecraft {gameVersion}");
+
+        return await _stack.Manifests.GetVersionJsonAsync(entry);
+    }
+
+    private async Task<bool> EnsureBaseVersionAsync(string gameVersion, IProgress<InstallProgress> progress)
     {
         if (_stack.Repository.IsInstalled(_stack.GameRoot, gameVersion))
         {
-            return;
+            return false;
         }
 
         InstallStatus = $"正在安装原版 {gameVersion}…";
@@ -1174,11 +1421,20 @@ public sealed class VersionsViewModel : ViewModelBase
             throw new InvalidOperationException(
                 $"原版 {gameVersion} 安装失败：{report.Failed} 个文件未能下载");
         }
+
+        // 这个原版只是给加载器当基底的临时版本；安装失败后重试也能认出它并清理掉。
+        _stack.Instances.MarkAsAutoBase(_stack.GameRoot, gameVersion);
+        return true;
     }
 
     private void ReportInstallProgress(InstallProgress progress)
     {
         InstallProgress = progress.Fraction;
+        UpdateInstallFiles(progress.ActiveFiles);
+
+        InstallSpeedText = progress.BytesPerSecond > 0
+            ? $"下载速度 {InstallFileItem.FormatBytes(progress.BytesPerSecond)}/s"
+            : string.Empty;
 
         if (progress.Total > 0)
         {
@@ -1188,6 +1444,48 @@ public sealed class VersionsViewModel : ViewModelBase
         {
             InstallStatus = progress.Stage;
         }
+    }
+
+    /// <summary>把当前并发下载的文件同步到界面；列表按开始顺序稳定更新。</summary>
+    private void UpdateInstallFiles(IReadOnlyList<DownloadFileProgress> files)
+    {
+        if (files.Count == 0)
+        {
+            if (InstallFiles.Count > 0)
+            {
+                ClearInstallFiles();
+            }
+
+            return;
+        }
+
+        var alive = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var file in files)
+        {
+            alive.Add(file.Name);
+
+            if (!_installFileRows.TryGetValue(file.Name, out var row))
+            {
+                row = new InstallFileItem(file.Name);
+                _installFileRows[file.Name] = row;
+                InstallFiles.Add(row);
+            }
+
+            row.Update(file.BytesReceived, file.TotalBytes);
+        }
+
+        foreach (var stale in _installFileRows.Keys.Where(key => !alive.Contains(key)).ToList())
+        {
+            InstallFiles.Remove(_installFileRows[stale]);
+            _installFileRows.Remove(stale);
+        }
+    }
+
+    private void ClearInstallFiles()
+    {
+        _installFileRows.Clear();
+        InstallFiles.Clear();
+        InstallSpeedText = string.Empty;
     }
 
     private void SetDefaultInstanceName(string value)
@@ -1213,7 +1511,7 @@ public sealed class VersionsViewModel : ViewModelBase
 
         return loader is null
             ? gameVersion
-            : $"{gameVersion}-{ModLoaderService.DisplayName(loader.Value)}";
+            : $"{ModLoaderService.DisplayName(loader.Value)}{gameVersion}";
     }
 
     private void RaiseInstallState()
@@ -1225,8 +1523,20 @@ public sealed class VersionsViewModel : ViewModelBase
 
     // ---------------------------------------------------------------- 安装整合包
 
-    private async Task OpenModpackAsync()
+    /// <summary>打开整合包安装方式选择：本地导入 / 链接下载 / 在线浏览。</summary>
+    private void OpenModpackPicker()
     {
+        CloseDialogs();
+        ModpackUrl = string.Empty;
+        ModpackUrlStatus = string.Empty;
+        ModpackDownloadProgress = 0;
+        IsModpackPickerOpen = true;
+    }
+
+    private async Task ImportLocalModpackAsync()
+    {
+        IsModpackPickerOpen = false;
+
         var dialog = new Microsoft.Win32.OpenFileDialog
         {
             Title = "选择整合包",
@@ -1239,14 +1549,121 @@ public sealed class VersionsViewModel : ViewModelBase
             return;
         }
 
+        await ShowModpackConfirmAsync(dialog.FileName);
+    }
+
+    private void OpenModpackUrlDialog()
+    {
+        IsModpackPickerOpen = false;
+        ModpackUrl = string.Empty;
+        ModpackUrlStatus = "填写整合包的下载链接（.zip / .mrpack）。";
+        ModpackDownloadProgress = 0;
+        IsModpackUrlDialogOpen = true;
+    }
+
+    private void OpenModpackBrowser()
+    {
+        IsModpackPickerOpen = false;
+        IsModpackUrlDialogOpen = false;
+        OnPropertyChanged(nameof(IsAnyDialogOpen));
+
+        // 整合包先落到缓存目录，确认后再由导入流程创建实例。
+        var cacheDirectory = Path.Combine(_stack.Config.ConfigDirectory, "cache");
+        Download.Show(ResourceKind.Modpack, string.Empty, cacheDirectory, null, null);
+    }
+
+    private async Task DownloadModpackFromUrlAsync()
+    {
+        var url = ModpackUrl.Trim();
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            ModpackUrlStatus = "请输入 http(s) 开头的整合包下载链接。";
+            return;
+        }
+
+        var directory = Path.Combine(_stack.Config.ConfigDirectory, "cache", "modpacks");
+        Directory.CreateDirectory(directory);
+
+        _modpackDownloadCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _modpackDownloadCts = cts;
+
+        IsModpackDownloading = true;
+        ModpackDownloadProgress = 0;
+        ModpackUrlStatus = "正在下载整合包…";
+
         try
         {
-            var info = await Task.Run(() => _stack.Modpacks.Inspect(dialog.FileName));
+            var result = await _stack.ResourceDownloads.DownloadToFolderAsync(
+                new ResourceFile
+                {
+                    FileName = BuildModpackFileName(uri),
+                    DownloadUrl = uri.AbsoluteUri,
+                },
+                directory,
+                new Progress<InstallProgress>(progress =>
+                {
+                    ModpackDownloadProgress = progress.Total > 0
+                        ? (double)progress.Completed / progress.Total
+                        : 0;
+                    ModpackUrlStatus = progress.Stage;
+                }),
+                cts.Token);
 
-            _modpackPath = dialog.FileName;
+            if (!result.Success || string.IsNullOrWhiteSpace(result.InstalledPath))
+            {
+                ModpackUrlStatus = result.Error ?? "下载失败。";
+                return;
+            }
+
+            ModpackDownloadProgress = 1;
+            ModpackUrlStatus = "下载完成，正在识别整合包…";
+            await ShowModpackConfirmAsync(result.InstalledPath);
+        }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            _stack.Log.Error("下载整合包失败", ex);
+            ModpackUrlStatus = "下载失败：" + ex.Message;
+        }
+        finally
+        {
+            if (ReferenceEquals(_modpackDownloadCts, cts))
+            {
+                _modpackDownloadCts = null;
+            }
+
+            cts.Dispose();
+            IsModpackDownloading = false;
+        }
+    }
+
+    /// <summary>从链接里取文件名；没有扩展名时按 zip 处理，识别顺序交给导入器。</summary>
+    private static string BuildModpackFileName(Uri uri)
+    {
+        var name = Path.GetFileName(Uri.UnescapeDataString(uri.AbsolutePath));
+        if (string.IsNullOrWhiteSpace(name) || !PathUtil.IsValidFileName(name))
+        {
+            return "modpack.zip";
+        }
+
+        return Path.GetExtension(name).Length == 0 ? name + ".zip" : name;
+    }
+
+    /// <summary>读取整合包信息并打开安装确认弹窗（本地导入与在线下载共用）。</summary>
+    private async Task ShowModpackConfirmAsync(string archivePath)
+    {
+        try
+        {
+            var info = await Task.Run(() => _stack.Modpacks.Inspect(archivePath));
+
+            _modpackPath = archivePath;
             _modpackInfo = info;
             ModpackTitle = string.IsNullOrWhiteSpace(info.Name)
-                ? Path.GetFileNameWithoutExtension(dialog.FileName)
+                ? Path.GetFileNameWithoutExtension(archivePath)
                 : info.Name!;
             ModpackDetail = $"{info.KindName} · 游戏版本 {info.GameVersion ?? "未知"} · "
                             + $"加载器 {info.Loader ?? "无"} · 文件 {info.FileCount} 个";
@@ -1262,6 +1679,8 @@ public sealed class VersionsViewModel : ViewModelBase
                 _ => "确认实例名后开始安装。",
             };
             ModpackProgress = 0;
+            IsModpackPickerOpen = false;
+            IsModpackUrlDialogOpen = false;
             IsModpackDialogOpen = true;
             OnPropertyChanged(nameof(CanConfirmModpack));
             _installModpackCommand.RaiseCanExecuteChanged();
@@ -1270,6 +1689,11 @@ public sealed class VersionsViewModel : ViewModelBase
         {
             _stack.Log.Error("读取整合包失败", ex);
             StatusText = "读取整合包失败：" + ex.Message;
+
+            if (IsModpackUrlDialogOpen)
+            {
+                ModpackUrlStatus = "读取整合包失败：" + ex.Message;
+            }
         }
     }
 
@@ -1295,8 +1719,6 @@ public sealed class VersionsViewModel : ViewModelBase
 
         try
         {
-            await EnsureBaseVersionAsync(info.GameVersion!, new Progress<InstallProgress>(ReportModpackProgress));
-
             var loader = ModLoaderService.ParseLoaderDescription(info.Loader);
             if (!string.IsNullOrWhiteSpace(info.Loader) && loader is null)
             {
@@ -1306,8 +1728,66 @@ public sealed class VersionsViewModel : ViewModelBase
             var fallback = string.IsNullOrWhiteSpace(ModpackInstanceName) ? ModpackTitle : ModpackInstanceName.Trim();
             var instanceId = _stack.Instances.CreateUniqueInstanceId(_stack.GameRoot, ModpackInstanceName, fallback);
 
-            if (loader is { } parsed)
+            if (loader is null || loader.Value.Kind is ModLoaderKind.Fabric or ModLoaderKind.Quilt)
             {
+                // 原版或 Fabric/Quilt：合并后直接装进实例目录，不生成原版基底。
+                GameVersionJson? loaderProfile = null;
+                string? loaderText = null;
+
+                if (loader is { } parsed)
+                {
+                    var loaderVersion = parsed.Version;
+                    if (string.IsNullOrWhiteSpace(loaderVersion))
+                    {
+                        var options = await _stack.ModLoaders.ListLoaderVersionsAsync(parsed.Kind, info.GameVersion!);
+                        loaderVersion = (options.FirstOrDefault(option => option.IsRecommended) ?? options.FirstOrDefault())?.Version
+                                        ?? throw new InvalidOperationException(
+                                            $"{ModLoaderService.DisplayName(parsed.Kind)} 没有支持 {info.GameVersion} 的版本");
+                    }
+
+                    loaderText = $"{ModLoaderService.DisplayName(parsed.Kind)} {loaderVersion}";
+                    ModpackStatus = $"正在安装 {loaderText}…";
+                    loaderProfile = await _stack.ModLoaders.GetFabricLikeProfileAsync(
+                        parsed.Kind, info.GameVersion!, loaderVersion);
+                }
+                else
+                {
+                    ModpackStatus = $"正在安装原版 {info.GameVersion}…";
+                }
+
+                var baseVersion = await FetchBaseVersionAsync(info.GameVersion!);
+
+                try
+                {
+                    var report = await _stack.Installer.InstallInstanceAsync(
+                        _stack.GameRoot, instanceId, baseVersion, loaderProfile,
+                        _stack.BuildInstallOptions(), new Progress<InstallProgress>(ReportModpackProgress));
+
+                    if (!report.Success)
+                    {
+                        throw new InvalidOperationException($"安装失败：{report.Failed} 个文件未能下载");
+                    }
+                }
+                catch
+                {
+                    try
+                    {
+                        _stack.Instances.Delete(_stack.GameRoot, instanceId);
+                    }
+                    catch (Exception cleanup)
+                    {
+                        _stack.Log.Warn($"清理未完成的整合包实例 {instanceId} 失败", cleanup);
+                    }
+
+                    throw;
+                }
+
+                _stack.Instances.RegisterSelfContainedInstance(
+                    _stack.GameRoot, instanceId, info.GameVersion!, baseVersion, loaderText, instanceId);
+            }
+            else
+            {
+                var parsed = loader.Value;
                 var loaderVersion = parsed.Version;
                 if (string.IsNullOrWhiteSpace(loaderVersion))
                 {
@@ -1316,6 +1796,9 @@ public sealed class VersionsViewModel : ViewModelBase
                                     ?? throw new InvalidOperationException(
                                         $"{ModLoaderService.DisplayName(parsed.Kind)} 没有支持 {info.GameVersion} 的版本");
                 }
+
+                var baseInstalledNow = await EnsureBaseVersionAsync(
+                    info.GameVersion!, new Progress<InstallProgress>(ReportModpackProgress));
 
                 ModpackStatus = $"正在安装 {ModLoaderService.DisplayName(parsed.Kind)} {loaderVersion}…";
                 var result = await _stack.ModLoaders.InstallAsync(
@@ -1340,12 +1823,8 @@ public sealed class VersionsViewModel : ViewModelBase
                     instanceId,
                     info.GameVersion!,
                     $"{ModLoaderService.DisplayName(parsed.Kind)} {loaderVersion}",
-                    instanceId);
-            }
-            else
-            {
-                _stack.Instances.CreateProfileInstance(
-                    _stack.GameRoot, instanceId, info.GameVersion!, instanceId);
+                    instanceId,
+                    deleteBaseVersion: baseInstalledNow);
             }
 
             ModpackStatus = "正在铺开整合包文件…";
@@ -1410,8 +1889,16 @@ public sealed class VersionsViewModel : ViewModelBase
 
     private void CloseDialogs()
     {
+        _modpackDownloadCts?.Cancel();
+        _modpackDownloadCts = null;
+
         IsInstallDialogOpen = false;
         IsModpackDialogOpen = false;
+        IsModpackPickerOpen = false;
+        IsModpackUrlDialogOpen = false;
+        IsModpackDownloading = false;
+        ModpackDownloadProgress = 0;
+        Download.Close();
         OnPropertyChanged(nameof(IsAnyDialogOpen));
     }
 }

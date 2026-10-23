@@ -356,7 +356,7 @@ public sealed partial class ModpackImporter
                 }
 
                 warnings.Add(string.Equals(file.Source?.Type, "curseforge", StringComparison.OrdinalIgnoreCase)
-                    ? $"CurseForge 引用需要 API Key 才能解析：{file.Path}"
+                    ? $"无法解析 CurseForge 文件地址：{file.Path}"
                     : $"缺少下载地址，已跳过：{file.Path}");
                 skipped++;
             }
@@ -459,8 +459,8 @@ public sealed partial class ModpackImporter
             return new ModpackImportResult
             {
                 Success = false,
-                Error = "CurseForge 整合包需要 API Key 才能解析文件下载地址。请到「设置」页填入 CurseForge API Key 后重试；"
-                        + "或者改用 Modrinth / MCBBS 版本的同款整合包。",
+                Error = "当前版本无法访问 CurseForge 文件服务，无法解析这个整合包的下载地址；"
+                        + "请改用 Modrinth / MCBBS 版本的同款整合包。",
             };
         }
 
@@ -887,7 +887,6 @@ public sealed partial class ModpackImporter
             info.FileCount = files.GetArrayLength();
         }
 
-        info.Note = "需要 CurseForge API Key 才能解析文件下载地址。";
         return info;
     }
 

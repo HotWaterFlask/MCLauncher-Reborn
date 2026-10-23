@@ -562,14 +562,21 @@ public sealed class InstanceManageViewModel : ViewModelBase
         OpenEngine();
     }
 
+    /// <summary>实例被重命名后通知外壳更新页面标题。</summary>
+    public event Action<string>? InstanceRenamed;
+
     /// <summary>实例设置保存后同步显示名、隔离目录与资源扫描位置。</summary>
     private void OnInstanceSaved()
     {
-        if (_instanceId.Length == 0)
+        // 实例设置里可能改了实例名，目录 id 会跟着变。
+        var currentId = Settings.InstanceId;
+        if (currentId.Length == 0)
         {
             return;
         }
 
+        var renamed = !string.Equals(_instanceId, currentId, StringComparison.OrdinalIgnoreCase);
+        _instanceId = currentId;
         _isolated = _stack.IsIsolated(_instanceId);
         _instanceDirectory = _stack.GetInstanceDirectory(_instanceId, _isolated);
         _instance = _stack.GetInstalledVersions()
@@ -586,6 +593,11 @@ public sealed class InstanceManageViewModel : ViewModelBase
         else if (SelectedTab is not null)
         {
             _ = RefreshAsync();
+        }
+
+        if (renamed)
+        {
+            InstanceRenamed?.Invoke(_instanceId);
         }
     }
 
@@ -766,7 +778,7 @@ public sealed class InstanceManageViewModel : ViewModelBase
                 new ResourceDownloadRequest
                 {
                     Kind = row.Kind,
-                    File = file,
+                    File = ResourceFile.FromCurseForge(file),
                     InstanceDirectory = _instanceDirectory,
                     ReplacePath = row.Resource.FilePath,
                 },
