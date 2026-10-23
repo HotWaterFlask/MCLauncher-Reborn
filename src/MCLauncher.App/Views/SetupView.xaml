@@ -1,0 +1,299 @@
+<UserControl x:Class="MCLauncher.App.Views.SetupView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DesignHeight="450" d:DesignWidth="720">
+    <UserControl.Resources>
+        <Style x:Key="SetupTabButton" TargetType="Button" BasedOn="{StaticResource SkinButton}">
+            <Setter Property="Width" Value="92"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Margin" Value="0,0,8,0"/>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Background="#66000000">
+        <!-- ===== 初始化设置卡片 ===== -->
+        <Border Width="580" Background="White" CornerRadius="8" Padding="24,18"
+                HorizontalAlignment="Center" VerticalAlignment="Center"
+                BorderBrush="#D8D8D8" BorderThickness="1">
+            <StackPanel>
+                <TextBlock Text="设置" FontSize="17" FontWeight="SemiBold" Foreground="#1A1A1A"/>
+                <TextBlock Text="请完成以下设置" FontSize="13" Foreground="#5A5A5A" Margin="0,8,0,0"/>
+
+                <!-- 账户 -->
+                <Grid Margin="0,18,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="72"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="账户" FontSize="13" Foreground="#5A5A5A" VerticalAlignment="Center"/>
+                    <Border Grid.Column="1" Height="30" Padding="8,0" CornerRadius="3"
+                            Background="#F5F6F8" BorderBrush="#DDE1E6" BorderThickness="1">
+                        <TextBlock Text="{Binding AccountDisplay}" FontSize="13"
+                                   Foreground="#1A1A1A" VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis"/>
+                    </Border>
+                    <Button Grid.Column="2" Content="添加账户" Width="88" Height="30"
+                            FontSize="13" Margin="8,0,0,0"
+                            Style="{StaticResource SkinButton}"
+                            Command="{Binding AddAccountCommand}"/>
+                </Grid>
+
+                <!-- 最大内存 -->
+                <Grid Margin="0,14,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="72"/>
+                        <ColumnDefinition Width="100"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="最大内存" FontSize="13" Foreground="#5A5A5A" VerticalAlignment="Center"/>
+                    <TextBox Grid.Column="1" Text="{Binding MaxMemoryText, UpdateSourceTrigger=PropertyChanged}"
+                             Height="28" Padding="6,0" FontSize="13" VerticalContentAlignment="Center"/>
+                    <TextBlock Grid.Column="2" Text="MB" FontSize="13" Foreground="#5A5A5A"
+                               VerticalAlignment="Center" Margin="6,0,0,0"/>
+                    <TextBlock Grid.Column="3" Text="{Binding MemoryHint}" FontSize="11" Foreground="#8A8A8A"
+                               VerticalAlignment="Center" Margin="12,0,0,0"
+                               TextTrimming="CharacterEllipsis"/>
+                </Grid>
+
+                <!-- Java 路径 -->
+                <Grid Margin="0,14,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="72"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="java 路径" FontSize="13" Foreground="#5A5A5A" VerticalAlignment="Center"/>
+                    <TextBox Grid.Column="1" Text="{Binding JavaPath, UpdateSourceTrigger=PropertyChanged}"
+                             Height="30" Padding="6,0" FontSize="12" VerticalContentAlignment="Center"/>
+                    <Button Grid.Column="2" Content="浏览" Width="72" Height="30" FontSize="13"
+                            Margin="8,0,0,0" Style="{StaticResource SkinButton}"
+                            Command="{Binding BrowseJavaCommand}"/>
+                </Grid>
+
+                <TextBlock Text="{Binding JavaStatusText}" Margin="72,7,0,0"
+                           FontSize="11" Foreground="#6A6A6A" TextWrapping="Wrap"/>
+
+                <TextBlock Text="{Binding ErrorText}" Margin="72,7,0,0"
+                           FontSize="12" Foreground="#C62828" TextWrapping="Wrap"
+                           Visibility="{Binding HasError, Converter={StaticResource BoolToVis}}"/>
+
+                <Grid Margin="0,18,0,0">
+                    <Button Content="退出启动器" Width="96" Height="28" FontSize="13"
+                            HorizontalAlignment="Left" Style="{StaticResource SkinButton}"
+                            Command="{Binding ExitCommand}"/>
+                    <Button Content="完成设置" Width="96" Height="30" FontSize="13"
+                            HorizontalAlignment="Right" Style="{StaticResource SkinButton}"
+                            Command="{Binding ConfirmCommand}"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- ===== 添加账户弹窗（离线 / 微软 / 外置登录） ===== -->
+        <Grid Panel.ZIndex="5" Background="#66000000"
+              Visibility="{Binding IsAddAccountOpen, Converter={StaticResource BoolToVis}}">
+            <Border Width="480" Background="White" CornerRadius="8" Padding="20,16"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    BorderBrush="#D8D8D8" BorderThickness="1">
+                <StackPanel>
+                    <TextBlock Text="添加账户" FontSize="16" FontWeight="SemiBold"/>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                        <Button Content="离线账户" Command="{Binding SelectOfflineCommand}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource SetupTabButton}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsOfflineMode}" Value="True">
+                                            <Setter Property="Foreground" Value="#0078D7"/>
+                                            <Setter Property="FontWeight" Value="SemiBold"/>
+                                            <Setter Property="BorderBrush" Value="#0078D7"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                        <Button Content="微软正版" Command="{Binding SelectMicrosoftCommand}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource SetupTabButton}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsMicrosoftMode}" Value="True">
+                                            <Setter Property="Foreground" Value="#0078D7"/>
+                                            <Setter Property="FontWeight" Value="SemiBold"/>
+                                            <Setter Property="BorderBrush" Value="#0078D7"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                        <Button Content="外置登录" Command="{Binding SelectExternalCommand}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource SetupTabButton}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsExternalMode}" Value="True">
+                                            <Setter Property="Foreground" Value="#0078D7"/>
+                                            <Setter Property="FontWeight" Value="SemiBold"/>
+                                            <Setter Property="BorderBrush" Value="#0078D7"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </StackPanel>
+
+                    <ScrollViewer MaxHeight="262" Margin="0,12,0,0"
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled">
+                        <Border Background="#F7F8FA" BorderBrush="#E2E6EC" BorderThickness="1"
+                                CornerRadius="4" Padding="12,10">
+                            <Grid>
+                            <!-- 离线账户 -->
+                            <StackPanel Visibility="{Binding IsOfflineMode, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="玩家名" FontSize="12.5" Foreground="#5A5A5A"/>
+                                <TextBox Text="{Binding Accounts.NewAccountName, UpdateSourceTrigger=PropertyChanged}"
+                                         Height="30" Padding="6,0" Margin="0,6,0,0" FontSize="13"
+                                         VerticalContentAlignment="Center" ToolTip="不超过 16 个字符"/>
+                                <TextBlock Text="{Binding Accounts.OfflineError}" Margin="0,6,0,0"
+                                           FontSize="12" Foreground="#C62828" TextWrapping="Wrap"/>
+                                <Button Content="添加" Width="76" Height="28" FontSize="13"
+                                        HorizontalAlignment="Right" Margin="0,10,0,0"
+                                        Style="{StaticResource SkinButton}"
+                                        Command="{Binding Accounts.AddOfflineCommand}"/>
+                            </StackPanel>
+
+                            <!-- 微软账户（设备码） -->
+                            <StackPanel Visibility="{Binding IsMicrosoftMode, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="{Binding Accounts.MsClientIdHint}"
+                                           Style="{StaticResource BodyText}" FontSize="12"/>
+                                <TextBlock Text="{Binding Accounts.MsSetupHint}" Margin="0,6,0,0"
+                                           Style="{StaticResource BodyText}" FontSize="12"
+                                           Visibility="{Binding Accounts.HasMsClientId, Converter={StaticResource BoolToVis}}"/>
+                                <Border Margin="0,10,0,0" Padding="10,8" CornerRadius="6"
+                                        Background="#FFF8E6" BorderBrush="#E8D9A8" BorderThickness="1"
+                                        Visibility="{Binding Accounts.HasDeviceCode, Converter={StaticResource BoolToVis}}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="验证码" VerticalAlignment="Center" FontSize="12.5"
+                                                   Foreground="#6B5B1E"/>
+                                        <TextBox Text="{Binding Accounts.DeviceCodeText, Mode=OneWay}"
+                                                 IsReadOnly="True" IsReadOnlyCaretVisible="False"
+                                                 BorderThickness="0" Background="Transparent"
+                                                 Margin="10,0,0,0" Padding="0" VerticalContentAlignment="Center"
+                                                 FontFamily="Consolas, Courier New" FontSize="20" FontWeight="Bold"
+                                                 Foreground="#1A1A1A" ToolTip="可直接选中复制"/>
+                                        <Button Style="{StaticResource SkinButton}" Content="复制"
+                                                Width="58" Height="26" FontSize="12" Margin="10,0,0,0"
+                                                Command="{Binding Accounts.CopyDeviceCodeCommand}"/>
+                                        <Button Style="{StaticResource SkinButton}" Content="打开登录页"
+                                                Width="96" Height="26" FontSize="12" Margin="8,0,0,0"
+                                                Command="{Binding Accounts.OpenDeviceCodePageCommand}"/>
+                                    </StackPanel>
+                                </Border>
+                                <TextBlock Text="{Binding Accounts.StatusText}" Margin="0,10,0,0"
+                                           Style="{StaticResource BodyText}" FontSize="12"/>
+                            </StackPanel>
+
+                            <!-- 外置登录 -->
+                            <StackPanel Visibility="{Binding IsExternalMode, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="认证服务器" FontSize="12.5" Foreground="#5A5A5A"/>
+                                <ComboBox ItemsSource="{Binding ExternalServerChoices}"
+                                          SelectedItem="{Binding SelectedExternalServer}"
+                                          DisplayMemberPath="Name" Height="28" Margin="0,6,0,0"
+                                          FontSize="12.5"/>
+
+                                <!-- 选中「自定义」后展开：填写名称与 API 根地址 -->
+                                <StackPanel Visibility="{Binding IsCustomServer, Converter={StaticResource BoolToVis}}">
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="88"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="名称（可选）" FontSize="12.5" Foreground="#5A5A5A"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBox Grid.Column="1"
+                                                 Text="{Binding CustomServerName, UpdateSourceTrigger=PropertyChanged}"
+                                                 Height="28" Padding="6,0" FontSize="12.5"
+                                                 VerticalContentAlignment="Center"/>
+                                    </Grid>
+
+                                    <Grid Margin="0,6,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="88"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="API 根地址" FontSize="12.5" Foreground="#5A5A5A"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBox Grid.Column="1"
+                                                 Text="{Binding CustomServerUrl, UpdateSourceTrigger=PropertyChanged}"
+                                                 Height="28" Padding="6,0" FontSize="12.5"
+                                                 VerticalContentAlignment="Center"/>
+                                    </Grid>
+
+                                    <TextBlock Text="{Binding CustomServerError}" Margin="88,5,0,0"
+                                               FontSize="12" Foreground="#C62828" TextWrapping="Wrap"
+                                               Visibility="{Binding HasCustomServerError, Converter={StaticResource BoolToVis}}"/>
+                                </StackPanel>
+
+                                <Grid Margin="0,10,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="88"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="用户名" FontSize="12.5" Foreground="#5A5A5A"
+                                               VerticalAlignment="Center"/>
+                                    <TextBox Grid.Column="1"
+                                             Text="{Binding Accounts.ExternalUsername, UpdateSourceTrigger=PropertyChanged}"
+                                             Height="28" Padding="6,0" FontSize="13"
+                                             VerticalContentAlignment="Center"/>
+                                </Grid>
+
+                                <Grid Margin="0,6,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="88"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="密码" FontSize="12.5" Foreground="#5A5A5A"
+                                               VerticalAlignment="Center"/>
+                                    <PasswordBox Grid.Column="1" x:Name="ExternalPasswordBox" Height="28"
+                                                 Padding="6,0" FontSize="13" VerticalContentAlignment="Center"/>
+                                </Grid>
+
+                                <TextBlock Text="{Binding Accounts.ExternalError}" Margin="88,5,0,0"
+                                           FontSize="12" Foreground="#C62828" TextWrapping="Wrap"
+                                           Visibility="{Binding Accounts.HasExternalError, Converter={StaticResource BoolToVis}}"/>
+
+                                <Button x:Name="ExternalLoginButton" Content="登录"
+                                        Width="76" Height="28" FontSize="13"
+                                        HorizontalAlignment="Right" Margin="0,10,0,0"
+                                        Click="OnExternalLoginClick">
+                                    <Button.Style>
+                                        <Style TargetType="Button" BasedOn="{StaticResource SkinButton}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Accounts.IsExternalBusy}" Value="True">
+                                                    <Setter Property="IsEnabled" Value="False"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding IsCustomServerBusy}" Value="True">
+                                                    <Setter Property="IsEnabled" Value="False"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                            </StackPanel>
+                            </Grid>
+                        </Border>
+                    </ScrollViewer>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+                        <Button Style="{StaticResource SkinButton}" Content="取消"
+                                Width="76" Height="28" FontSize="13"
+                                Command="{Binding CancelAddAccountCommand}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

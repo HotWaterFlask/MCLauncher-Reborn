@@ -20,6 +20,10 @@ public sealed class InstanceConfig
     [JsonPropertyName("displayName")]
     public string? DisplayName { get; set; }
 
+    /// <summary>实例对应的原版游戏版本（自洽实例不再有 inheritsFrom，需要单独记录）。</summary>
+    [JsonPropertyName("gameVersion")]
+    public string? GameVersion { get; set; }
+
     [JsonPropertyName("note")]
     public string? Note { get; set; }
 

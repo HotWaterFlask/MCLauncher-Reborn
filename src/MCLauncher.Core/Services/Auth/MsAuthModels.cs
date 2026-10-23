@@ -102,7 +102,7 @@ public sealed class MsAuthException : Exception
     /// <summary>把失败原因翻译成给用户的下一步建议。</summary>
     public string ToUserMessage() => Failure switch
     {
-        MsAuthFailure.NotConfigured => "尚未配置微软客户端 ID。请到「设置」页填写 Azure 应用客户端 ID 后重试。",
+        MsAuthFailure.NotConfigured => "当前版本未配置微软登录客户端 ID，无法使用微软正版登录；请改用离线或外置登录。",
         MsAuthFailure.UserCancelled => "已取消登录。",
         // 设备码过期等超时文案由调用方给出，直接透出更有用。
         MsAuthFailure.Timeout => Message,

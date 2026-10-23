@@ -11,6 +11,19 @@
     <ApplicationIcon>MCLauncher-Reborn.ico</ApplicationIcon>
   </PropertyGroup>
 
+  <!-- exe 属性面板里「详细信息」页签展示的元数据 -->
+  <PropertyGroup>
+    <Version>6.0.0</Version>
+    <AssemblyVersion>6.0.0.0</AssemblyVersion>
+    <FileVersion>6.0.0.0</FileVersion>
+    <!-- 默认会把 git 提交哈希拼到产品版本后面（形如 1.0.0+c4dc8fb72...），关掉 -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <AssemblyTitle>MineCraft Launcher 6.0 Reborn</AssemblyTitle>
+    <Product>MineCraft Launcher 6.0 Reborn</Product>
+    <Company>忘却的旋律</Company>
+    <Copyright>© 2026 忘却的旋律</Copyright>
+  </PropertyGroup>
+
   <ItemGroup>
     <Resource Include="Assets\bgskin\*.jpg" />
     <Resource Include="Assets\default-bg.jpg" />
@@ -22,5 +35,14 @@
   <ItemGroup>
     <ProjectReference Include="..\MCLauncher.Core\MCLauncher.Core.csproj" />
   </ItemGroup>
+
+  <!-- 单文件发布时清掉引用工程带过来的 pdb，保证发布目录里只有一个 exe -->
+  <Target Name="RemovePublishDebugSymbols" AfterTargets="Publish"
+          Condition="'$(PublishSingleFile)' == 'true'">
+    <ItemGroup>
+      <PublishPdbFiles Include="$(PublishDir)**\*.pdb" />
+    </ItemGroup>
+    <Delete Files="@(PublishPdbFiles)" />
+  </Target>
 
 </Project>

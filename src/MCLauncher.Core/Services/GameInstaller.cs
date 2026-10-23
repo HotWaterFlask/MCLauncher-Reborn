@@ -131,6 +131,38 @@ public sealed class GameInstaller
         return await EnsureCompleteAsync(gameDirectory, version.Id!, options, progress, ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// 直接把原版（可再叠加一个加载器）安装成一个自洽实例：
+    /// 在内存中合并版本 JSON，客户端 jar 落到实例目录，依赖库与资源一次性并发下载。
+    /// 不会在 <c>versions</c> 下生成额外的原版基底目录。
+    /// </summary>
+    public async Task<InstallReport> InstallInstanceAsync(
+        string gameDirectory,
+        string instanceId,
+        GameVersionJson baseVersion,
+        GameVersionJson? loaderVersion = null,
+        InstallOptions? options = null,
+        IProgress<InstallProgress>? progress = null,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(instanceId))
+        {
+            throw new InvalidOperationException("实例 id 不能为空");
+        }
+
+        // 没有加载器时也走一次 Merge：得到一个副本，避免改动调用方手里的原版 JSON。
+        var merged = VersionResolver.Merge(baseVersion, loaderVersion ?? new GameVersionJson());
+        merged.Id = instanceId;
+        merged.InheritsFrom = null;
+        merged.Jar = instanceId;
+
+        _log.Info(loaderVersion is null
+            ? $"直接安装原版实例 {instanceId}（{baseVersion.Id}）"
+            : $"直接安装实例 {instanceId}（{baseVersion.Id} + {loaderVersion.Id}）");
+
+        return await InstallVersionAsync(gameDirectory, merged, options, progress, ct).ConfigureAwait(false);
+    }
+
     /// <summary>补全（或校验并修复）一个已落盘版本的全部文件。</summary>
     public async Task<InstallReport> EnsureCompleteAsync(
         string gameDirectory,
@@ -150,14 +182,60 @@ public sealed class GameInstaller
 
         var managed = new ManagedManifest { VersionId = versionId, BaseVersionId = baseVersionId };
 
-        // ---- 阶段 1：客户端 jar + 依赖库 ----
-        var primaryRequests = new List<DownloadRequest>();
+        // ---- 阶段 1：资源索引与日志配置（后面展开资源对象要靠它）----
+        var indexInfo = ResolveAssetIndexInfo(version);
+        var preRequests = new List<DownloadRequest>();
+
+        if (indexInfo is not null)
+        {
+            preRequests.Add(new DownloadRequest
+            {
+                Name = $"assets/indexes/{indexInfo.Id}.json",
+                Candidates = _resolver.Resolve(indexInfo.Url!, DownloadUrlKind.AssetIndex),
+                TargetPath = AssetsIndexPath(gameDirectory, indexInfo.Id!),
+                Checker = MakeChecker(indexInfo, options.VerifyExisting),
+            });
+
+            managed.Files.Add(ToManagedFile(gameDirectory, preRequests[^1]));
+        }
+
+        var logRequest = BuildLogConfigRequest(gameDirectory, version, options);
+        if (logRequest is not null)
+        {
+            preRequests.Add(logRequest);
+            managed.Files.Add(ToManagedFile(gameDirectory, logRequest));
+        }
+
+        var downloaded = 0;
+        var skipped = 0;
+        long totalBytes = 0;
+
+        if (preRequests.Count > 0)
+        {
+            Report(progress, "下载资源索引", 0, preRequests.Count, 0, 0, null);
+            var preResult = await _batch
+                .RunAsync(preRequests, options.MaxParallel, Wrap(progress, "下载资源索引", preRequests.Count), ct)
+                .ConfigureAwait(false);
+
+            if (!preResult.Success)
+            {
+                _log.Error($"安装 {versionId} 失败：资源索引或日志配置下载失败");
+                return InstallReport.FromBatch(preResult);
+            }
+
+            downloaded += preResult.Completed;
+            skipped += preResult.Skipped;
+            totalBytes += preRequests.Where(r => r.Checker.Size > 0).Sum(r => r.Checker.Size);
+        }
+
+        // ---- 阶段 2：客户端 jar + 依赖库 + 资源对象，一次性并发下载 ----
+        var requests = new List<DownloadRequest>();
         var nativesPlans = new List<NativePlan>();
 
         var jarRequest = BuildClientJarRequest(gameDirectory, version);
         if (jarRequest is not null)
         {
-            primaryRequests.Add(jarRequest);
+            requests.Add(jarRequest);
             managed.Files.Add(ToManagedFile(gameDirectory, jarRequest));
         }
 
@@ -174,7 +252,7 @@ public sealed class GameInstaller
                 continue;
             }
 
-            primaryRequests.Add(request);
+            requests.Add(request);
             managed.Files.Add(ToManagedFile(gameDirectory, request));
 
             if (options.ExtractNatives && library.IsNativeLibrary && classifier is not null)
@@ -188,75 +266,32 @@ public sealed class GameInstaller
             }
         }
 
-        // ---- 资源索引 ----
-        var indexInfo = ResolveAssetIndexInfo(version);
-        DownloadRequest? indexRequest = null;
-        if (indexInfo is not null)
-        {
-            indexRequest = new DownloadRequest
-            {
-                Name = $"assets/indexes/{indexInfo.Id}.json",
-                Candidates = _resolver.Resolve(indexInfo.Url!, DownloadUrlKind.AssetIndex),
-                TargetPath = AssetsIndexPath(gameDirectory, indexInfo.Id!),
-                Checker = MakeChecker(indexInfo, options.VerifyExisting),
-            };
-
-            primaryRequests.Add(indexRequest);
-            managed.Files.Add(ToManagedFile(gameDirectory, indexRequest));
-        }
-
-        // ---- 日志配置（老版本需要，缺失不致命）----
-        var logRequest = BuildLogConfigRequest(gameDirectory, version, options);
-        if (logRequest is not null)
-        {
-            primaryRequests.Add(logRequest);
-            managed.Files.Add(ToManagedFile(gameDirectory, logRequest));
-        }
-
-        Report(progress, "下载游戏文件", 0, primaryRequests.Count, 0, 0, null);
-        var primaryResult = await _batch
-            .RunAsync(primaryRequests, options.MaxParallel, Wrap(progress, "下载游戏文件", primaryRequests.Count), ct)
-            .ConfigureAwait(false);
-
-        if (!primaryResult.Success)
-        {
-            _log.Error($"安装 {versionId} 失败：关键文件下载未成功");
-            return InstallReport.FromBatch(primaryResult);
-        }
-
-        var downloaded = primaryResult.Completed;
-        var skipped = primaryResult.Skipped;
-        long totalBytes = primaryRequests.Where(r => r.Checker.Size > 0).Sum(r => r.Checker.Size);
-
-        // ---- 阶段 2：资源对象 ----
         if (indexInfo is not null && options.DownloadAssets)
         {
-            var assetRequests = BuildAssetRequests(gameDirectory, indexInfo, options);
-            if (assetRequests.Count > 0)
+            requests.AddRange(BuildAssetRequests(gameDirectory, indexInfo, options));
+        }
+
+        Report(progress, "下载游戏文件", 0, requests.Count, 0, 0, null);
+        var mainResult = await _batch
+            .RunAsync(requests, options.MaxParallel, Wrap(progress, "下载游戏文件", requests.Count), ct)
+            .ConfigureAwait(false);
+
+        downloaded += mainResult.Completed;
+        skipped += mainResult.Skipped;
+        totalBytes += requests.Where(r => r.Checker.Size > 0).Sum(r => r.Checker.Size);
+
+        if (!mainResult.Success)
+        {
+            _log.Error($"安装 {versionId} 失败：关键文件下载未成功");
+            return new InstallReport
             {
-                Report(progress, "下载资源文件", 0, assetRequests.Count, 0, 0, null);
-                var assetResult = await _batch
-                    .RunAsync(assetRequests, options.MaxParallel, Wrap(progress, "下载资源文件", assetRequests.Count), ct)
-                    .ConfigureAwait(false);
-
-                downloaded += assetResult.Completed;
-                skipped += assetResult.Skipped;
-                totalBytes += assetRequests.Where(r => r.Checker.Size > 0).Sum(r => r.Checker.Size);
-
-                if (!assetResult.Success)
-                {
-                    _log.Error($"安装 {versionId} 的资源文件存在失败项");
-                    return new InstallReport
-                    {
-                        Success = false,
-                        Downloaded = downloaded,
-                        Skipped = skipped,
-                        Failed = assetResult.Failed,
-                        TotalBytes = totalBytes,
-                        Failures = assetResult.Failures,
-                    };
-                }
-            }
+                Success = false,
+                Downloaded = downloaded,
+                Skipped = skipped,
+                Failed = mainResult.Failed,
+                TotalBytes = totalBytes,
+                Failures = mainResult.Failures,
+            };
         }
 
         // ---- 阶段 3：解压 natives ----
@@ -767,6 +802,8 @@ public sealed class GameInstaller
             DownloadedBytes = batch.DownloadedBytes,
             TotalBytes = batch.TotalBytes,
             Current = batch.Current,
+            ActiveFiles = batch.ActiveFiles,
+            BytesPerSecond = batch.BytesPerSecond,
         }));
     }
 

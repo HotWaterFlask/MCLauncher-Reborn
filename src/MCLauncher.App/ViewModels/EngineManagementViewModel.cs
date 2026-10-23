@@ -327,6 +327,33 @@ public sealed class EngineManagementViewModel : ViewModelBase
 
         try
         {
+            var progress = new Progress<InstallProgress>(value =>
+            {
+                InstallStatus = string.IsNullOrWhiteSpace(value.Stage)
+                    ? InstallStatus
+                    : value.Stage;
+                InstallProgress = value.Total > 0
+                    ? Math.Clamp((double)value.Completed / value.Total, 0, 1)
+                    : 0;
+            });
+
+            // 自洽实例已经把原版合并进自己目录，装载加载器前要先补回基底。
+            var baseInstalledNow = false;
+            if (!_stack.Repository.IsInstalled(_stack.GameRoot, _baseVersion))
+            {
+                InstallStatus = $"正在安装原版 {_baseVersion}…";
+                var baseReport = await _stack.InstallVersionAsync(_baseVersion, progress);
+                if (!baseReport.Success)
+                {
+                    throw new InvalidOperationException(
+                        $"原版 {_baseVersion} 安装失败：{baseReport.Failed} 个文件未能下载");
+                }
+
+                // 只为装加载器临时下载的原版基底，合并进新实例后清除。
+                _stack.Instances.MarkAsAutoBase(_stack.GameRoot, _baseVersion);
+                baseInstalledNow = true;
+            }
+
             var result = await _stack.ModLoaders.InstallAsync(
                 new LoaderInstallRequest
                 {
@@ -336,24 +363,16 @@ public sealed class EngineManagementViewModel : ViewModelBase
                     LoaderVersion = loaderVersion,
                     InstallOptions = _stack.BuildInstallOptions(),
                 },
-                new Progress<InstallProgress>(progress =>
-                {
-                    InstallStatus = string.IsNullOrWhiteSpace(progress.Stage)
-                        ? InstallStatus
-                        : progress.Stage;
-                    InstallProgress = progress.Total > 0
-                        ? Math.Clamp((double)progress.Completed / progress.Total, 0, 1)
-                        : 0;
-                }));
+                progress);
 
             if (!result.Success || string.IsNullOrWhiteSpace(result.VersionId))
             {
                 throw new InvalidOperationException(result.Error ?? "加载器安装失败");
             }
 
-            var desiredName = $"{InstanceDisplay}-{loaderName}";
+            var desiredName = $"{loaderName}{InstanceDisplay}";
             var newInstanceId = _stack.Instances.CreateUniqueInstanceId(
-                _stack.GameRoot, desiredName, $"{_baseVersion}-{loaderName}");
+                _stack.GameRoot, desiredName, $"{loaderName}{_baseVersion}");
 
             _stack.Instances.AdoptLoaderVersion(
                 _stack.GameRoot,
@@ -361,7 +380,8 @@ public sealed class EngineManagementViewModel : ViewModelBase
                 newInstanceId,
                 _baseVersion,
                 $"{loaderName} {loaderVersion}",
-                newInstanceId);
+                newInstanceId,
+                deleteBaseVersion: baseInstalledNow);
 
             _stack.Config.Settings.SelectedInstanceId = newInstanceId;
             _stack.Config.Save();

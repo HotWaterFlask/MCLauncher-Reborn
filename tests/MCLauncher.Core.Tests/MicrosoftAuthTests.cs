@@ -46,15 +46,16 @@ public sealed class MicrosoftAuthTests
     }
 
     [Fact]
-    public void 配置指引说明设备码流程与公共客户端流()
+    public void 登录说明只描述设备码流程不要求用户配置()
     {
         var service = CreateService(out _, out _, out var downloader, clientId: "cid");
         using (downloader)
         {
             var text = service.DescribeSetup();
-            Assert.Contains("不需要注册回调地址", text);
-            Assert.Contains("允许公共客户端流", text);
-            Assert.Contains("个人 Microsoft 账户", text);
+            Assert.Contains("浏览器", text);
+            Assert.Contains("一次性验证码", text);
+            Assert.DoesNotContain("Azure", text);
+            Assert.DoesNotContain("客户端 ID", text);
         }
     }
 

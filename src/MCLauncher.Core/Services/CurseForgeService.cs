@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -51,6 +52,7 @@ public sealed class CurseForgeService
         ResourceKind.ResourcePack => 12,
         ResourceKind.World => 17,
         ResourceKind.ShaderPack => 6552,
+        ResourceKind.Modpack => 4471,
         _ => -1,
     };
 
@@ -123,7 +125,48 @@ public sealed class CurseForgeService
         string? gameVersion,
         CancellationToken ct)
     {
-        var url = $"{BaseUrl}/v1/mods/{projectId}/files?pageSize=50";
+        var files = await GetFilesPageAsync(projectId, 0, 50, gameVersion, ct).ConfigureAwait(false);
+
+        return files
+            .Select(ToFile)
+            .OrderByDescending(file => file.FileDate)
+            .ToList();
+    }
+
+    /// <summary>
+    /// 翻页拉取项目的全部文件（接口单页上限 50，默认最多 150 条）。
+    /// 详情页要按 Minecraft 版本分组，必须拿到足够多的历史文件。
+    /// </summary>
+    public async Task<IReadOnlyList<CurseForgeFile>> GetAllFilesAsync(
+        int projectId,
+        CancellationToken ct,
+        int maxFiles = 150)
+    {
+        const int pageSize = 50;
+        var result = new List<CurseForgeFile>();
+
+        for (var index = 0; index < maxFiles; index += pageSize)
+        {
+            var batch = await GetFilesPageAsync(projectId, index, pageSize, null, ct).ConfigureAwait(false);
+            result.AddRange(batch.Select(ToFile));
+
+            if (batch.Count < pageSize)
+            {
+                break;
+            }
+        }
+
+        return result;
+    }
+
+    private async Task<List<FileDto>> GetFilesPageAsync(
+        int projectId,
+        int index,
+        int pageSize,
+        string? gameVersion,
+        CancellationToken ct)
+    {
+        var url = $"{BaseUrl}/v1/mods/{projectId}/files?index={index}&pageSize={pageSize}";
         if (!string.IsNullOrWhiteSpace(gameVersion))
         {
             url += "&gameVersion=" + Uri.EscapeDataString(gameVersion.Trim());
@@ -131,13 +174,102 @@ public sealed class CurseForgeService
 
         var json = await SendAsync(url, HttpMethod.Get, null, ct).ConfigureAwait(false);
         var response = JsonUtil.Deserialize<FilesResponse>(json);
+        return response?.Data ?? new List<FileDto>();
+    }
 
+    /// <summary>获取项目详情（详情页头部使用）。</summary>
+    public async Task<CurseForgeProject> GetProjectAsync(int projectId, CancellationToken ct)
+    {
+        var json = await SendAsync(
+                $"{BaseUrl}/v1/mods/{projectId}",
+                HttpMethod.Get,
+                null,
+                ct)
+            .ConfigureAwait(false);
+
+        var dto = JsonUtil.Deserialize<SingleProjectResponse>(json)?.Data
+                  ?? throw new InvalidOperationException("CurseForge 返回的项目信息为空。");
+
+        return ToProject(dto);
+    }
+
+    /// <summary>批量获取项目摘要（一次解析一个版本的全部前置内容）。</summary>
+    public async Task<IReadOnlyList<CurseForgeProject>> GetProjectsAsync(
+        IReadOnlyCollection<int> projectIds,
+        CancellationToken ct)
+    {
+        if (projectIds.Count == 0)
+        {
+            return Array.Empty<CurseForgeProject>();
+        }
+
+        var body = JsonSerializer.Serialize(
+            new { modIds = projectIds.ToArray() },
+            JsonUtil.Options);
+
+        var json = await SendAsync($"{BaseUrl}/v1/mods", HttpMethod.Post, body, ct)
+            .ConfigureAwait(false);
+
+        var response = JsonUtil.Deserialize<ProjectsResponse>(json);
         return response?.Data is null
-            ? Array.Empty<CurseForgeFile>()
-            : response.Data
-                .Select(ToFile)
-                .OrderByDescending(file => file.FileDate)
-                .ToList();
+            ? Array.Empty<CurseForgeProject>()
+            : response.Data.Select(ToProject).ToList();
+    }
+
+    /// <summary>
+    /// 获取项目全部版本的下载信息（不做游戏版本 / 加载器过滤，交给界面按实例推荐分组）。
+    /// </summary>
+    public async Task<IReadOnlyList<ResourceVersionInfo>> GetVersionInfosAsync(
+        int projectId,
+        ResourceKind kind,
+        CancellationToken ct)
+    {
+        var files = await GetAllFilesAsync(projectId, ct).ConfigureAwait(false);
+        var result = new List<ResourceVersionInfo>(files.Count);
+
+        foreach (var file in files)
+        {
+            if (!MatchesExtension(kind, file.FileName)
+                || string.IsNullOrWhiteSpace(file.DownloadUrl))
+            {
+                continue;
+            }
+
+            result.Add(new ResourceVersionInfo
+            {
+                Source = ResourceSource.CurseForge,
+                Id = file.Id.ToString(CultureInfo.InvariantCulture),
+                Name = string.IsNullOrWhiteSpace(file.DisplayName) ? file.FileName : file.DisplayName,
+                VersionType = file.ReleaseType switch
+                {
+                    2 => "beta",
+                    3 => "alpha",
+                    _ => "release",
+                },
+                PublishedAt = file.FileDate,
+                GameVersions = file.GameVersions,
+                Loaders = file.GameVersions
+                    .Where(ResourceVersionCatalog.IsLoaderName)
+                    .Select(value => value.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList(),
+                File = ResourceFile.FromCurseForge(file),
+                Dependencies = file.Dependencies
+                    .Where(dependency => dependency.ModId > 0 && dependency.RelationType is 2 or 3)
+                    .GroupBy(dependency => dependency.ModId)
+                    .Select(group => new ResourceDependency
+                    {
+                        Source = ResourceSource.CurseForge,
+                        CurseForgeProjectId = group.Key,
+                        Kind = group.Any(dependency => dependency.RelationType == 3)
+                            ? ResourceDependencyKind.Required
+                            : ResourceDependencyKind.Optional,
+                    })
+                    .ToList(),
+            });
+        }
+
+        return result;
     }
 
     /// <summary>挑出最合适的文件：优先同类加载器、优先正式版，再按发布时间取最新。</summary>
@@ -242,7 +374,7 @@ public sealed class CurseForgeService
     {
         if (_apiKey is null)
         {
-            throw new InvalidOperationException("未配置 CurseForge API Key，无法使用资源下载与更新检查。");
+            throw new InvalidOperationException("CurseForge 服务不可用，无法使用资源下载与更新检查。");
         }
 
         var headers = new Dictionary<string, string>
@@ -289,7 +421,7 @@ public sealed class CurseForgeService
         }
 
         var hint = lastError is HttpApiException api && api.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden
-            ? "CurseForge 拒绝了请求：API Key 可能无效或没有访问权限。"
+            ? "CurseForge 拒绝了请求（访问受限），请改用 Modrinth。"
             : "CurseForge 请求失败：" + (lastError?.Message ?? "网络不可用");
 
         throw new InvalidOperationException(hint, lastError);
@@ -314,6 +446,7 @@ public sealed class CurseForgeService
                          .Take(4)
                          .ToList()
                      ?? new List<string>(),
+        WebsiteUrl = string.IsNullOrWhiteSpace(dto.Links?.WebsiteUrl) ? null : dto.Links!.WebsiteUrl,
         LatestFiles = dto.LatestFilesIndexes?
                           .Select(index => new CurseForgeFileIndex
                           {
@@ -338,6 +471,14 @@ public sealed class CurseForgeService
         ReleaseType = dto.ReleaseType,
         FileDate = dto.FileDate,
         GameVersions = dto.GameVersions ?? new List<string>(),
+        Dependencies = dto.Dependencies?
+                           .Select(dependency => new CurseForgeFileDependency
+                           {
+                               ModId = dependency.ModId,
+                               RelationType = dependency.RelationType,
+                           })
+                           .ToList()
+                       ?? new List<CurseForgeFileDependency>(),
         Sha1 = dto.Hashes?
             .FirstOrDefault(hash => hash.Algo == 1)?
             .Value,
@@ -357,6 +498,7 @@ public sealed class CurseForgeService
                                       || extension.Equals(".schematic", StringComparison.OrdinalIgnoreCase)
                                       || extension.Equals(".schem", StringComparison.OrdinalIgnoreCase)
                                       || extension.Equals(".nbt", StringComparison.OrdinalIgnoreCase),
+            ResourceKind.Modpack => extension.Equals(".zip", StringComparison.OrdinalIgnoreCase),
             _ => false,
         };
     }
@@ -394,6 +536,18 @@ public sealed class CurseForgeService
     {
         [JsonPropertyName("data")]
         public List<FileDto>? Data { get; set; }
+    }
+
+    private sealed class SingleProjectResponse
+    {
+        [JsonPropertyName("data")]
+        public ProjectDto? Data { get; set; }
+    }
+
+    private sealed class ProjectsResponse
+    {
+        [JsonPropertyName("data")]
+        public List<ProjectDto>? Data { get; set; }
     }
 
     private sealed class FingerprintResponse
@@ -460,6 +614,15 @@ public sealed class CurseForgeService
 
         [JsonPropertyName("latestFilesIndexes")]
         public List<FileIndexDto>? LatestFilesIndexes { get; set; }
+
+        [JsonPropertyName("links")]
+        public LinksDto? Links { get; set; }
+    }
+
+    private sealed class LinksDto
+    {
+        [JsonPropertyName("websiteUrl")]
+        public string? WebsiteUrl { get; set; }
     }
 
     private sealed class LogoDto
@@ -532,6 +695,18 @@ public sealed class CurseForgeService
 
         [JsonPropertyName("hashes")]
         public List<HashDto>? Hashes { get; set; }
+
+        [JsonPropertyName("dependencies")]
+        public List<DependencyDto>? Dependencies { get; set; }
+    }
+
+    private sealed class DependencyDto
+    {
+        [JsonPropertyName("modId")]
+        public int ModId { get; set; }
+
+        [JsonPropertyName("relationType")]
+        public int RelationType { get; set; }
     }
 
     private sealed class HashDto

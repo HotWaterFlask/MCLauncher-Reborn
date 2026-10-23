@@ -44,8 +44,9 @@
             <StackPanel>
                 <TextBlock Text="实例名称" Style="{StaticResource SectionTitle}" Margin="0,6,0,8"/>
                 <TextBox Text="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}"
+                         AutomationProperties.Name="实例名称"
                          Height="26" VerticalContentAlignment="Center" Padding="6,0" FontSize="13"
-                         ToolTip="显示在实例列表与首页下拉框里的名称"/>
+                         ToolTip="实例名同时也是 versions 下的目录名，保存时会一起重命名"/>
 
                 <TextBlock Text="版本隔离" Style="{StaticResource SectionTitle}" Margin="0,16,0,8"/>
                 <ComboBox Width="180" Height="28" FontSize="13" HorizontalAlignment="Left"

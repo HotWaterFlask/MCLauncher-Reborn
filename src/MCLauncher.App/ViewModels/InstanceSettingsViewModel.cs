@@ -53,6 +53,9 @@ public sealed class InstanceSettingsViewModel : ViewModelBase
 
     // ---------------------------------------------------------------- 实例信息
 
+    /// <summary>当前实例 id（重命名后会变成新的目录名）。</summary>
+    public string InstanceId => _instanceId;
+
     public string InstanceDisplay
     {
         get => _instanceDisplay;
@@ -234,8 +237,33 @@ public sealed class InstanceSettingsViewModel : ViewModelBase
             return;
         }
 
+        var desiredName = DisplayName.Trim();
+        var renamed = false;
+
         try
         {
+            // 实例名就是 versions 下的目录名：改名时同步重命名目录与版本文件。
+            if (desiredName.Length > 0 &&
+                !string.Equals(desiredName, _instanceId, StringComparison.OrdinalIgnoreCase))
+            {
+                var previousId = _instanceId;
+                var newId = _stack.Instances.RenameInstance(_stack.GameRoot, previousId, desiredName);
+
+                if (!string.Equals(newId, previousId, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (string.Equals(_stack.Config.Settings.SelectedInstanceId, previousId,
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        _stack.Config.Settings.SelectedInstanceId = newId;
+                    }
+
+                    _instanceId = newId;
+                    _loadedInstanceId = newId;
+                    DisplayName = newId;
+                    renamed = true;
+                }
+            }
+
             var config = _stack.Instances.Load(_stack.GameRoot, _instanceId);
 
             config.DisplayName = string.IsNullOrWhiteSpace(DisplayName) ? null : DisplayName.Trim();
@@ -268,7 +296,9 @@ public sealed class InstanceSettingsViewModel : ViewModelBase
             InstanceDisplay = _instance?.Display ?? _instanceId;
             InstanceDirectory = _stack.GetInstanceDirectory(_instanceId, _stack.IsIsolated(_instanceId));
 
-            Status = $"实例设置已保存，下次启动 {InstanceDisplay} 时生效。";
+            Status = renamed
+                ? $"实例已重命名为 {_instanceId}，版本目录已同步。"
+                : $"实例设置已保存，下次启动 {InstanceDisplay} 时生效。";
             _stack.Log.Info($"已保存实例设置：{_instanceId}");
             _stack.RaiseChanged();
             Saved?.Invoke(this, EventArgs.Empty);

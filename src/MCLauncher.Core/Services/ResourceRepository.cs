@@ -34,6 +34,7 @@ public sealed class ResourceRepository
         ResourceKind.ShaderPack => "shaderpacks",
         ResourceKind.World => "saves",
         ResourceKind.Schematic => "schematics",
+        ResourceKind.Modpack => "modpacks",
         _ => "datapacks",
     };
 
@@ -44,6 +45,7 @@ public sealed class ResourceRepository
         ResourceKind.ShaderPack => "光影包",
         ResourceKind.World => "世界存档",
         ResourceKind.Schematic => "原理图",
+        ResourceKind.Modpack => "整合包",
         _ => "数据包",
     };
 

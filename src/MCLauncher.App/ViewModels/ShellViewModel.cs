@@ -38,7 +38,9 @@ public sealed class ShellViewModel : ViewModelBase
         Func<string, object> pageFactory,
         object initialPage,
         int initialWidth,
-        int initialHeight)
+        int initialHeight,
+        CrashOverlayViewModel crash,
+        SetupViewModel setup)
     {
         _pageFactory = pageFactory;
         NavItems = new ObservableCollection<NavItem>(navItems);
@@ -47,7 +49,15 @@ public sealed class ShellViewModel : ViewModelBase
         _statusText = _selectedNavItem?.Title ?? "就绪";
         InitialWidth = initialWidth;
         InitialHeight = initialHeight;
+        Crash = crash;
+        Setup = setup;
     }
+
+    /// <summary>全局崩溃界面，盖在所有页面之上。</summary>
+    public CrashOverlayViewModel Crash { get; }
+
+    /// <summary>首次启动的初始化设置，未完成时盖在主界面上。</summary>
+    public SetupViewModel Setup { get; }
 
     public ObservableCollection<NavItem> NavItems { get; }
 

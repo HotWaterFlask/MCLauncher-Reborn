@@ -109,7 +109,7 @@ public sealed class ModpackImporterTests
     }
 
     [Fact]
-    public void 识别CurseForge整合包并提示需要APIKey()
+    public void 识别CurseForge整合包且不再提示需要APIKey()
     {
         using var temp = new TempDirectory();
         var importer = Create(out _, out var downloader);
@@ -128,7 +128,7 @@ public sealed class ModpackImporterTests
             Assert.Equal("1.19.2", info.GameVersion);
             Assert.Equal("forge-43.2.0", info.Loader);
             Assert.Equal(1, info.FileCount);
-            Assert.Contains("API Key", info.Note);
+            Assert.Null(info.Note);
         }
     }
 
@@ -189,7 +189,7 @@ public sealed class ModpackImporterTests
     }
 
     [Fact]
-    public async Task 没有APIKey时CurseForge导入给出可操作提示()
+    public async Task 缺少CurseForge服务凭据时给出可操作提示()
     {
         using var temp = new TempDirectory();
         var importer = Create(out _, out var downloader);
@@ -206,7 +206,9 @@ public sealed class ModpackImporterTests
             });
 
             Assert.False(result.Success);
-            Assert.Contains("API Key", result.Error);
+            Assert.Contains("Modrinth", result.Error);
+            Assert.DoesNotContain("API Key", result.Error);
+            Assert.DoesNotContain("设置", result.Error);
         }
     }
 

@@ -6,6 +6,10 @@ namespace MCLauncher.Core.Services;
 /// <summary>启动器全局设置。序列化到 %LOCALAPPDATA%\MCLauncher-Reborn\settings.json。</summary>
 public sealed class AppSettings
 {
+    // ---- 初始化 ----
+    /// <summary>是否已完成首次启动的初始化设置（添加账户、内存、Java）。</summary>
+    public bool SetupCompleted { get; set; }
+
     // ---- 界面 ----
     /// <summary>窗口宽度（默认 720，可自由缩放）。</summary>
     public int WindowWidth { get; set; } = 720;

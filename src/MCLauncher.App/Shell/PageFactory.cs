@@ -111,6 +111,19 @@ public sealed class PageFactory
     private VersionsViewModel Versions => _versions ??= new VersionsViewModel(
         _stack, OpenGlobalSettings, OpenInstanceSettings, LaunchFromVersions, OpenInstanceManage);
 
-    private InstanceManageViewModel InstanceManage => _instanceManage ??= new InstanceManageViewModel(
-        _stack, () => Navigate(VersionsPageId), LaunchWithServer);
+    private InstanceManageViewModel InstanceManage
+    {
+        get
+        {
+            if (_instanceManage is null)
+            {
+                _instanceManage = new InstanceManageViewModel(
+                    _stack, () => Navigate(VersionsPageId), LaunchWithServer);
+                _instanceManage.InstanceRenamed += id =>
+                    _pageNavigate?.Invoke(InstanceManagePageId, $"实例管理 · {id}");
+            }
+
+            return _instanceManage;
+        }
+    }
 }

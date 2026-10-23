@@ -309,13 +309,45 @@ public sealed partial class ModLoaderService
         }
     }
 
+    /// <summary>
+    /// 只获取 Fabric / Quilt 的 profile JSON，不落盘、不下载依赖。
+    /// 供「原版 + 加载器合并成一个自洽实例」的直装流程使用。
+    /// </summary>
+    public async Task<GameVersionJson> GetFabricLikeProfileAsync(
+        ModLoaderKind kind,
+        string gameVersion,
+        string loaderVersion,
+        CancellationToken ct = default)
+    {
+        var metaBase = kind == ModLoaderKind.Quilt ? QuiltMetaBase : FabricMetaBase;
+        var url = $"{metaBase}/versions/loader/{Uri.EscapeDataString(gameVersion)}/"
+                  + $"{Uri.EscapeDataString(loaderVersion)}/profile/json";
+
+        var json = await _downloader
+            .RequestStringAsync(url, HttpMethod.Get, null, null, null, ct)
+            .ConfigureAwait(false);
+
+        var version = JsonUtil.Deserialize<GameVersionJson>(json)
+                      ?? throw new InvalidDataException($"{DisplayName(kind)} 没有返回可用的版本 JSON");
+
+        if (string.IsNullOrWhiteSpace(version.Id))
+        {
+            throw new InvalidDataException("profile JSON 缺少 id");
+        }
+
+        if (!string.Equals(version.InheritsFrom, gameVersion, StringComparison.OrdinalIgnoreCase))
+        {
+            _log.Warn($"profile JSON 的 inheritsFrom（{version.InheritsFrom}）与请求的基底（{gameVersion}）不一致");
+        }
+
+        return version;
+    }
+
     private async Task<LoaderInstallResult> InstallFabricLikeAsync(
         LoaderInstallRequest request,
         IProgress<InstallProgress>? progress,
         CancellationToken ct)
     {
-        var metaBase = request.Kind == ModLoaderKind.Quilt ? QuiltMetaBase : FabricMetaBase;
-
         progress?.Report(new InstallProgress
         {
             Stage = $"获取 {DisplayName(request.Kind)} 配置",
@@ -323,25 +355,9 @@ public sealed partial class ModLoaderService
             Total = 1,
         });
 
-        var url = $"{metaBase}/versions/loader/{Uri.EscapeDataString(request.GameVersion)}/"
-                  + $"{Uri.EscapeDataString(request.LoaderVersion)}/profile/json";
-
-        var json = await _downloader
-            .RequestStringAsync(url, HttpMethod.Get, null, null, null, ct)
+        var version = await GetFabricLikeProfileAsync(
+                request.Kind, request.GameVersion, request.LoaderVersion, ct)
             .ConfigureAwait(false);
-
-        var version = JsonUtil.Deserialize<GameVersionJson>(json)
-                      ?? throw new InvalidDataException($"{DisplayName(request.Kind)} 没有返回可用的版本 JSON");
-
-        if (string.IsNullOrWhiteSpace(version.Id))
-        {
-            throw new InvalidDataException("profile JSON 缺少 id");
-        }
-
-        if (!string.Equals(version.InheritsFrom, request.GameVersion, StringComparison.OrdinalIgnoreCase))
-        {
-            _log.Warn($"profile JSON 的 inheritsFrom（{version.InheritsFrom}）与请求的基底（{request.GameVersion}）不一致");
-        }
 
         _repository.Save(request.GameRoot, version);
         _log.Info($"已写入 {DisplayName(request.Kind)} 版本 JSON：{version.Id}");

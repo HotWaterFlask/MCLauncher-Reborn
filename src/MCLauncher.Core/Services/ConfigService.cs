@@ -123,7 +123,7 @@ public sealed class ConfigService
         }
     }
 
-    /// <summary>确保默认游戏目录（启动器所在目录下的 .minecraft）存在并登记。</summary>
+    /// <summary>确保默认游戏目录（启动器所在目录下的 .minecraft）存在并登记，目录缺失时直接创建。</summary>
     public string EnsureDefaultGameFolder(string launcherDirectory)
     {
         var candidate = Path.Combine(launcherDirectory, ".minecraft");
@@ -136,6 +136,28 @@ public sealed class ConfigService
         }
 
         Settings.SelectedGameFolder ??= candidate;
+
+        // 首次运行 / 用户删掉目录后启动：把 .minecraft 建出来，避免实例与目录功能全都落空。
+        try
+        {
+            if (!Directory.Exists(candidate))
+            {
+                Directory.CreateDirectory(candidate);
+                _log.Info($"已创建默认游戏目录：{candidate}");
+            }
+
+            if (!Directory.Exists(Settings.SelectedGameFolder))
+            {
+                Directory.CreateDirectory(Settings.SelectedGameFolder);
+                _log.Info($"已创建游戏目录：{Settings.SelectedGameFolder}");
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                                       or ArgumentException or NotSupportedException)
+        {
+            _log.Warn($"创建游戏目录失败：{Settings.SelectedGameFolder}", ex);
+        }
+
         return Settings.SelectedGameFolder;
     }
 }

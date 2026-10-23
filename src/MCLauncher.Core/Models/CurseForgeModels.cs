@@ -38,6 +38,9 @@ public sealed class CurseForgeProject
     /// <summary>项目分类名，用于显示徽标。</summary>
     public IReadOnlyList<string> Categories { get; init; } = Array.Empty<string>();
 
+    /// <summary>CurseForge 页面地址。</summary>
+    public string? WebsiteUrl { get; init; }
+
     /// <summary>最新文件的索引（搜索接口不返回完整文件对象）。</summary>
     public IReadOnlyList<CurseForgeFileIndex> LatestFiles { get; init; } = Array.Empty<CurseForgeFileIndex>();
 
@@ -85,9 +88,21 @@ public sealed class CurseForgeFile
 
     public IReadOnlyList<string> GameVersions { get; init; } = Array.Empty<string>();
 
+    /// <summary>文件声明的前置模组。</summary>
+    public IReadOnlyList<CurseForgeFileDependency> Dependencies { get; init; } =
+        Array.Empty<CurseForgeFileDependency>();
+
     public string? Sha1 { get; init; }
 
     public bool IsRelease => ReleaseType == 1;
+}
+
+/// <summary>文件依赖项。<c>RelationType</c>：2=可选，3=必需，其余（内嵌/工具/不兼容）界面不展示。</summary>
+public sealed class CurseForgeFileDependency
+{
+    public int ModId { get; init; }
+
+    public int RelationType { get; init; }
 }
 
 /// <summary>一页搜索结果。</summary>

@@ -31,7 +31,16 @@ public sealed class HomeViewModel : ViewModelBase
     private bool _hasLaunchOutput;
     private string _lastStage = string.Empty;
     private bool _suppressLaunchOutput;
+    private bool _launchFailed;
+    private int _launchSession;
     private double _progress;
+    private bool _isUpdateDialogOpen;
+    private bool _isUpdating;
+    private double _updateProgress;
+    private string _updateStatus = string.Empty;
+    private string _updateResult = string.Empty;
+    private bool _hasUpdateResult;
+    private bool _updateResultFailed;
     private bool _isBusy;
     private string _accountName = "未选择账号";
     private string _accountTypeText = string.Empty;
@@ -49,6 +58,7 @@ public sealed class HomeViewModel : ViewModelBase
         SettingsCommand = new RelayCommand(() => openInstanceSettings(SelectedVersion?.Id));
         OpenAccountsCommand = new RelayCommand(openAccounts);
         RefreshCommand = new RelayCommand(Refresh);
+        CloseUpdateDialogCommand = new RelayCommand(() => IsUpdateDialogOpen = false);
 
         _launchCommand = new AsyncRelayCommand(LaunchAsync, () => !IsBusy && SelectedVersion is not null);
         _completeCommand = new AsyncRelayCommand(CompleteAsync, () => !IsBusy && SelectedVersion is not null);
@@ -105,6 +115,13 @@ public sealed class HomeViewModel : ViewModelBase
         private set => SetProperty(ref _hasLaunchOutput, value);
     }
 
+    /// <summary>启动失败时中间的输出面板变红。</summary>
+    public bool IsLaunchFailed
+    {
+        get => _launchFailed;
+        private set => SetProperty(ref _launchFailed, value);
+    }
+
     /// <summary>账号名，显示在头像右侧。</summary>
     public string AccountName
     {
@@ -132,6 +149,57 @@ public sealed class HomeViewModel : ViewModelBase
         private set => SetProperty(ref _progress, value);
     }
 
+    /// <summary>「更新游戏」的进度弹窗是否打开。</summary>
+    public bool IsUpdateDialogOpen
+    {
+        get => _isUpdateDialogOpen;
+        private set => SetProperty(ref _isUpdateDialogOpen, value);
+    }
+
+    /// <summary>补全是否仍在进行：进行中不允许关闭弹窗。</summary>
+    public bool IsUpdating
+    {
+        get => _isUpdating;
+        private set => SetProperty(ref _isUpdating, value);
+    }
+
+    public double UpdateProgress
+    {
+        get => _updateProgress;
+        private set => SetProperty(ref _updateProgress, value);
+    }
+
+    public string UpdateStatus
+    {
+        get => _updateStatus;
+        private set => SetProperty(ref _updateStatus, value);
+    }
+
+    public string UpdateResult
+    {
+        get => _updateResult;
+        private set
+        {
+            if (SetProperty(ref _updateResult, value))
+            {
+                HasUpdateResult = !string.IsNullOrEmpty(value);
+            }
+        }
+    }
+
+    public bool HasUpdateResult
+    {
+        get => _hasUpdateResult;
+        private set => SetProperty(ref _hasUpdateResult, value);
+    }
+
+    /// <summary>补全结果是否为失败，用于把结果文字显示成红色。</summary>
+    public bool UpdateResultFailed
+    {
+        get => _updateResultFailed;
+        private set => SetProperty(ref _updateResultFailed, value);
+    }
+
     public bool IsBusy
     {
         get => _isBusy;
@@ -155,6 +223,9 @@ public sealed class HomeViewModel : ViewModelBase
 
     public ICommand SettingsCommand { get; }
 
+    /// <summary>关闭「更新游戏」的进度弹窗。</summary>
+    public ICommand CloseUpdateDialogCommand { get; }
+
     /// <summary>点击左上角账号块时切到「账号」页。</summary>
     public ICommand OpenAccountsCommand { get; }
 
@@ -163,7 +234,8 @@ public sealed class HomeViewModel : ViewModelBase
     /// <summary>重新扫描本地版本并尽量保持当前选中项。</summary>
     public void Refresh()
     {
-        var previous = SelectedVersion?.Id ?? _stack.Config.Settings.SelectedInstanceId;
+        // 设置里的 SelectedInstanceId 是权威值：实例重命名后旧 id 已不存在，不能再用旧的 SelectedVersion.Id。
+        var previous = _stack.Config.Settings.SelectedInstanceId ?? SelectedVersion?.Id;
 
         Versions.Clear();
         foreach (var version in _stack.GetInstalledVersions())
@@ -185,6 +257,15 @@ public sealed class HomeViewModel : ViewModelBase
         if (Versions.Count == 0)
         {
             StatusText = "本地还没有实例，请到「实例列表」页安装";
+        }
+    }
+
+    /// <summary>崩溃界面的「重新启动」：用当前选中的实例再启动一次。</summary>
+    public void RelaunchSelected()
+    {
+        if (_launchCommand.CanExecute(null))
+        {
+            _launchCommand.Execute(null);
         }
     }
 
@@ -374,8 +455,14 @@ public sealed class HomeViewModel : ViewModelBase
         var server = _pendingServer;
         _pendingServer = null;
 
+        // 记录启动时刻与实际游戏目录，退出后据此判断是否出现了新的崩溃报告。
+        var launchedAt = DateTime.Now;
+        var instanceDirectory = _stack.GetInstanceDirectory(version.Id, _stack.IsIsolated(version.Id));
+
         IsBusy = true;
         Progress = 0;
+        IsLaunchFailed = false;
+        var session = ++_launchSession;
         _launchBuilder.Clear();
         LaunchOutput = string.Empty;
         HasLaunchOutput = true;
@@ -389,7 +476,8 @@ public sealed class HomeViewModel : ViewModelBase
 
         try
         {
-            var account = _stack.Accounts.EnsureUsable();
+            var account = _stack.Accounts.Selected
+                          ?? throw new InvalidOperationException("尚未添加账号，请先在「账号」页添加。");
 
             // 外置登录的 accessToken 可能已被服务器注销，启动前先校验/续期。
             if (account.IsExternal)
@@ -402,6 +490,17 @@ public sealed class HomeViewModel : ViewModelBase
             }
 
             _stack.Config.Save();
+
+            // 加载器实例依赖的原版基底可能被误删：启动前补齐继承链，避免直接报「找不到被继承的版本」。
+            StatusText = "正在检查实例依赖…";
+            var repaired = await _stack.EnsureInheritanceChainAsync(
+                version.Id,
+                new Progress<InstallProgress>(OnInstallProgress));
+
+            if (repaired.Count > 0)
+            {
+                AppendLaunchLine($"已自动补装缺失的基础版本：{string.Join("、", repaired)}");
+            }
 
             var (options, java) = BuildLaunchOptions(version, server);
             var request = new GameLaunchRequest
@@ -432,25 +531,34 @@ public sealed class HomeViewModel : ViewModelBase
             _stack.Log.Error($"启动 {version.Id} 失败", ex);
             StatusText = "启动失败：" + ex.Message;
             AppendLaunchLine(StatusText);
+            Progress = 0;
+            IsLaunchFailed = true;
         }
         finally
         {
             IsBusy = false;
         }
 
+        // 面板统一停留几秒：成功时等待游戏窗口起来，失败时让红色错误提示有足够时间被看到。
+        await HideLaunchPanelAsync(session);
+
         if (process is not null)
         {
-            await HideLaunchPanelAsync();
-            _ = WatchExitAsync(process);
+            _ = WatchExitAsync(process, version, instanceDirectory, launchedAt);
         }
     }
 
-    /// <summary>启动成功后让面板停留 3 秒，然后收起，回到干净的主页。</summary>
-    private async Task HideLaunchPanelAsync()
+    /// <summary>启动面板停留 3 秒后收起，回到干净的主页；期间重新启动则取消收起。</summary>
+    private async Task HideLaunchPanelAsync(int session)
     {
         await Task.Delay(TimeSpan.FromSeconds(3));
+        if (session != _launchSession)
+        {
+            return;
+        }
 
         HasLaunchOutput = false;
+        IsLaunchFailed = false;
         Progress = 0;
         LaunchOutput = string.Empty;
         _launchBuilder.Clear();
@@ -465,28 +573,49 @@ public sealed class HomeViewModel : ViewModelBase
         }
 
         IsBusy = true;
-        Progress = 0;
+        IsUpdating = true;
+        UpdateProgress = 0;
+        UpdateStatus = "正在校验文件…";
+        UpdateResult = string.Empty;
+        UpdateResultFailed = false;
+        IsUpdateDialogOpen = true;
 
         try
         {
             var report = await _stack.CompleteVersionAsync(
                 version.Id,
-                new Progress<InstallProgress>(OnInstallProgress));
+                new Progress<InstallProgress>(OnUpdateProgress));
 
-            StatusText = report.Success
+            UpdateProgress = 1;
+            UpdateStatus = report.Success ? "校验完成" : "校验结束，仍有文件未能补全";
+            UpdateResultFailed = !report.Success;
+            UpdateResult = report.Success
                 ? $"补全完成：新下载 {report.Downloaded} 个，跳过 {report.Skipped} 个"
                 : $"补全失败：{report.Failed} 个文件未能下载";
+            StatusText = UpdateResult;
         }
         catch (Exception ex)
         {
             _stack.Log.Error($"补全 {version.Id} 失败", ex);
-            StatusText = "补全失败：" + ex.Message;
+            UpdateStatus = "校验中断";
+            UpdateResultFailed = true;
+            UpdateResult = "补全失败：" + ex.Message;
+            StatusText = UpdateResult;
         }
         finally
         {
-            Progress = 1;
+            IsUpdating = false;
             IsBusy = false;
         }
+    }
+
+    /// <summary>「更新游戏」弹窗里的进度：阶段、数量与百分比。</summary>
+    private void OnUpdateProgress(InstallProgress progress)
+    {
+        UpdateProgress = progress.Fraction;
+        UpdateStatus = progress.Total > 0
+            ? $"{progress.Stage} {progress.Completed}/{progress.Total}"
+            : progress.Stage;
     }
 
     private void OnInstallProgress(InstallProgress progress)
@@ -522,16 +651,36 @@ public sealed class HomeViewModel : ViewModelBase
         LaunchOutput = _launchBuilder.ToString();
     }
 
-    private async Task WatchExitAsync(GameProcess process)
+    private async Task WatchExitAsync(
+        GameProcess process,
+        InstalledVersionInfo version,
+        string instanceDirectory,
+        DateTime launchedAt)
     {
         try
         {
             var exitCode = await process.WaitForExitAsync();
             _stack.Log.Info($"游戏进程已退出：{exitCode}");
+
+            var crash = AnalyzeCrash(exitCode, instanceDirectory, launchedAt);
+
             UiThread.Post(() =>
             {
-                StatusText = GameLauncher.DescribeExitCode(exitCode);
+                StatusText = crash is null
+                    ? GameLauncher.DescribeExitCode(exitCode)
+                    : $"{crash.Title}（退出码 {exitCode}）";
                 AppendLaunchLine(StatusText);
+
+                if (crash is not null)
+                {
+                    _stack.NotifyGameCrashed(new GameCrashedEventArgs
+                    {
+                        Report = crash,
+                        InstanceId = version.Id,
+                        InstanceName = version.Display,
+                        InstanceDirectory = instanceDirectory,
+                    });
+                }
             });
         }
         catch (Exception ex)
@@ -544,9 +693,33 @@ public sealed class HomeViewModel : ViewModelBase
         }
     }
 
+    /// <summary>退出码非 0 或本次启动产生了新崩溃报告时返回分析结果。</summary>
+    private CrashReport? AnalyzeCrash(int exitCode, string instanceDirectory, DateTime launchedAt)
+    {
+        try
+        {
+            return CrashAnalyzer.Analyze(new CrashAnalysisRequest
+            {
+                GameDirectory = instanceDirectory,
+                ExitCode = exitCode,
+                LaunchedAt = launchedAt,
+                StandardOutput = _stack.LaunchLog.Join(),
+            });
+        }
+        catch (Exception ex)
+        {
+            _stack.Log.Warn("分析游戏崩溃失败", ex);
+            return null;
+        }
+    }
+
     private void OpenGameFolder()
     {
-        var folder = _stack.GameRoot;
+        // 版本隔离的实例有自己的目录，其余共享游戏根目录。
+        var version = SelectedVersion;
+        var folder = version is not null && _stack.IsIsolated(version.Id)
+            ? _stack.GetInstanceDirectory(version.Id, isolated: true)
+            : _stack.GameRoot;
 
         try
         {

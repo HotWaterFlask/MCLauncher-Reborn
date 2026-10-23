@@ -11,6 +11,9 @@ public enum ResourceKind
     World,
     Schematic,
     Datapack,
+
+    /// <summary>整合包：仅用于在线检索与下载，下载后交给导入流程而不是直接铺进实例。</summary>
+    Modpack,
 }
 
 /// <summary>扫描出来的一个本地资源。</summary>
