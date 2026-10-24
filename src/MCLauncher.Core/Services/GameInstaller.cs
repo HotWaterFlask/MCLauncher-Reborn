@@ -163,6 +163,47 @@ public sealed class GameInstaller
         return await InstallVersionAsync(gameDirectory, merged, options, progress, ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// 只补全一批依赖库（不落版本 JSON、不下载资源）。
+    /// 供 Forge / NeoForge 的处理器安装流程下载安装器自带依赖。
+    /// </summary>
+    public async Task<InstallReport> EnsureLibrariesAsync(
+        string gameDirectory,
+        IReadOnlyList<Library> libraries,
+        InstallOptions? options = null,
+        IProgress<InstallProgress>? progress = null,
+        CancellationToken ct = default)
+    {
+        options ??= new InstallOptions();
+
+        var requests = new List<DownloadRequest>(libraries.Count);
+        foreach (var library in libraries)
+        {
+            if (!library.Applies())
+            {
+                continue;
+            }
+
+            var request = BuildLibraryRequest(gameDirectory, library, out _);
+            if (request is not null)
+            {
+                requests.Add(request);
+            }
+        }
+
+        if (requests.Count == 0)
+        {
+            return InstallReport.Ok(0, 0, 0);
+        }
+
+        Report(progress, "下载安装器依赖", 0, requests.Count, 0, 0, null);
+        var result = await _batch
+            .RunAsync(requests, options.MaxParallel, Wrap(progress, "下载安装器依赖", requests.Count), ct)
+            .ConfigureAwait(false);
+
+        return InstallReport.FromBatch(result);
+    }
+
     /// <summary>补全（或校验并修复）一个已落盘版本的全部文件。</summary>
     public async Task<InstallReport> EnsureCompleteAsync(
         string gameDirectory,
@@ -516,15 +557,36 @@ public sealed class GameInstaller
             return null;
         }
 
-        var artifactPath = library.ArtifactPath(classifier);
-        var url = library.ResolveDownloadUrl(classifier);
-        if (artifactPath is null || url is null)
+        var info = library.GetDownloadInfo(classifier);
+        var artifactPath = string.IsNullOrWhiteSpace(info?.Path)
+            ? library.ArtifactPath(classifier)
+            : info!.Path!;
+
+        if (artifactPath is null)
         {
             _log.Warn($"库 {library.Name} 无法解析下载地址，已跳过");
             return null;
         }
 
-        var info = library.GetDownloadInfo(classifier);
+        // 有些制品只存在于本地：Forge 安装器内嵌的 universal jar、处理器生成的补丁 jar。
+        // 它们没有远端 URL（或 URL 为空），已经落盘时不应该再拼一个必然 404 的地址。
+        if (string.IsNullOrWhiteSpace(info?.Url))
+        {
+            var existing = LibraryFilePath(gameDirectory, artifactPath);
+            if (File.Exists(existing))
+            {
+                _log.Trace($"库 {library.Name} 已在本地，跳过下载");
+                return null;
+            }
+        }
+
+        var url = library.ResolveDownloadUrl(classifier);
+        if (url is null)
+        {
+            _log.Warn($"库 {library.Name} 无法解析下载地址，已跳过");
+            return null;
+        }
+
         var kind = IsModLoaderLibrary(library) ? DownloadUrlKind.ModLoaderLibrary : DownloadUrlKind.Library;
 
         return new DownloadRequest

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text.RegularExpressions;
 using MCLauncher.Core.Abstractions;
 using MCLauncher.Core.Models;
@@ -67,7 +66,8 @@ public sealed class LoaderInstallResult
 /// 加载器自动安装。
 /// <list type="bullet">
 /// <item><b>Fabric / Quilt</b>：拿 <c>profile/json</c> 直接落一个 <c>inheritsFrom</c> 的版本 JSON，**全程不需要 Java**。</item>
-/// <item><b>Forge / NeoForge</b>：下载 installer jar 并执行 <c>--installClient</c>（需要 <c>launcher_profiles.json</c> 已存在）。</item>
+/// <item><b>Forge / NeoForge</b>：下载 installer jar 后由 <see cref="ForgeInstallerService"/> 解析
+/// <c>install_profile.json</c> 并直接执行其中的处理器，不运行 <c>--installClient</c>。</item>
 /// <item><b>OptiFine</b>：第一版只做"把 jar 放进 mods"，不做版本 JSON 注入。</item>
 /// </list>
 /// </summary>
@@ -83,28 +83,23 @@ public sealed partial class ModLoaderService
     private const string NeoForgeBase = "https://maven.neoforged.net/releases/net/neoforged/neoforge";
     private const string NeoForgeMetadataUrl = "https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge";
 
-    private static readonly TimeSpan InstallerTimeout = TimeSpan.FromMinutes(10);
-
     private readonly HttpDownloader _downloader;
-    private readonly DownloadSourceResolver _resolver;
     private readonly VersionRepository _repository;
     private readonly GameInstaller _installer;
-    private readonly JavaService _javaService;
+    private readonly ForgeInstallerService _forgeInstaller;
     private readonly ILogger _log;
 
     public ModLoaderService(
         HttpDownloader downloader,
-        DownloadSourceResolver resolver,
         VersionRepository repository,
         GameInstaller installer,
-        JavaService javaService,
+        ForgeInstallerService forgeInstaller,
         ILogger log)
     {
         _downloader = downloader;
-        _resolver = resolver;
         _repository = repository;
         _installer = installer;
-        _javaService = javaService;
+        _forgeInstaller = forgeInstaller;
         _log = log;
     }
 
@@ -377,22 +372,7 @@ public sealed partial class ModLoaderService
         CancellationToken ct)
     {
         var kind = request.Kind;
-        var expectedVersionId = kind == ModLoaderKind.Forge
-            ? $"{request.GameVersion}-forge-{request.LoaderVersion}"
-            : $"neoforge-{request.LoaderVersion}";
-
-        // Forge / NeoForge 的安装器都要读 launcher_profiles.json，没有就直接失败。
-        _installer.CreateLauncherProfiles(request.GameRoot);
-
-        var installerUrl = kind == ModLoaderKind.Forge
-            ? $"{ForgeMavenBase}/{Uri.EscapeDataString($"{request.GameVersion}-{request.LoaderVersion}")}/"
-              + $"forge-{Uri.EscapeDataString($"{request.GameVersion}-{request.LoaderVersion}")}-installer.jar"
-            : $"{NeoForgeBase}/{Uri.EscapeDataString(request.LoaderVersion)}/"
-              + $"neoforge-{Uri.EscapeDataString(request.LoaderVersion)}-installer.jar";
-
-        var tempDirectory = Path.Combine(request.GameRoot, ".mclauncher", "temp");
-        PathUtil.EnsureDirectory(tempDirectory);
-        var installerPath = Path.Combine(tempDirectory, $"{DisplayName(kind)}-{request.LoaderVersion}-installer.jar");
+        var installerUrl = BuildInstallerUrl(kind, request.GameVersion, request.LoaderVersion);
 
         progress?.Report(new InstallProgress
         {
@@ -401,115 +381,78 @@ public sealed partial class ModLoaderService
             Total = 1,
         });
 
-        var outcome = await _downloader.DownloadAsync(
-            _resolver.Resolve(installerUrl, DownloadUrlKind.ModLoaderInstaller),
-            installerPath,
-            FileChecker.ExistenceOnly,
-            null,
-            ct).ConfigureAwait(false);
+        var installerPath = await _forgeInstaller
+            .DownloadInstallerAsync(request.GameRoot, kind, request.LoaderVersion, installerUrl, ct)
+            .ConfigureAwait(false);
 
-        if (!outcome.Success)
-        {
-            return LoaderInstallResult.Fail($"下载安装器失败：{outcome.Error}");
-        }
+        var baseVersion = _repository.Resolve(request.GameRoot, request.GameVersion);
+        var version = await _forgeInstaller
+            .PrepareAsync(
+                kind, request.GameRoot, request.GameVersion, request.LoaderVersion,
+                baseVersion, installerPath, clientJarPath: null,
+                request.InstallOptions, progress, ct)
+            .ConfigureAwait(false);
 
-        var java = _javaService.SelectBest(RequiredJavaMajor(request.GameVersion));
-        if (java is null)
-        {
-            return LoaderInstallResult.Fail("没有可用的 64 位 Java，无法运行安装器");
-        }
+        var versionId = version.Id!;
 
-        progress?.Report(new InstallProgress
-        {
-            Stage = $"运行 {DisplayName(kind)} 安装器",
-            Completed = 0,
-            Total = 1,
-            Current = installerPath,
-        });
+        // 安装器里的版本 JSON 自带 inheritsFrom；先按原样落盘，补全后再交给实例/引擎流程合并。
+        _repository.Save(request.GameRoot, version);
 
-        var (exitCode, output) = await RunInstallerAsync(java.Path, installerPath, request.GameRoot, ct).ConfigureAwait(false);
-
-        if (exitCode != 0)
-        {
-            _log.Error($"{DisplayName(kind)} 安装器退出码 {exitCode}");
-            return LoaderInstallResult.Fail($"安装器执行失败（退出码 {exitCode}）：{Tail(output)}");
-        }
-
-        if (!_repository.IsInstalled(request.GameRoot, expectedVersionId))
-        {
-            return LoaderInstallResult.Fail($"安装器执行成功，但没有生成期望的版本 {expectedVersionId}。安装器输出：{Tail(output)}");
-        }
-
-        // 安装器只保证版本 JSON 就位，库与 natives 由我们再校验补全一遍。
         var report = await _installer
-            .EnsureCompleteAsync(request.GameRoot, expectedVersionId, request.InstallOptions, progress, ct)
+            .EnsureCompleteAsync(request.GameRoot, versionId, request.InstallOptions, progress, ct)
             .ConfigureAwait(false);
 
         return report.Success
-            ? LoaderInstallResult.Ok(expectedVersionId)
+            ? LoaderInstallResult.Ok(versionId)
             : LoaderInstallResult.Fail($"加载器已安装，但补全依赖失败（{report.Failed} 个）");
     }
 
-    private static async Task<(int ExitCode, string Output)> RunInstallerAsync(
-        string javaPath,
-        string installerPath,
+    /// <summary>
+    /// 只解析 Forge / NeoForge 安装器并执行处理器，返回加载器版本 JSON。
+    /// 供「原版 + 加载器合并成一个自洽实例」的直装流程使用，不需要先安装原版基底目录。
+    /// </summary>
+    public async Task<GameVersionJson> GetForgeLikeVersionAsync(
+        ModLoaderKind kind,
         string gameRoot,
-        CancellationToken ct)
+        string gameVersion,
+        string loaderVersion,
+        GameVersionJson baseVersion,
+        string? clientJarPath,
+        InstallOptions options,
+        IProgress<InstallProgress>? progress = null,
+        CancellationToken ct = default)
     {
-        var startInfo = new ProcessStartInfo(javaPath)
+        if (kind is not (ModLoaderKind.Forge or ModLoaderKind.NeoForge))
         {
-            WorkingDirectory = gameRoot,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-        };
-
-        // 用 ArgumentList 传参，路径里有空格也不会被切错。
-        startInfo.ArgumentList.Add("-jar");
-        startInfo.ArgumentList.Add(installerPath);
-        startInfo.ArgumentList.Add("--installClient");
-        startInfo.ArgumentList.Add(gameRoot);
-
-        using var process = Process.Start(startInfo)
-                            ?? throw new InvalidOperationException("无法启动 Java 安装器进程");
-
-        var stdoutTask = process.StandardOutput.ReadToEndAsync(ct);
-        var stderrTask = process.StandardError.ReadToEndAsync(ct);
-
-        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeoutCts.CancelAfter(InstallerTimeout);
-
-        try
-        {
-            await process.WaitForExitAsync(timeoutCts.Token).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-        {
-            try
-            {
-                process.Kill(entireProcessTree: true);
-            }
-            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
-            {
-                // 已经退出就忽略。
-            }
-
-            throw new TimeoutException($"安装器超过 {InstallerTimeout.TotalMinutes:0} 分钟没有结束");
+            throw new ArgumentOutOfRangeException(nameof(kind), kind, "只支持 Forge / NeoForge");
         }
 
-        var output = string.Empty;
-        try
-        {
-            output = await stdoutTask.ConfigureAwait(false) + Environment.NewLine + await stderrTask.ConfigureAwait(false);
-        }
-        catch (Exception ex) when (ex is IOException or ObjectDisposedException)
-        {
-            // 输出读取失败不影响退出码判定。
-        }
+        var installerUrl = BuildInstallerUrl(kind, gameVersion, loaderVersion);
 
-        return (process.ExitCode, output);
+        progress?.Report(new InstallProgress
+        {
+            Stage = $"下载 {DisplayName(kind)} 安装器",
+            Completed = 0,
+            Total = 1,
+        });
+
+        var installerPath = await _forgeInstaller
+            .DownloadInstallerAsync(gameRoot, kind, loaderVersion, installerUrl, ct)
+            .ConfigureAwait(false);
+
+        return await _forgeInstaller
+            .PrepareAsync(
+                kind, gameRoot, gameVersion, loaderVersion,
+                baseVersion, installerPath, clientJarPath, options, progress, ct)
+            .ConfigureAwait(false);
     }
+
+    private static string BuildInstallerUrl(ModLoaderKind kind, string gameVersion, string loaderVersion) =>
+        kind == ModLoaderKind.Forge
+            ? $"{ForgeMavenBase}/{Uri.EscapeDataString($"{gameVersion}-{loaderVersion}")}/"
+              + $"forge-{Uri.EscapeDataString($"{gameVersion}-{loaderVersion}")}-installer.jar"
+            : $"{NeoForgeBase}/{Uri.EscapeDataString(loaderVersion)}/"
+              + $"neoforge-{Uri.EscapeDataString(loaderVersion)}-installer.jar";
 
     /// <summary>安装器需要与目标版本匹配的 Java，这里按原版版本号推断主版本。</summary>
     public static int RequiredJavaMajor(string gameVersion)
@@ -530,17 +473,6 @@ public sealed partial class ModLoaderService
         }
 
         return 8;
-    }
-
-    private static string Tail(string text, int lines = 12)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return "（安装器没有输出）";
-        }
-
-        var all = text.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        return string.Join(" / ", all.TakeLast(lines).Select(l => l.Trim()));
     }
 
     // ------------------------------------------------------------------ OptiFine
