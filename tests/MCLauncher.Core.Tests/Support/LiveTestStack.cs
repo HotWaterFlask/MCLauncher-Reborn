@@ -38,15 +38,16 @@ internal sealed class LiveTestStack : IDisposable
 
     public required InstanceService Instances { get; init; }
 
-    public static LiveTestStack Create(string cacheDirectory)
+    public static LiveTestStack Create(string cacheDirectory, bool preferMirror = false)
     {
         var log = new TestLog();
         var downloader = new HttpDownloader(log);
-        var resolver = new DownloadSourceResolver(log) { PreferMirror = false };
+        var resolver = new DownloadSourceResolver(log) { PreferMirror = preferMirror };
         var batch = new DownloadBatch(downloader, log);
         var repository = new VersionRepository(new VersionResolver(log), log);
         var installer = new GameInstaller(downloader, resolver, batch, repository, log);
         var java = new JavaService(log);
+        var forgeInstaller = new ForgeInstallerService(downloader, resolver, installer, java, log);
         var argumentBuilder = new LaunchArgumentBuilder(log);
         var launcher = new GameLauncher(log);
         var authlibAuth = new AuthlibAuthService(downloader, log);
@@ -66,7 +67,7 @@ internal sealed class LiveTestStack : IDisposable
             Launcher = launcher,
             LaunchService = new GameLaunchService(
                 repository, installer, java, argumentBuilder, launcher, authlibAuth, authlibInjector, log),
-            ModLoaders = new ModLoaderService(downloader, resolver, repository, installer, java, log),
+            ModLoaders = new ModLoaderService(downloader, repository, installer, forgeInstaller, log),
             Instances = new InstanceService(repository, log),
         };
     }

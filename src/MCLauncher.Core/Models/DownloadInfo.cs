@@ -9,6 +9,10 @@ namespace MCLauncher.Core.Models;
 /// </summary>
 public class DownloadInfo
 {
+    /// <summary>制品相对 <c>libraries</c> 的路径；安装了分类器或非 jar 扩展名时以它为准。</summary>
+    [JsonPropertyName("path")]
+    public string? Path { get; set; }
+
     [JsonPropertyName("url")]
     public string? Url { get; set; }
 

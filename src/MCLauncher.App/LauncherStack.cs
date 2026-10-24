@@ -150,6 +150,7 @@ public sealed class LauncherStack : IDisposable
         var manifests = new VersionManifestService(downloader, resolver, log, Path.Combine(config.ConfigDirectory, "cache"));
         var installer = new GameInstaller(downloader, resolver, batch, repository, log);
         var java = new JavaService(log);
+        var forgeInstaller = new ForgeInstallerService(downloader, resolver, installer, java, log);
         var argumentBuilder = new LaunchArgumentBuilder(log);
         var launcher = new GameLauncher(log);
         var authlibAuth = new AuthlibAuthService(downloader, log);
@@ -177,7 +178,7 @@ public sealed class LauncherStack : IDisposable
             LaunchService = new GameLaunchService(
                 repository, installer, java, argumentBuilder, launcher, authlibAuth, authlibInjector, log),
             Instances = new InstanceService(repository, log),
-            ModLoaders = new ModLoaderService(downloader, resolver, repository, installer, java, log),
+            ModLoaders = new ModLoaderService(downloader, repository, installer, forgeInstaller, log),
             MicrosoftAuth = new MicrosoftAuthService(downloader, config, log),
             AuthlibAuth = authlibAuth,
             AuthlibInjector = authlibInjector,

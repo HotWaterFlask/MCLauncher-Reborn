@@ -32,7 +32,11 @@ public sealed class HttpDownloader : IDisposable
     private static readonly TimeSpan ReadTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan MirrorMinInterval = TimeSpan.FromMilliseconds(100);
 
-    public const string UserAgent = "MCLauncher-Reborn/6.0 (+https://github.com/HotWaterFlask/MCLauncher-Reborn)";
+    /// <summary>
+    /// 默认 User-Agent。不要带括号里的站点地址：部分镜像（BMCLAPI）的 WAF 会把带链接的 UA 判成爬虫并回 403，
+    /// 导致镜像全部失效、只能退回官方源。
+    /// </summary>
+    public const string UserAgent = "MCLauncher-Reborn/6.0";
 
     private readonly ILogger _log;
     private readonly HttpClient _http;

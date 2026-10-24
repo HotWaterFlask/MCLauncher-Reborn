@@ -1282,88 +1282,66 @@ public sealed class VersionsViewModel : ViewModelBase
                 var instanceId = _stack.Instances.CreateUniqueInstanceId(
                     _stack.GameRoot, trimmedName, fallback);
 
-                if (card is null || card.Kind is ModLoaderKind.Fabric or ModLoaderKind.Quilt)
+                // 原版与加载器在内存里合并，直接写进实例目录，再一次性并发下载全部文件；
+                // versions 下不会出现临时原版基底目录。Forge / NeoForge 的处理器也在这一步执行。
+                InstallStatus = card is null
+                    ? $"正在安装原版 {gameVersion}…"
+                    : $"正在安装 {loaderName} {loaderVersion}…";
+
+                var baseVersion = await FetchBaseVersionAsync(gameVersion!);
+                GameVersionJson? loaderProfile = null;
+
+                try
                 {
-                    // 原版与加载器在内存里合并，直接写进实例目录，再一次性并发下载全部文件；
-                    // versions 下不会出现临时原版基底目录。
-                    InstallStatus = card is null
-                        ? $"正在安装原版 {gameVersion}…"
-                        : $"正在安装 {loaderName} {loaderVersion}…";
+                    if (card is not null)
+                    {
+                        loaderProfile = card.Kind is ModLoaderKind.Fabric or ModLoaderKind.Quilt
+                            ? await _stack.ModLoaders.GetFabricLikeProfileAsync(
+                                card.Kind, gameVersion!, loaderVersion!)
+                            : await _stack.ModLoaders.GetForgeLikeVersionAsync(
+                                card.Kind,
+                                _stack.GameRoot,
+                                gameVersion!,
+                                loaderVersion!,
+                                baseVersion,
+                                VersionRepository.VersionJarPath(_stack.GameRoot, instanceId),
+                                _stack.BuildInstallOptions(),
+                                new Progress<InstallProgress>(ReportInstallProgress));
+                    }
 
-                    var baseVersion = await FetchBaseVersionAsync(gameVersion!);
-                    var loaderProfile = card is null
-                        ? null
-                        : await _stack.ModLoaders.GetFabricLikeProfileAsync(
-                            card.Kind, gameVersion!, loaderVersion!);
+                    var report = await _stack.Installer.InstallInstanceAsync(
+                        _stack.GameRoot, instanceId, baseVersion, loaderProfile,
+                        _stack.BuildInstallOptions(), new Progress<InstallProgress>(ReportInstallProgress));
 
+                    if (!report.Success)
+                    {
+                        throw new InvalidOperationException(
+                            $"安装失败：{report.Failed} 个文件未能下载");
+                    }
+                }
+                catch
+                {
+                    // 半成品会以「实例」身份出现在列表里，失败就整个删掉；
+                    // libraries / assets 是跨版本共享的，不受影响。
                     try
                     {
-                        var report = await _stack.Installer.InstallInstanceAsync(
-                            _stack.GameRoot, instanceId, baseVersion, loaderProfile,
-                            _stack.BuildInstallOptions(), new Progress<InstallProgress>(ReportInstallProgress));
-
-                        if (!report.Success)
-                        {
-                            throw new InvalidOperationException(
-                                $"安装失败：{report.Failed} 个文件未能下载");
-                        }
+                        _stack.Instances.Delete(_stack.GameRoot, instanceId);
                     }
-                    catch
+                    catch (Exception cleanup)
                     {
-                        // 半成品会以「实例」身份出现在列表里，失败就整个删掉；
-                        // libraries / assets 是跨版本共享的，不受影响。
-                        try
-                        {
-                            _stack.Instances.Delete(_stack.GameRoot, instanceId);
-                        }
-                        catch (Exception cleanup)
-                        {
-                            _stack.Log.Warn($"清理未完成的实例 {instanceId} 失败", cleanup);
-                        }
-
-                        throw;
+                        _stack.Log.Warn($"清理未完成的实例 {instanceId} 失败", cleanup);
                     }
 
-                    _stack.Instances.RegisterSelfContainedInstance(
-                        _stack.GameRoot,
-                        instanceId,
-                        gameVersion!,
-                        baseVersion,
-                        card is null ? null : $"{loaderName} {loaderVersion}",
-                        instanceId);
+                    throw;
                 }
-                else
-                {
-                    var baseInstalledNow = await EnsureBaseVersionAsync(gameVersion!,
-                        new Progress<InstallProgress>(ReportInstallProgress));
 
-                    InstallStatus = $"正在安装 {loaderName} {loaderVersion}…";
-                    var result = await _stack.ModLoaders.InstallAsync(
-                        new LoaderInstallRequest
-                        {
-                            GameRoot = _stack.GameRoot,
-                            GameVersion = gameVersion!,
-                            Kind = card.Kind,
-                            LoaderVersion = loaderVersion!,
-                            InstallOptions = _stack.BuildInstallOptions(),
-                        },
-                        new Progress<InstallProgress>(ReportInstallProgress));
-
-                    if (!result.Success || string.IsNullOrWhiteSpace(result.VersionId))
-                    {
-                        throw new InvalidOperationException(result.Error ?? "加载器安装失败");
-                    }
-
-                    InstallStatus = $"正在创建实例 {instanceId}…";
-                    _stack.Instances.AdoptLoaderVersion(
-                        _stack.GameRoot,
-                        result.VersionId!,
-                        instanceId,
-                        gameVersion!,
-                        $"{loaderName} {loaderVersion}",
-                        instanceId,
-                        deleteBaseVersion: baseInstalledNow);
-                }
+                _stack.Instances.RegisterSelfContainedInstance(
+                    _stack.GameRoot,
+                    instanceId,
+                    gameVersion!,
+                    baseVersion,
+                    card is null ? null : $"{loaderName} {loaderVersion}",
+                    instanceId);
 
                 _stack.Config.Settings.SelectedInstanceId = instanceId;
                 _stack.Config.Save();
@@ -1404,27 +1382,6 @@ public sealed class VersionsViewModel : ViewModelBase
                     ?? throw new InvalidOperationException($"版本清单里找不到 Minecraft {gameVersion}");
 
         return await _stack.Manifests.GetVersionJsonAsync(entry);
-    }
-
-    private async Task<bool> EnsureBaseVersionAsync(string gameVersion, IProgress<InstallProgress> progress)
-    {
-        if (_stack.Repository.IsInstalled(_stack.GameRoot, gameVersion))
-        {
-            return false;
-        }
-
-        InstallStatus = $"正在安装原版 {gameVersion}…";
-        var report = await _stack.InstallVersionAsync(gameVersion, progress);
-
-        if (!report.Success)
-        {
-            throw new InvalidOperationException(
-                $"原版 {gameVersion} 安装失败：{report.Failed} 个文件未能下载");
-        }
-
-        // 这个原版只是给加载器当基底的临时版本；安装失败后重试也能认出它并清理掉。
-        _stack.Instances.MarkAsAutoBase(_stack.GameRoot, gameVersion);
-        return true;
     }
 
     private void ReportInstallProgress(InstallProgress progress)
@@ -1728,12 +1685,15 @@ public sealed class VersionsViewModel : ViewModelBase
             var fallback = string.IsNullOrWhiteSpace(ModpackInstanceName) ? ModpackTitle : ModpackInstanceName.Trim();
             var instanceId = _stack.Instances.CreateUniqueInstanceId(_stack.GameRoot, ModpackInstanceName, fallback);
 
-            if (loader is null || loader.Value.Kind is ModLoaderKind.Fabric or ModLoaderKind.Quilt)
-            {
-                // 原版或 Fabric/Quilt：合并后直接装进实例目录，不生成原版基底。
-                GameVersionJson? loaderProfile = null;
-                string? loaderText = null;
+            // 原版与加载器（Fabric / Quilt / Forge / NeoForge）在内存里合并后直接装进实例目录，
+            // 不生成原版基底；Forge / NeoForge 的处理器在这一步执行。
+            GameVersionJson? loaderProfile = null;
+            string? loaderText = null;
 
+            var baseVersion = await FetchBaseVersionAsync(info.GameVersion!);
+
+            try
+            {
                 if (loader is { } parsed)
                 {
                     var loaderVersion = parsed.Version;
@@ -1747,85 +1707,50 @@ public sealed class VersionsViewModel : ViewModelBase
 
                     loaderText = $"{ModLoaderService.DisplayName(parsed.Kind)} {loaderVersion}";
                     ModpackStatus = $"正在安装 {loaderText}…";
-                    loaderProfile = await _stack.ModLoaders.GetFabricLikeProfileAsync(
-                        parsed.Kind, info.GameVersion!, loaderVersion);
+
+                    loaderProfile = parsed.Kind is ModLoaderKind.Fabric or ModLoaderKind.Quilt
+                        ? await _stack.ModLoaders.GetFabricLikeProfileAsync(
+                            parsed.Kind, info.GameVersion!, loaderVersion)
+                        : await _stack.ModLoaders.GetForgeLikeVersionAsync(
+                            parsed.Kind,
+                            _stack.GameRoot,
+                            info.GameVersion!,
+                            loaderVersion,
+                            baseVersion,
+                            VersionRepository.VersionJarPath(_stack.GameRoot, instanceId),
+                            _stack.BuildInstallOptions(),
+                            new Progress<InstallProgress>(ReportModpackProgress));
                 }
                 else
                 {
                     ModpackStatus = $"正在安装原版 {info.GameVersion}…";
                 }
 
-                var baseVersion = await FetchBaseVersionAsync(info.GameVersion!);
+                var report = await _stack.Installer.InstallInstanceAsync(
+                    _stack.GameRoot, instanceId, baseVersion, loaderProfile,
+                    _stack.BuildInstallOptions(), new Progress<InstallProgress>(ReportModpackProgress));
 
+                if (!report.Success)
+                {
+                    throw new InvalidOperationException($"安装失败：{report.Failed} 个文件未能下载");
+                }
+            }
+            catch
+            {
                 try
                 {
-                    var report = await _stack.Installer.InstallInstanceAsync(
-                        _stack.GameRoot, instanceId, baseVersion, loaderProfile,
-                        _stack.BuildInstallOptions(), new Progress<InstallProgress>(ReportModpackProgress));
-
-                    if (!report.Success)
-                    {
-                        throw new InvalidOperationException($"安装失败：{report.Failed} 个文件未能下载");
-                    }
+                    _stack.Instances.Delete(_stack.GameRoot, instanceId);
                 }
-                catch
+                catch (Exception cleanup)
                 {
-                    try
-                    {
-                        _stack.Instances.Delete(_stack.GameRoot, instanceId);
-                    }
-                    catch (Exception cleanup)
-                    {
-                        _stack.Log.Warn($"清理未完成的整合包实例 {instanceId} 失败", cleanup);
-                    }
-
-                    throw;
+                    _stack.Log.Warn($"清理未完成的整合包实例 {instanceId} 失败", cleanup);
                 }
 
-                _stack.Instances.RegisterSelfContainedInstance(
-                    _stack.GameRoot, instanceId, info.GameVersion!, baseVersion, loaderText, instanceId);
+                throw;
             }
-            else
-            {
-                var parsed = loader.Value;
-                var loaderVersion = parsed.Version;
-                if (string.IsNullOrWhiteSpace(loaderVersion))
-                {
-                    var options = await _stack.ModLoaders.ListLoaderVersionsAsync(parsed.Kind, info.GameVersion!);
-                    loaderVersion = (options.FirstOrDefault(option => option.IsRecommended) ?? options.FirstOrDefault())?.Version
-                                    ?? throw new InvalidOperationException(
-                                        $"{ModLoaderService.DisplayName(parsed.Kind)} 没有支持 {info.GameVersion} 的版本");
-                }
 
-                var baseInstalledNow = await EnsureBaseVersionAsync(
-                    info.GameVersion!, new Progress<InstallProgress>(ReportModpackProgress));
-
-                ModpackStatus = $"正在安装 {ModLoaderService.DisplayName(parsed.Kind)} {loaderVersion}…";
-                var result = await _stack.ModLoaders.InstallAsync(
-                    new LoaderInstallRequest
-                    {
-                        GameRoot = _stack.GameRoot,
-                        GameVersion = info.GameVersion!,
-                        Kind = parsed.Kind,
-                        LoaderVersion = loaderVersion,
-                        InstallOptions = _stack.BuildInstallOptions(),
-                    },
-                    new Progress<InstallProgress>(ReportModpackProgress));
-
-                if (!result.Success || string.IsNullOrWhiteSpace(result.VersionId))
-                {
-                    throw new InvalidOperationException(result.Error ?? "加载器安装失败");
-                }
-
-                _stack.Instances.AdoptLoaderVersion(
-                    _stack.GameRoot,
-                    result.VersionId!,
-                    instanceId,
-                    info.GameVersion!,
-                    $"{ModLoaderService.DisplayName(parsed.Kind)} {loaderVersion}",
-                    instanceId,
-                    deleteBaseVersion: baseInstalledNow);
-            }
+            _stack.Instances.RegisterSelfContainedInstance(
+                _stack.GameRoot, instanceId, info.GameVersion!, baseVersion, loaderText, instanceId);
 
             ModpackStatus = "正在铺开整合包文件…";
             var import = await _stack.Modpacks.ImportAsync(
