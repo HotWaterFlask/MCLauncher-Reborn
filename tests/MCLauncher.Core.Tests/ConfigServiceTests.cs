@@ -75,4 +75,25 @@ public class ConfigServiceTests
             Cleanup(root);
         }
     }
+
+    [Fact]
+    public void 首次加载会标记为首次运行保存后不再是首次()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "mcl-config-" + Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            var first = CreateService(root, out _);
+            Assert.True(first.IsFirstRun);
+
+            first.Save();
+
+            var second = CreateService(root, out _);
+            Assert.False(second.IsFirstRun);
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
 }

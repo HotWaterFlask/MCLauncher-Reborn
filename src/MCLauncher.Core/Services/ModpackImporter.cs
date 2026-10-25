@@ -596,6 +596,8 @@ public sealed partial class ModpackImporter
                 DownloadedBytes = p.DownloadedBytes,
                 TotalBytes = p.TotalBytes,
                 Current = p.Current,
+                ActiveFiles = p.ActiveFiles,
+                BytesPerSecond = p.BytesPerSecond,
             }));
 
         var result = await batch.RunAsync(requests, 8, batchProgress, ct).ConfigureAwait(false);

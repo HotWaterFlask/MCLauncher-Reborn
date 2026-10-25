@@ -32,11 +32,133 @@
 
                 <!-- 下载源 -->
                 <TextBlock Text="下载源" Style="{StaticResource SectionTitle}" Margin="0,18,0,8"/>
-                <CheckBox Content="优先使用镜像源（BMCLAPI，失败自动回退官方）"
-                          IsChecked="{Binding PreferMirror, Mode=TwoWay}"
-                          FontSize="13" Foreground="#1A1A1A"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="版本列表源"
+                               VerticalAlignment="Center" FontSize="13" Foreground="#1A1A1A"/>
+                    <ComboBox Grid.Row="0" Grid.Column="1" Width="180" Height="26" Margin="12,0,0,0"
+                              HorizontalAlignment="Right" FontSize="13"
+                              ItemsSource="{Binding DownloadSourceChoices}"
+                              DisplayMemberPath="Label"
+                              SelectedValuePath="Value"
+                              SelectedValue="{Binding VersionListSource, Mode=TwoWay}"
+                              ToolTip="版本清单与版本 JSON 的获取源"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="下载源" Margin="0,8,0,0"
+                               VerticalAlignment="Center" FontSize="13" Foreground="#1A1A1A"/>
+                    <ComboBox Grid.Row="1" Grid.Column="1" Width="180" Height="26" Margin="12,8,0,0"
+                              HorizontalAlignment="Right" FontSize="13"
+                              ItemsSource="{Binding DownloadSourceChoices}"
+                              DisplayMemberPath="Label"
+                              SelectedValuePath="Value"
+                              SelectedValue="{Binding FileSource, Mode=TwoWay}"
+                              ToolTip="客户端、依赖库与资源对象的下载源"/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="附加内容默认下载源" Margin="0,8,0,0"
+                               VerticalAlignment="Center" FontSize="13" Foreground="#1A1A1A"/>
+                    <ComboBox Grid.Row="2" Grid.Column="1" Width="180" Height="26" Margin="12,8,0,0"
+                              HorizontalAlignment="Right" FontSize="13"
+                              ItemsSource="{Binding ContentSourceChoices}"
+                              DisplayMemberPath="Label"
+                              SelectedValuePath="Value"
+                              SelectedValue="{Binding DefaultContentSource, Mode=TwoWay}"
+                              ToolTip="模组、资源包、光影与整合包的默认检索源"/>
+                </Grid>
                 <TextBlock Margin="0,6,0,0" Style="{StaticResource BodyText}"
-                           Text="镜像源在国内更快；关闭后所有下载都走官方地址。"/>
+                           Text="自动模式会在启动时探测镜像连通性；镜像不可用时自动改用官方源。附加内容指模组、资源包、光影与整合包。"/>
+
+                <!-- 下载线程数 -->
+                <TextBlock Text="下载线程数" Style="{StaticResource SectionTitle}" Margin="0,18,0,8"/>
+                <RadioButton Content="自动选择线程数"
+                             GroupName="DownloadThreads"
+                             IsChecked="{Binding AutoDownloadThreads, Mode=TwoWay}"
+                             FontSize="13" Foreground="#1A1A1A"/>
+                <Grid Margin="0,10,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <RadioButton Grid.Column="0" Content="自定义线程数"
+                                 GroupName="DownloadThreads"
+                                 IsChecked="{Binding CustomDownloadThreads, Mode=TwoWay}"
+                                 FontSize="13" Foreground="#1A1A1A" VerticalAlignment="Center"/>
+                    <Slider Grid.Column="1" Margin="16,0,12,0"
+                            Minimum="1" Maximum="64"
+                            TickFrequency="1" IsSnapToTickEnabled="True"
+                            Value="{Binding DownloadThreads, Mode=TwoWay}"
+                            IsEnabled="{Binding CustomDownloadThreads}"
+                            VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="2" Width="110" TextAlignment="Right"
+                               VerticalAlignment="Center" FontSize="12" Foreground="#5A5A5A"
+                               Text="{Binding DownloadThreadsText}"/>
+                </Grid>
+                <TextBlock Margin="0,6,0,0" Style="{StaticResource BodyText}"
+                           Text="自动模式使用 16 并发；镜像源对单个主机本身有限流，调得过高不会更快。"/>
+
+                <!-- 背景图 -->
+                <TextBlock Text="背景图" Style="{StaticResource SectionTitle}" Margin="0,18,0,8"/>
+                <RadioButton Content="默认底图"
+                             GroupName="BackgroundMode"
+                             IsChecked="{Binding IsBackgroundDefault, Mode=TwoWay}"
+                             FontSize="13" Foreground="#1A1A1A"/>
+                <RadioButton Content="目录模式（bgskin）" Margin="0,6,0,0"
+                             GroupName="BackgroundMode"
+                             IsChecked="{Binding IsBackgroundFolder, Mode=TwoWay}"
+                             FontSize="13" Foreground="#1A1A1A"/>
+                <TextBlock Margin="24,3,0,0" Style="{StaticResource BodyText}"
+                           Text="选择后自动创建该目录；把图片放进去，每次启动随机显示一张。"/>
+                <StackPanel Margin="24,4,0,0" Orientation="Horizontal"
+                            Visibility="{Binding IsBackgroundFolder, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="{Binding BackgroundFolderPath}" FontSize="11" Foreground="#7A7A7A"
+                               VerticalAlignment="Center" MaxWidth="400" TextTrimming="CharacterEllipsis"/>
+                    <Button Content="打开目录" Style="{StaticResource SkinButton}"
+                            Command="{Binding OpenBackgroundFolderCommand}"
+                            Width="76" Height="24" FontSize="12" Margin="10,0,0,0"/>
+                </StackPanel>
+
+                <RadioButton Content="自定义模式（目录或图片文件）" Margin="0,8,0,0"
+                             GroupName="BackgroundMode"
+                             IsChecked="{Binding IsBackgroundCustom, Mode=TwoWay}"
+                             FontSize="13" Foreground="#1A1A1A"/>
+                <Grid Margin="24,4,0,0" IsEnabled="{Binding IsBackgroundCustom}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox Grid.Column="0" Text="{Binding BackgroundCustomPath, UpdateSourceTrigger=PropertyChanged}"
+                             Height="26" VerticalContentAlignment="Center" Padding="6,0" FontSize="12"/>
+                    <Button Grid.Column="1" Content="浏览图片…" Style="{StaticResource SkinButton}"
+                            Command="{Binding BrowseBackgroundFileCommand}"
+                            Width="86" Height="26" FontSize="12" Margin="8,0,0,0"/>
+                    <Button Grid.Column="2" Content="浏览目录…" Style="{StaticResource SkinButton}"
+                            Command="{Binding BrowseBackgroundFolderCommand}"
+                            Width="86" Height="26" FontSize="12" Margin="8,0,0,0"/>
+                </Grid>
+                <TextBlock Margin="24,3,0,0" Style="{StaticResource BodyText}"
+                           Text="选择目录则从目录中随机取图；选择图片文件则固定显示该图片。"/>
+
+                <RadioButton Content="网络模式（图片 URL）" Margin="0,8,0,0"
+                             GroupName="BackgroundMode"
+                             IsChecked="{Binding IsBackgroundNetwork, Mode=TwoWay}"
+                             FontSize="13" Foreground="#1A1A1A"/>
+                <TextBox Margin="24,4,0,0" Height="26" FontSize="12"
+                         VerticalContentAlignment="Center" Padding="6,0"
+                         IsEnabled="{Binding IsBackgroundNetwork}"
+                         Text="{Binding BackgroundUrl, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="图片直链；支持每次返回不同图片的随机图 API"/>
+                <TextBlock Margin="24,3,0,0" Style="{StaticResource BodyText}"
+                           Text="每次启动都会重新下载；随机图片 API 每次启动即可显示不同图片。"/>
 
                 <!-- Java -->
                 <TextBlock Text="Java 运行时" Style="{StaticResource SectionTitle}" Margin="0,18,0,8"/>
@@ -121,7 +243,8 @@
                                  FontSize="13" Foreground="#1A1A1A"/>
                 </Grid>
                 <TextBlock Margin="0,8,0,0" Style="{StaticResource BodyText}"
-                           Text="窗口大小可选预设，也可以直接输入数字；「最大化」按主显示器分辨率启动。"/>
+                           TextWrapping="Wrap"
+                           Text="窗口大小可选预设，也可以直接输入数字；「最大化」按主显示器分辨率启动。首次使用时会按显示器分辨率自动选择一次，之后以你的设置为准。"/>
 
                 <!-- 附加参数 -->
                 <TextBlock Text="附加启动参数" Style="{StaticResource SectionTitle}" Margin="0,18,0,8"/>

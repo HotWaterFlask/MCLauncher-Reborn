@@ -294,6 +294,7 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
                             <TextBlock Grid.Column="0" Text="{Binding StatusText}"
@@ -302,7 +303,11 @@
                                        TextTrimming="CharacterEllipsis"
                                        ToolTip="{Binding StatusText}"/>
 
-                            <ProgressBar Grid.Column="1" Width="150" Height="6"
+                            <TextBlock Grid.Column="1" Text="{Binding ProgressSpeedText}"
+                                       Style="{StaticResource SpeedText}"
+                                       VerticalAlignment="Center" Margin="0,0,10,0"/>
+
+                            <ProgressBar Grid.Column="2" Width="150" Height="6"
                                          Minimum="0" Maximum="1"
                                          Value="{Binding Progress, Mode=OneWay}"
                                          VerticalAlignment="Center"/>
@@ -523,28 +528,8 @@
 
                             <!-- 并发下载中的文件：与 HMCL 一样逐文件展示进度 -->
                             <ItemsControl ItemsSource="{Binding InstallFiles}" Margin="0,4,0,0"
-                                          Visibility="{Binding IsInstalling, Converter={StaticResource BoolToVis}}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <StackPanel Margin="0,2,0,0">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-                                                <TextBlock Text="{Binding DisplayName}" FontSize="11"
-                                                           Foreground="#5A5A5A" TextTrimming="CharacterEllipsis"/>
-                                                <TextBlock Grid.Column="1" Text="{Binding Detail}" FontSize="11"
-                                                           Foreground="#8A8A8A" Margin="8,0,0,0"/>
-                                            </Grid>
-                                            <ProgressBar Height="3" Margin="0,2,0,0" Minimum="0" Maximum="1"
-                                                         Value="{Binding Progress, Mode=OneWay}"
-                                                         BorderThickness="0" Background="#E8E8E8"
-                                                         Foreground="#4A6FA5"/>
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                                          ItemTemplate="{StaticResource DownloadFileRowTemplate}"
+                                          Visibility="{Binding IsInstalling, Converter={StaticResource BoolToVis}}"/>
 
                             <TextBlock Text="{Binding InstallSpeedText}" FontSize="11" Foreground="#8A8A8A"
                                        Margin="0,4,0,0" HorizontalAlignment="Right"
@@ -654,9 +639,13 @@
                         <StackPanel Grid.Row="1">
                             <TextBlock Text="{Binding ModpackUrlStatus}" Margin="0,10,0,0"
                                        FontSize="12" Foreground="#5A5A5A" TextWrapping="Wrap" MinHeight="16"/>
+                            <ItemsControl ItemsSource="{Binding ModpackFiles}" Margin="0,4,0,0"
+                                          ItemTemplate="{StaticResource DownloadFileRowTemplate}"
+                                          Visibility="{Binding IsModpackDownloading, Converter={StaticResource BoolToVis}}"/>
                             <ProgressBar Height="6" Margin="0,8,0,0" Minimum="0" Maximum="1"
                                          Value="{Binding ModpackDownloadProgress, Mode=OneWay}"
                                          Visibility="{Binding IsModpackDownloading, Converter={StaticResource BoolToVis}}"/>
+                            <TextBlock Text="{Binding ModpackDownloadSpeedText}" Style="{StaticResource SpeedText}"/>
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
                                 <Button Style="{StaticResource SkinButton}" Content="取消"
                                         Width="76" Height="28" FontSize="13"
@@ -703,9 +692,13 @@
                         <StackPanel Grid.Row="1">
                             <TextBlock Text="{Binding ModpackStatus}" Margin="0,10,0,0"
                                        FontSize="12" Foreground="#5A5A5A" TextWrapping="Wrap" MinHeight="16"/>
+                            <ItemsControl ItemsSource="{Binding ModpackFiles}" Margin="0,4,0,0"
+                                          ItemTemplate="{StaticResource DownloadFileRowTemplate}"
+                                          Visibility="{Binding IsModpackInstalling, Converter={StaticResource BoolToVis}}"/>
                             <ProgressBar Height="6" Margin="0,8,0,0" Minimum="0" Maximum="1"
                                          Value="{Binding ModpackProgress, Mode=OneWay}"
                                          Visibility="{Binding IsModpackInstalling, Converter={StaticResource BoolToVis}}"/>
+                            <TextBlock Text="{Binding ModpackSpeedText}" Style="{StaticResource SpeedText}"/>
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
                                 <Button Style="{StaticResource SkinButton}" Content="取消"
                                         Width="76" Height="28" FontSize="13"

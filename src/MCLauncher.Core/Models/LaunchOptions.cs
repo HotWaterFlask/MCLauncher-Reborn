@@ -42,6 +42,9 @@ public sealed class LaunchOptions
 
     public int ServerPort { get; init; } = 25565;
 
+    /// <summary>实例对应的 Minecraft 版本号，用于决定直连参数（1.20+ 用 Quick Play）。</summary>
+    public string? GameVersion { get; init; }
+
     public string LauncherName { get; init; } = "MCLauncher-Reborn";
 
     public string LauncherVersion { get; init; } = "6.0";

@@ -1,7 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -24,6 +23,8 @@ public sealed class HomeViewModel : ViewModelBase
     private readonly AsyncRelayCommand _completeCommand;
     private readonly StringBuilder _launchBuilder = new();
     private readonly AvatarService _avatars;
+    private readonly DownloadFileRows _launchRows = new();
+    private readonly DownloadFileRows _updateRows = new();
 
     private InstalledVersionInfo? _selectedVersion;
     private string _statusText = "就绪";
@@ -34,9 +35,11 @@ public sealed class HomeViewModel : ViewModelBase
     private bool _launchFailed;
     private int _launchSession;
     private double _progress;
+    private string _launchSpeedText = string.Empty;
     private bool _isUpdateDialogOpen;
     private bool _isUpdating;
     private double _updateProgress;
+    private string _updateSpeedText = string.Empty;
     private string _updateStatus = string.Empty;
     private string _updateResult = string.Empty;
     private bool _hasUpdateResult;
@@ -149,6 +152,16 @@ public sealed class HomeViewModel : ViewModelBase
         private set => SetProperty(ref _progress, value);
     }
 
+    /// <summary>启动前补文件时的实时下载速度文案。</summary>
+    public string LaunchSpeedText
+    {
+        get => _launchSpeedText;
+        private set => SetProperty(ref _launchSpeedText, value);
+    }
+
+    /// <summary>启动前补文件时的下载队列（单文件时只有一行）。</summary>
+    public ObservableCollection<InstallFileItem> LaunchFiles => _launchRows.Items;
+
     /// <summary>「更新游戏」的进度弹窗是否打开。</summary>
     public bool IsUpdateDialogOpen
     {
@@ -168,6 +181,16 @@ public sealed class HomeViewModel : ViewModelBase
         get => _updateProgress;
         private set => SetProperty(ref _updateProgress, value);
     }
+
+    /// <summary>「更新游戏」弹窗里的实时下载速度文案。</summary>
+    public string UpdateSpeedText
+    {
+        get => _updateSpeedText;
+        private set => SetProperty(ref _updateSpeedText, value);
+    }
+
+    /// <summary>「更新游戏」弹窗里的下载队列。</summary>
+    public ObservableCollection<InstallFileItem> UpdateFiles => _updateRows.Items;
 
     public string UpdateStatus
     {
@@ -388,7 +411,7 @@ public sealed class HomeViewModel : ViewModelBase
         // 最大化：按主显示器分辨率窗口化启动，视觉上等同最大化。
         if (mode == GameWindowMode.Maximized)
         {
-            var screen = PrimaryScreenSize();
+            var screen = DisplayMetrics.PrimaryScreenSize();
             if (screen.Width > 0 && screen.Height > 0)
             {
                 width = screen.Width;
@@ -422,6 +445,7 @@ public sealed class HomeViewModel : ViewModelBase
                 : instance.ExtraGameArgs,
             ServerIp = server?.Host,
             ServerPort = server?.Port ?? 25565,
+            GameVersion = version.VersionText,
             CompleteBeforeLaunch = true,
             LauncherName = "MCLauncher-Reborn",
             LauncherVersion = "6.0",
@@ -429,20 +453,6 @@ public sealed class HomeViewModel : ViewModelBase
 
         return (options, java);
     }
-
-    /// <summary>主显示器像素尺寸；取不到时返回 (0, 0)，交给游戏默认值。</summary>
-    private static (int Width, int Height) PrimaryScreenSize()
-    {
-        var width = GetSystemMetrics(SmCxScreen);
-        var height = GetSystemMetrics(SmCyScreen);
-        return width > 0 && height > 0 ? (width, height) : (0, 0);
-    }
-
-    private const int SmCxScreen = 0;
-    private const int SmCyScreen = 1;
-
-    [DllImport("user32.dll")]
-    private static extern int GetSystemMetrics(int index);
 
     private async Task LaunchAsync()
     {
@@ -461,6 +471,8 @@ public sealed class HomeViewModel : ViewModelBase
 
         IsBusy = true;
         Progress = 0;
+        LaunchSpeedText = string.Empty;
+        _launchRows.Clear();
         IsLaunchFailed = false;
         var session = ++_launchSession;
         _launchBuilder.Clear();
@@ -520,6 +532,8 @@ public sealed class HomeViewModel : ViewModelBase
                 new Progress<InstallProgress>(OnInstallProgress));
 
             Progress = 1;
+            LaunchSpeedText = string.Empty;
+            _launchRows.Clear();
             StatusText = "等待游戏窗口出现…";
             AppendLaunchLine($"游戏已启动（PID {process.Id}），等待游戏窗口出现…");
 
@@ -532,6 +546,8 @@ public sealed class HomeViewModel : ViewModelBase
             StatusText = "启动失败：" + ex.Message;
             AppendLaunchLine(StatusText);
             Progress = 0;
+            LaunchSpeedText = string.Empty;
+            _launchRows.Clear();
             IsLaunchFailed = true;
         }
         finally
@@ -539,19 +555,40 @@ public sealed class HomeViewModel : ViewModelBase
             IsBusy = false;
         }
 
-        // 面板统一停留几秒：成功时等待游戏窗口起来，失败时让红色错误提示有足够时间被看到。
-        await HideLaunchPanelAsync(session);
-
+        // 进程起来后立刻开始盯着退出，避免等待窗口期间错过崩溃分析。
         if (process is not null)
         {
             _ = WatchExitAsync(process, version, instanceDirectory, launchedAt);
         }
+
+        // 面板统一停留：成功时真正等到游戏窗口出现，失败时让红色错误提示有足够时间被看到。
+        await HideLaunchPanelAsync(session, process);
     }
 
-    /// <summary>启动面板停留 3 秒后收起，回到干净的主页；期间重新启动则取消收起。</summary>
-    private async Task HideLaunchPanelAsync(int session)
+    /// <summary>
+    /// 收起启动面板：启动成功时轮询游戏主窗口，窗口真的出现后再停留 3 秒；
+    /// 启动失败或进程提前退出时只停留 3 秒，让红色错误提示有时间被看到。
+    /// </summary>
+    private async Task HideLaunchPanelAsync(int session, GameProcess? process)
     {
-        await Task.Delay(TimeSpan.FromSeconds(3));
+        if (process is null)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(3));
+        }
+        else
+        {
+            var appeared = await WaitForGameWindowAsync(process, session);
+            if (session != _launchSession)
+            {
+                return;
+            }
+
+            if (appeared)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(3));
+            }
+        }
+
         if (session != _launchSession)
         {
             return;
@@ -560,8 +597,39 @@ public sealed class HomeViewModel : ViewModelBase
         HasLaunchOutput = false;
         IsLaunchFailed = false;
         Progress = 0;
+        LaunchSpeedText = string.Empty;
+        _launchRows.Clear();
         LaunchOutput = string.Empty;
         _launchBuilder.Clear();
+    }
+
+    /// <summary>
+    /// 轮询游戏进程的主窗口，直到窗口真的出现；
+    /// 进程提前退出、用户重新启动或等待超过 5 分钟时返回 false。
+    /// </summary>
+    private async Task<bool> WaitForGameWindowAsync(GameProcess process, int session)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromMinutes(5);
+
+        while (DateTime.UtcNow < deadline)
+        {
+            if (session != _launchSession || process.HasExited)
+            {
+                return false;
+            }
+
+            if (process.MainWindowHandle != IntPtr.Zero)
+            {
+                StatusText = "游戏窗口已出现，启动完成";
+                return true;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(300));
+        }
+
+        _stack.Log.Warn("等待游戏窗口出现超时（5 分钟），自动收起启动面板");
+        StatusText = "等待游戏窗口超时，详情请看启动日志";
+        return false;
     }
 
     private async Task CompleteAsync()
@@ -575,6 +643,8 @@ public sealed class HomeViewModel : ViewModelBase
         IsBusy = true;
         IsUpdating = true;
         UpdateProgress = 0;
+        UpdateSpeedText = string.Empty;
+        _updateRows.Clear();
         UpdateStatus = "正在校验文件…";
         UpdateResult = string.Empty;
         UpdateResultFailed = false;
@@ -604,6 +674,8 @@ public sealed class HomeViewModel : ViewModelBase
         }
         finally
         {
+            UpdateSpeedText = string.Empty;
+            _updateRows.Clear();
             IsUpdating = false;
             IsBusy = false;
         }
@@ -613,6 +685,8 @@ public sealed class HomeViewModel : ViewModelBase
     private void OnUpdateProgress(InstallProgress progress)
     {
         UpdateProgress = progress.Fraction;
+        UpdateSpeedText = InstallFileItem.FormatSpeed(progress.BytesPerSecond);
+        _updateRows.Update(progress.ActiveFiles);
         UpdateStatus = progress.Total > 0
             ? $"{progress.Stage} {progress.Completed}/{progress.Total}"
             : progress.Stage;
@@ -622,6 +696,8 @@ public sealed class HomeViewModel : ViewModelBase
     {
         // Progress<T> 已经把回调 marshal 到 UI 线程。
         Progress = progress.Fraction;
+        LaunchSpeedText = InstallFileItem.FormatSpeed(progress.BytesPerSecond);
+        _launchRows.Update(progress.ActiveFiles);
         StatusText = progress.Total > 0
             ? $"{progress.Stage} {progress.Completed}/{progress.Total}"
             : progress.Stage;

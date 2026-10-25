@@ -76,6 +76,11 @@
                     </Style>
                 </ProgressBar.Style>
             </ProgressBar>
+            <TextBlock Text="{Binding LaunchSpeedText}"
+                       Style="{StaticResource SpeedText}"
+                       Foreground="#B3FFFFFF" HorizontalAlignment="Left" Margin="2,4,0,0"/>
+            <ItemsControl ItemsSource="{Binding LaunchFiles}" Margin="0,2,0,0"
+                          ItemTemplate="{StaticResource DownloadFileRowDarkTemplate}"/>
         </StackPanel>
 
         <!-- 更新游戏：校验与补全文件的进度弹窗 -->
@@ -92,8 +97,14 @@
                     <ProgressBar Height="6" Margin="0,14,0,0" Minimum="0" Maximum="1"
                                  Value="{Binding UpdateProgress, Mode=OneWay}"/>
 
+                    <TextBlock Text="{Binding UpdateSpeedText}" Style="{StaticResource SpeedText}"/>
+
                     <TextBlock Text="{Binding UpdateStatus}" Margin="0,8,0,0"
                                FontSize="12" Foreground="#5A5A5A" TextWrapping="Wrap"/>
+
+                    <ItemsControl ItemsSource="{Binding UpdateFiles}" Margin="0,4,0,0"
+                                  ItemTemplate="{StaticResource DownloadFileRowTemplate}"
+                                  Visibility="{Binding IsUpdating, Converter={StaticResource BoolToVis}}"/>
 
                     <TextBlock Text="{Binding UpdateResult}" Margin="0,6,0,0"
                                FontSize="12" TextWrapping="Wrap"

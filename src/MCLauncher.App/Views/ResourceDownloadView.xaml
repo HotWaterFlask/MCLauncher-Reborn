@@ -215,6 +215,11 @@
                     <ProgressBar Height="5" Minimum="0" Maximum="1" Margin="0,0,0,6"
                                  Value="{Binding DownloadProgress, Mode=OneWay}"
                                  Visibility="{Binding IsDownloading, Converter={StaticResource BoolToVis}}"/>
+                    <TextBlock Text="{Binding DownloadSpeedText}" Style="{StaticResource SpeedText}"
+                               Margin="0,0,0,4"/>
+                    <ItemsControl ItemsSource="{Binding DownloadFiles}" Margin="0,0,0,2"
+                                  ItemTemplate="{StaticResource DownloadFileRowTemplate}"
+                                  Visibility="{Binding IsDownloading, Converter={StaticResource BoolToVis}}"/>
 
                     <Grid>
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -483,9 +488,14 @@
                         <ProgressBar Height="5" Minimum="0" Maximum="1" Margin="0,0,0,6"
                                      Value="{Binding DownloadProgress, Mode=OneWay}"
                                      Visibility="{Binding IsDownloading, Converter={StaticResource BoolToVis}}"/>
+                        <TextBlock Text="{Binding DownloadSpeedText}" Style="{StaticResource SpeedText}"
+                                   Margin="0,0,0,4"/>
                         <TextBlock Text="{Binding VersionDialogStatus}" FontSize="11" Foreground="#5A5A5A"
                                    TextTrimming="CharacterEllipsis" Margin="0,0,0,6"
                                    ToolTip="{Binding VersionDialogStatus}"/>
+                        <ItemsControl ItemsSource="{Binding DownloadFiles}" Margin="0,0,0,2"
+                                      ItemTemplate="{StaticResource DownloadFileRowTemplate}"
+                                      Visibility="{Binding IsDownloading, Converter={StaticResource BoolToVis}}"/>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                             <Button Style="{StaticResource SkinButton}" Content="{Binding InstallButtonText}"
                                     Width="118" Height="28" FontSize="12"

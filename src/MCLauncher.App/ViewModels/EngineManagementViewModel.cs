@@ -41,6 +41,7 @@ public sealed class EngineComponent
 public sealed class EngineManagementViewModel : ViewModelBase
 {
     private readonly LauncherStack _stack;
+    private readonly DownloadFileRows _installRows = new();
 
     private InstalledVersionInfo? _instance;
     private string _instanceId = string.Empty;
@@ -52,6 +53,7 @@ public sealed class EngineManagementViewModel : ViewModelBase
     private bool _isInstalling;
     private bool _isLoadingVersions;
     private double _installProgress;
+    private string _installSpeedText = string.Empty;
     private string _installStatus = string.Empty;
     private string _dialogTitle = string.Empty;
     private string _dialogSubtitle = string.Empty;
@@ -246,6 +248,16 @@ public sealed class EngineManagementViewModel : ViewModelBase
         private set => SetProperty(ref _installProgress, value);
     }
 
+    /// <summary>安装加载器时的实时下载速度文案。</summary>
+    public string InstallSpeedText
+    {
+        get => _installSpeedText;
+        private set => SetProperty(ref _installSpeedText, value);
+    }
+
+    /// <summary>安装加载器时的下载队列（单文件时只有一行）。</summary>
+    public ObservableCollection<InstallFileItem> InstallFiles => _installRows.Items;
+
     public string InstallStatus
     {
         get => _installStatus;
@@ -323,6 +335,7 @@ public sealed class EngineManagementViewModel : ViewModelBase
 
         IsInstalling = true;
         InstallProgress = 0;
+        _installRows.Clear();
         InstallStatus = $"正在安装 {loaderName} {loaderVersion}…";
 
         try
@@ -332,6 +345,8 @@ public sealed class EngineManagementViewModel : ViewModelBase
                 InstallStatus = string.IsNullOrWhiteSpace(value.Stage)
                     ? InstallStatus
                     : value.Stage;
+                InstallSpeedText = InstallFileItem.FormatSpeed(value.BytesPerSecond);
+                _installRows.Update(value.ActiveFiles);
                 InstallProgress = value.Total > 0
                     ? Math.Clamp((double)value.Completed / value.Total, 0, 1)
                     : 0;
@@ -401,6 +416,8 @@ public sealed class EngineManagementViewModel : ViewModelBase
         }
         finally
         {
+            InstallSpeedText = string.Empty;
+            _installRows.Clear();
             IsInstalling = false;
         }
     }
@@ -413,6 +430,8 @@ public sealed class EngineManagementViewModel : ViewModelBase
         }
 
         IsDialogOpen = false;
+        InstallSpeedText = string.Empty;
+        _installRows.Clear();
         LoaderVersions.Clear();
         SelectedLoaderVersion = null;
         _pendingKind = null;

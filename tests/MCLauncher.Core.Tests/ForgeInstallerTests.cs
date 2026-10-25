@@ -28,7 +28,11 @@ public sealed class ForgeInstallerTests : IDisposable
         Directory.CreateDirectory(_root);
 
         _downloader = new HttpDownloader(_log);
-        var resolver = new DownloadSourceResolver(_log) { PreferMirror = false };
+        var resolver = new DownloadSourceResolver(_log)
+        {
+            VersionListSource = DownloadSourcePreference.Official,
+            FileSource = DownloadSourcePreference.Official,
+        };
         var batch = new DownloadBatch(_downloader, _log);
         var repository = new VersionRepository(new VersionResolver(_log), _log);
         var installer = new GameInstaller(_downloader, resolver, batch, repository, _log);

@@ -28,6 +28,9 @@ public sealed class ConfigService
 
     public AppSettings Settings { get; private set; } = new();
 
+    /// <summary>本次启动前没有 settings.json，也就是第一次使用启动器。</summary>
+    public bool IsFirstRun { get; private set; }
+
     public string ConfigDirectory => _store.ConfigDirectory;
 
     /// <summary>日志目录（与配置目录同级）。</summary>
@@ -35,8 +38,11 @@ public sealed class ConfigService
 
     public void Load()
     {
+        var path = Path.Combine(_store.ConfigDirectory, SettingsFileName);
+        IsFirstRun = !File.Exists(path);
+
         Settings = _store.Load(SettingsFileName, () => new AppSettings());
-        _log.Info($"已加载设置：{Path.Combine(_store.ConfigDirectory, SettingsFileName)}");
+        _log.Info($"已加载设置：{path}");
     }
 
     public void Save()

@@ -273,6 +273,53 @@ public sealed class LaunchArgumentBuilderTests
     }
 
     [Fact]
+    public void 一点二以上改用快速加入参数()
+    {
+        var options = new LaunchOptions
+        {
+            ServerIp = "mc.example.com",
+            ServerPort = 25566,
+            GameVersion = "1.20.4",
+        };
+
+        var game = Build(ModernJson, options).GameArguments;
+
+        Assert.Equal("mc.example.com:25566", game[IndexOf(game, "--quickPlayMultiplayer") + 1]);
+        Assert.Equal(-1, IndexOf(game, "--server"));
+    }
+
+    [Fact]
+    public void 旧版本继续使用服务器与端口参数()
+    {
+        var options = new LaunchOptions
+        {
+            ServerIp = "mc.example.com",
+            ServerPort = 25566,
+            GameVersion = "1.19.4",
+        };
+
+        var game = Build(ModernJson, options).GameArguments;
+
+        Assert.Equal("mc.example.com", game[IndexOf(game, "--server") + 1]);
+        Assert.Equal(-1, IndexOf(game, "--quickPlayMultiplayer"));
+    }
+
+    [Fact]
+    public void 快速加入的IPv6地址带方括号()
+    {
+        var options = new LaunchOptions
+        {
+            ServerIp = "2408:8207::1",
+            ServerPort = 25566,
+            GameVersion = "1.21.1",
+        };
+
+        var game = Build(ModernJson, options).GameArguments;
+
+        Assert.Equal("[2408:8207::1]:25566", game[IndexOf(game, "--quickPlayMultiplayer") + 1]);
+    }
+
+    [Fact]
     public void 自定义参数支持变量且带引号的参数不会被切错()
     {
         var options = new LaunchOptions

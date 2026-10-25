@@ -170,10 +170,19 @@ public sealed class LaunchArgumentBuilder
 
         if (!string.IsNullOrWhiteSpace(options.ServerIp))
         {
-            game.Add("--server");
-            game.Add(options.ServerIp!);
-            game.Add("--port");
-            game.Add(options.ServerPort.ToString());
+            if (McVersionUtil.IsAtLeast(options.GameVersion, 1, 20, 0))
+            {
+                // 1.20 起 --server / --port 被 Quick Play 取代。
+                game.Add("--quickPlayMultiplayer");
+                game.Add(Connect.DirectProtocol.FormatAddress(options.ServerIp!, options.ServerPort));
+            }
+            else
+            {
+                game.Add("--server");
+                game.Add(options.ServerIp!);
+                game.Add("--port");
+                game.Add(options.ServerPort.ToString());
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(options.ExtraGameArgs))

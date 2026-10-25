@@ -63,7 +63,11 @@ public sealed class HttpDownloaderLiveTests
     {
         var log = new TestLog();
         using var downloader = new HttpDownloader(log);
-        var resolver = new DownloadSourceResolver(log) { PreferMirror = false };
+        var resolver = new DownloadSourceResolver(log)
+        {
+            VersionListSource = DownloadSourcePreference.Official,
+            FileSource = DownloadSourcePreference.Official,
+        };
         using var cts = new CancellationTokenSource(Timeout);
 
         var json = await downloader.GetStringAsync(resolver.Resolve(ManifestUrl, DownloadUrlKind.Metadata), cts.Token);
@@ -78,7 +82,11 @@ public sealed class HttpDownloaderLiveTests
     {
         var log = new TestLog();
         using var downloader = new HttpDownloader(log);
-        var resolver = new DownloadSourceResolver(log) { PreferMirror = true };
+        var resolver = new DownloadSourceResolver(log)
+        {
+            VersionListSource = DownloadSourcePreference.Mirror,
+            FileSource = DownloadSourcePreference.Mirror,
+        };
         using var cts = new CancellationTokenSource(Timeout);
 
         // 本机环境访问 BMCLAPI 会超时，正好用来验证"镜像挂了也能装"。
@@ -95,7 +103,11 @@ public sealed class HttpDownloaderLiveTests
         using var temp = new TempDirectory();
         var log = new TestLog();
         using var downloader = new HttpDownloader(log);
-        var resolver = new DownloadSourceResolver(log) { PreferMirror = false };
+        var resolver = new DownloadSourceResolver(log)
+        {
+            VersionListSource = DownloadSourcePreference.Official,
+            FileSource = DownloadSourcePreference.Official,
+        };
         using var cts = new CancellationTokenSource(Timeout);
 
         var manifest = await downloader.GetStringAsync(resolver.Resolve(ManifestUrl, DownloadUrlKind.Metadata), cts.Token);
@@ -121,7 +133,11 @@ public sealed class HttpDownloaderLiveTests
         using var temp = new TempDirectory();
         var log = new TestLog();
         using var downloader = new HttpDownloader(log);
-        var resolver = new DownloadSourceResolver(log) { PreferMirror = false };
+        var resolver = new DownloadSourceResolver(log)
+        {
+            VersionListSource = DownloadSourcePreference.Official,
+            FileSource = DownloadSourcePreference.Official,
+        };
         using var cts = new CancellationTokenSource(Timeout);
 
         var manifest = await downloader.GetStringAsync(resolver.Resolve(ManifestUrl, DownloadUrlKind.Metadata), cts.Token);

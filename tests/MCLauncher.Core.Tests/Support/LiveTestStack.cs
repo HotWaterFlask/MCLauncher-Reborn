@@ -7,7 +7,7 @@ namespace MCLauncher.Core.Tests.Support;
 
 /// <summary>
 /// 真实网络的完整服务栈，供需要访问外网的用例共用。
-/// 刻意把 <c>PreferMirror</c> 关掉：本机访问 BMCLAPI 会超时，
+/// 默认把下载源设为官方：本机访问 BMCLAPI 会超时，
 /// 否则每个文件都要先撞一次镜像，装几百个资源会拖很久。
 /// </summary>
 internal sealed class LiveTestStack : IDisposable
@@ -42,7 +42,15 @@ internal sealed class LiveTestStack : IDisposable
     {
         var log = new TestLog();
         var downloader = new HttpDownloader(log);
-        var resolver = new DownloadSourceResolver(log) { PreferMirror = preferMirror };
+        var preference = preferMirror
+            ? DownloadSourcePreference.Mirror
+            : DownloadSourcePreference.Official;
+
+        var resolver = new DownloadSourceResolver(log)
+        {
+            VersionListSource = preference,
+            FileSource = preference,
+        };
         var batch = new DownloadBatch(downloader, log);
         var repository = new VersionRepository(new VersionResolver(log), log);
         var installer = new GameInstaller(downloader, resolver, batch, repository, log);

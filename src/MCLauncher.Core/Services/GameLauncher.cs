@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.Versioning;
 using System.Text;
 using MCLauncher.Core.Abstractions;
 using MCLauncher.Core.Logging;
@@ -131,6 +132,26 @@ public sealed class GameProcess : IDisposable
             catch (InvalidOperationException)
             {
                 return true;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 游戏主窗口句柄；窗口尚未创建或进程已退出时为 0。
+    /// 只有 Windows 上才有意义，启动器用它判断「游戏窗口是否真的出来了」。
+    /// </summary>
+    [SupportedOSPlatform("windows")]
+    public IntPtr MainWindowHandle
+    {
+        get
+        {
+            try
+            {
+                return _process.MainWindowHandle;
+            }
+            catch (InvalidOperationException)
+            {
+                return IntPtr.Zero;
             }
         }
     }

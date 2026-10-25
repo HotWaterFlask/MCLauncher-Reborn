@@ -280,4 +280,57 @@
         <Setter Property="TextWrapping" Value="Wrap"/>
     </Style>
 
+    <!-- 下载速度文案：为空时不占位，避免对话框布局抖动 -->
+    <Style x:Key="SpeedText" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="Foreground" Value="#8A8A8A"/>
+        <Setter Property="HorizontalAlignment" Value="Right"/>
+        <Setter Property="Margin" Value="0,4,0,0"/>
+        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        <Style.Triggers>
+            <Trigger Property="Text" Value="">
+                <Setter Property="Visibility" Value="Collapsed"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+    <!-- 下载队列里的单个文件行：单文件下载时队列里只有一行 -->
+    <DataTemplate x:Key="DownloadFileRowTemplate">
+        <StackPanel Margin="0,2,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding DisplayName}" FontSize="11"
+                           Foreground="#5A5A5A" TextTrimming="CharacterEllipsis"/>
+                <TextBlock Grid.Column="1" Text="{Binding Detail}" FontSize="11"
+                           Foreground="#8A8A8A" Margin="8,0,0,0"/>
+            </Grid>
+            <ProgressBar Height="3" Margin="0,2,0,0" Minimum="0" Maximum="1"
+                         Value="{Binding Progress, Mode=OneWay}"
+                         BorderThickness="0" Background="#E8E8E8"
+                         Foreground="#4A6FA5"/>
+        </StackPanel>
+    </DataTemplate>
+
+    <!-- 深色背景（首页启动面板）下的文件行 -->
+    <DataTemplate x:Key="DownloadFileRowDarkTemplate">
+        <StackPanel Margin="0,2,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding DisplayName}" FontSize="11"
+                           Foreground="#E6FFFFFF" TextTrimming="CharacterEllipsis"/>
+                <TextBlock Grid.Column="1" Text="{Binding Detail}" FontSize="11"
+                           Foreground="#B3FFFFFF" Margin="8,0,0,0"/>
+            </Grid>
+            <ProgressBar Height="3" Margin="0,2,0,0" Minimum="0" Maximum="1"
+                         Value="{Binding Progress, Mode=OneWay}"
+                         BorderThickness="0" Background="#33FFFFFF"
+                         Foreground="#6AA5E0"/>
+        </StackPanel>
+    </DataTemplate>
+
 </ResourceDictionary>

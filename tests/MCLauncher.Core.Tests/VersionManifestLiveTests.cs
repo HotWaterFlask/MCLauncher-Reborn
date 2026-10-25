@@ -19,7 +19,11 @@ public sealed class VersionManifestLiveTests
         using var temp = new TempDirectory();
         var log = new TestLog();
         using var downloader = new HttpDownloader(log);
-        var resolver = new DownloadSourceResolver(log) { PreferMirror = false };
+        var resolver = new DownloadSourceResolver(log)
+        {
+            VersionListSource = DownloadSourcePreference.Official,
+            FileSource = DownloadSourcePreference.Official,
+        };
         var service = new VersionManifestService(downloader, resolver, log, temp.Path);
         using var cts = new CancellationTokenSource(Timeout);
 
@@ -59,7 +63,11 @@ public sealed class VersionManifestLiveTests
         using var temp = new TempDirectory();
         var log = new TestLog();
         using var downloader = new HttpDownloader(log);
-        var resolver = new DownloadSourceResolver(log) { PreferMirror = false };
+        var resolver = new DownloadSourceResolver(log)
+        {
+            VersionListSource = DownloadSourcePreference.Official,
+            FileSource = DownloadSourcePreference.Official,
+        };
         using var cts = new CancellationTokenSource(Timeout);
 
         var first = new VersionManifestService(downloader, resolver, log, temp.Path);
@@ -78,7 +86,11 @@ public sealed class VersionManifestLiveTests
         using var temp = new TempDirectory();
         var log = new TestLog();
         using var downloader = new HttpDownloader(log);
-        var resolver = new DownloadSourceResolver(log) { PreferMirror = false };
+        var resolver = new DownloadSourceResolver(log)
+        {
+            VersionListSource = DownloadSourcePreference.Official,
+            FileSource = DownloadSourcePreference.Official,
+        };
         var service = new VersionManifestService(downloader, resolver, log, temp.Path);
         using var cts = new CancellationTokenSource(Timeout);
 
@@ -96,7 +108,11 @@ public sealed class VersionManifestLiveTests
         using var temp = new TempDirectory();
         var log = new TestLog();
         using var downloader = new HttpDownloader(log);
-        var resolver = new DownloadSourceResolver(log) { PreferMirror = false };
+        var resolver = new DownloadSourceResolver(log)
+        {
+            VersionListSource = DownloadSourcePreference.Official,
+            FileSource = DownloadSourcePreference.Official,
+        };
         var service = new VersionManifestService(downloader, resolver, log, temp.Path);
         using var cts = new CancellationTokenSource(Timeout);
 

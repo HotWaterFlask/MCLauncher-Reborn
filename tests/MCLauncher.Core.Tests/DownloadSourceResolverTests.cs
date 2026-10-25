@@ -8,8 +8,9 @@ namespace MCLauncher.Core.Tests;
 /// </summary>
 public sealed class DownloadSourceResolverTests
 {
-    private static DownloadSourceResolver Create(bool preferMirror = true) =>
-        new(new TestLog()) { PreferMirror = preferMirror };
+    private static DownloadSourceResolver Create(
+        DownloadSourcePreference preference = DownloadSourcePreference.Mirror) =>
+        new(new TestLog()) { VersionListSource = preference, FileSource = preference };
 
     [Fact]
     public void 元数据走镜像根路径()
@@ -71,7 +72,7 @@ public sealed class DownloadSourceResolverTests
     [Fact]
     public void 旧版明文http地址会被升级为https()
     {
-        var resolver = Create(preferMirror: false);
+        var resolver = Create(DownloadSourcePreference.Official);
         var result = resolver.Resolve(
             "http://resources.download.minecraft.net/ab/abcdef",
             DownloadUrlKind.Asset);
@@ -82,7 +83,7 @@ public sealed class DownloadSourceResolverTests
     [Fact]
     public void 优先官方时官方排在首位且镜像仍然保留()
     {
-        var resolver = Create(preferMirror: false);
+        var resolver = Create(DownloadSourcePreference.Official);
         var result = resolver.Resolve(
             "https://libraries.minecraft.net/gson.jar",
             DownloadUrlKind.Library);
@@ -104,7 +105,7 @@ public sealed class DownloadSourceResolverTests
     [Fact]
     public void Mod平台官方源始终排第一()
     {
-        var resolver = Create(preferMirror: true);
+        var resolver = Create(DownloadSourcePreference.Mirror);
         var result = resolver.Resolve(
             "https://api.modrinth.com/v2/project/fabric-api",
             DownloadUrlKind.ModPlatform);
@@ -123,5 +124,46 @@ public sealed class DownloadSourceResolverTests
 
         var distinct = result.Select(c => c.Url).Distinct(StringComparer.OrdinalIgnoreCase).Count();
         Assert.Equal(result.Count, distinct);
+    }
+
+    [Fact]
+    public void 版本列表源与下载源互不影响()
+    {
+        var resolver = new DownloadSourceResolver(new TestLog())
+        {
+            VersionListSource = DownloadSourcePreference.Official,
+            FileSource = DownloadSourcePreference.Mirror,
+        };
+
+        var metadata = resolver.Resolve(
+            "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json",
+            DownloadUrlKind.Metadata);
+
+        var library = resolver.Resolve(
+            "https://libraries.minecraft.net/gson.jar",
+            DownloadUrlKind.Library);
+
+        Assert.Equal("官方", metadata[0].SourceName);
+        Assert.Equal("BMCLAPI(Maven)", library[0].SourceName);
+    }
+
+    [Fact]
+    public void 自动模式在镜像探测失败时改用官方优先()
+    {
+        var resolver = new DownloadSourceResolver(new TestLog());
+        resolver.SetMirrorReachable(false);
+
+        var result = resolver.Resolve(
+            "https://libraries.minecraft.net/gson.jar",
+            DownloadUrlKind.Library);
+
+        Assert.Equal("官方", result[0].SourceName);
+
+        resolver.SetMirrorReachable(true);
+        result = resolver.Resolve(
+            "https://libraries.minecraft.net/gson.jar",
+            DownloadUrlKind.Library);
+
+        Assert.Equal("BMCLAPI(Maven)", result[0].SourceName);
     }
 }
