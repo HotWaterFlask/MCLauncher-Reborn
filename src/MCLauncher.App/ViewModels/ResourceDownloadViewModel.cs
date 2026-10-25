@@ -252,6 +252,8 @@ public sealed class ResourceDownloadViewModel : ViewModelBase
     private int _totalPages;
     private int _totalCount;
     private double _downloadProgress;
+    private string _downloadSpeedText = string.Empty;
+    private readonly DownloadFileRows _downloadRows = new();
 
     private string _detailName = string.Empty;
     private string _detailSummary = string.Empty;
@@ -498,6 +500,16 @@ public sealed class ResourceDownloadViewModel : ViewModelBase
         private set => SetProperty(ref _downloadProgress, value);
     }
 
+    /// <summary>资源下载时的实时速度文案（底部进度条与版本弹窗共用）。</summary>
+    public string DownloadSpeedText
+    {
+        get => _downloadSpeedText;
+        private set => SetProperty(ref _downloadSpeedText, value);
+    }
+
+    /// <summary>资源下载时的文件队列（单文件时只有一行）。</summary>
+    public ObservableCollection<InstallFileItem> DownloadFiles => _downloadRows.Items;
+
     public bool CanPage => !IsBusy && Results.Count > 0;
 
     /// <summary>世界存档只有 CurseForge 一个源，选择器不可用。</summary>
@@ -712,6 +724,8 @@ public sealed class ResourceDownloadViewModel : ViewModelBase
         IsBusy = false;
         IsDownloading = false;
         DownloadProgress = 0;
+        DownloadSpeedText = string.Empty;
+        _downloadRows.Clear();
         IsVersionDialogOpen = false;
         IsFileNameDialogOpen = false;
         CancelVersionDialog();
@@ -724,7 +738,8 @@ public sealed class ResourceDownloadViewModel : ViewModelBase
 
     private void BuildSources(ResourceKind kind)
     {
-        var preferred = _selectedSource?.Source;
+        // 首次打开用设置里的默认源；用户在本页切换过后沿用本页的选择。
+        var preferred = _selectedSource?.Source ?? _stack.Config.Settings.DefaultContentSource;
         Sources.Clear();
 
         if (ModrinthService.SupportsDownload(kind))
@@ -1548,6 +1563,8 @@ public sealed class ResourceDownloadViewModel : ViewModelBase
         IsBusy = true;
         IsDownloading = true;
         DownloadProgress = 0;
+        DownloadSpeedText = string.Empty;
+        _downloadRows.Clear();
         VersionDialogStatus = "正在准备下载…";
 
         try
@@ -1565,6 +1582,8 @@ public sealed class ResourceDownloadViewModel : ViewModelBase
                     DownloadProgress = progress.Total > 0
                         ? (double)progress.Completed / progress.Total
                         : 0;
+                    DownloadSpeedText = InstallFileItem.FormatSpeed(progress.BytesPerSecond);
+                    _downloadRows.Update(progress.ActiveFiles);
                     VersionDialogStatus = progress.Stage;
                 }),
                 cts.Token).ConfigureAwait(true);
@@ -1603,6 +1622,8 @@ public sealed class ResourceDownloadViewModel : ViewModelBase
                 _downloadCts = null;
             }
 
+            DownloadSpeedText = string.Empty;
+            _downloadRows.Clear();
             cts.Dispose();
             IsBusy = false;
             IsDownloading = false;
@@ -1625,6 +1646,8 @@ public sealed class ResourceDownloadViewModel : ViewModelBase
         IsBusy = true;
         IsDownloading = true;
         DownloadProgress = 0;
+        DownloadSpeedText = string.Empty;
+        _downloadRows.Clear();
         VersionDialogStatus = "正在准备下载…";
 
         try
@@ -1637,6 +1660,8 @@ public sealed class ResourceDownloadViewModel : ViewModelBase
                     DownloadProgress = progress.Total > 0
                         ? (double)progress.Completed / progress.Total
                         : 0;
+                    DownloadSpeedText = InstallFileItem.FormatSpeed(progress.BytesPerSecond);
+                    _downloadRows.Update(progress.ActiveFiles);
                     VersionDialogStatus = progress.Stage;
                 }),
                 cts.Token).ConfigureAwait(true);
@@ -1667,6 +1692,8 @@ public sealed class ResourceDownloadViewModel : ViewModelBase
                 _downloadCts = null;
             }
 
+            DownloadSpeedText = string.Empty;
+            _downloadRows.Clear();
             cts.Dispose();
             IsBusy = false;
             IsDownloading = false;
@@ -1690,6 +1717,8 @@ public sealed class ResourceDownloadViewModel : ViewModelBase
         IsBusy = true;
         IsDownloading = true;
         DownloadProgress = 0;
+        DownloadSpeedText = string.Empty;
+        _downloadRows.Clear();
         StatusText = $"正在获取 {row.Name} 的文件…";
 
         _downloadCts?.Cancel();
@@ -1731,6 +1760,8 @@ public sealed class ResourceDownloadViewModel : ViewModelBase
                     DownloadProgress = progress.Total > 0
                         ? (double)progress.Completed / progress.Total
                         : 0;
+                    DownloadSpeedText = InstallFileItem.FormatSpeed(progress.BytesPerSecond);
+                    _downloadRows.Update(progress.ActiveFiles);
                     StatusText = progress.Stage;
                 }),
                 cts.Token);
@@ -1768,6 +1799,8 @@ public sealed class ResourceDownloadViewModel : ViewModelBase
                 _downloadCts = null;
             }
 
+            DownloadSpeedText = string.Empty;
+            _downloadRows.Clear();
             cts.Dispose();
             IsBusy = false;
             IsDownloading = false;

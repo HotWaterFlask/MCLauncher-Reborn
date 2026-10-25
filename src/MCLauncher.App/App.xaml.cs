@@ -1,11 +1,11 @@
 using System.IO;
 using System.Windows;
-using System.Windows.Media;
 using MCLauncher.App.Shell;
 using MCLauncher.App.ViewModels;
 using MCLauncher.Core.Abstractions;
 using MCLauncher.Core.Logging;
 using MCLauncher.Core.Services;
+using MCLauncher.Core.Utils;
 
 namespace MCLauncher.App;
 
@@ -40,6 +40,18 @@ public partial class App : Application
             var config = new ConfigService(store, log);
             config.Load();
             config.EnsureKnownGameFolders(AppContext.BaseDirectory);
+            ApplyFirstRunGameWindowSize(config, log);
+
+            // 背景：默认状态下如果启动器目录已有 bgskin，就自动切到目录模式；不会主动创建该目录。
+            var backgroundFolder = BackgroundPicker.FolderPath(AppContext.BaseDirectory);
+            if (!config.Settings.BackgroundModeConfigured
+                && config.Settings.BackgroundMode == BackgroundMode.None
+                && Directory.Exists(backgroundFolder))
+            {
+                config.Settings.BackgroundMode = BackgroundMode.Folder;
+                config.Settings.BackgroundModeConfigured = true;
+                log.Info($"检测到 bgskin 目录，背景图切换为目录模式：{backgroundFolder}");
+            }
 
             Services.RegisterSingleton<ILogger>(log);
             Services.RegisterSingleton<IConfigStore>(store);
@@ -92,11 +104,8 @@ public partial class App : Application
 
             var window = new MainWindow { DataContext = shellViewModel };
 
-            // 背景：启动器目录下的 bgskin 里有图片就随机取一张，否则用内置默认底图。
-            window.Background = new ImageBrush(BackgroundPicker.Pick(AppContext.BaseDirectory, log))
-            {
-                Stretch = Stretch.Fill,
-            };
+            // 背景：按设置加载（默认底图 / bgskin 目录 / 自定义路径 / 网络 URL）。
+            BackgroundPicker.Apply(window, config.Settings, AppContext.BaseDirectory, stack.Downloader, log);
 
             // 显式设置初始尺寸：Window.Width/Height 的绑定在 DataContext 赋值时序上不可靠，
             // 这里直接按配置赋初值，低于最小尺寸时钳到 720×450。
@@ -143,8 +152,44 @@ public partial class App : Application
         }
     }
 
+    /// <summary>设置页保存背景图配置后，立即刷新窗口背景。</summary>
+    public static void RefreshBackground()
+    {
+        if (Current?.MainWindow is not MainWindow window
+            || Stack is null
+            || !Services.TryResolve<ConfigService>(out var config)
+            || config is null)
+        {
+            return;
+        }
+
+        BackgroundPicker.Apply(window, config.Settings, AppContext.BaseDirectory, Stack.Downloader, Log.Default);
+    }
+
     private static string GetConfigDirectory() =>
         Path.Combine(AppContext.BaseDirectory, AppFolderName);
+
+    /// <summary>
+    /// 首次使用（还没有 settings.json）时，按主显示器分辨率挑一个合适的游戏窗口大小。
+    /// 只执行这一次，之后一律以用户在设置里的调整为准。
+    /// </summary>
+    private static void ApplyFirstRunGameWindowSize(ConfigService config, ILogger log)
+    {
+        if (!config.IsFirstRun)
+        {
+            return;
+        }
+
+        var (screenWidth, screenHeight) = DisplayMetrics.PrimaryScreenSize();
+        var (width, height) = DefaultWindowSize.Choose(screenWidth, screenHeight);
+
+        config.Settings.DefaultWidth = width;
+        config.Settings.DefaultHeight = height;
+
+        log.Info(screenWidth > 0 && screenHeight > 0
+            ? $"首次使用：按显示器 {screenWidth}x{screenHeight} 自动设定游戏窗口 {width}x{height}"
+            : $"首次使用：取不到显示器分辨率，游戏窗口使用 {width}x{height}");
+    }
 
     private static string GetLogDirectory() => Path.Combine(GetConfigDirectory(), "logs");
 }

@@ -175,9 +175,12 @@ public sealed class InstanceManageViewModel : ViewModelBase
     private bool _isEngineMode;
     private bool _isServerMode;
     private IReadOnlyList<LocalResource> _allResources = Array.Empty<LocalResource>();
+    private readonly DownloadFileRows _downloadRows = new();
     private string _searchText = string.Empty;
     private string _statusText = string.Empty;
+    private string _downloadSpeedText = string.Empty;
     private bool _isBusy;
+    private bool _isDownloading;
     private bool _isCheckingUpdates;
     private int _scanVersion;
     private IReadOnlyDictionary<string, ResourceUpdateInfo> _updatesByPath =
@@ -390,6 +393,21 @@ public sealed class InstanceManageViewModel : ViewModelBase
     {
         get => _statusText;
         private set => SetProperty(ref _statusText, value);
+    }
+
+    /// <summary>正在下载的资源文件；更新单个资源时队列里只有一行。</summary>
+    public ObservableCollection<InstallFileItem> DownloadFiles => _downloadRows.Items;
+
+    public bool IsDownloading
+    {
+        get => _isDownloading;
+        private set => SetProperty(ref _isDownloading, value);
+    }
+
+    public string DownloadSpeedText
+    {
+        get => _downloadSpeedText;
+        private set => SetProperty(ref _downloadSpeedText, value);
     }
 
     public bool IsBusy
@@ -770,6 +788,9 @@ public sealed class InstanceManageViewModel : ViewModelBase
         var success = false;
 
         IsBusy = true;
+        IsDownloading = true;
+        DownloadSpeedText = string.Empty;
+        _downloadRows.Clear();
         StatusText = $"正在更新 {title}…";
 
         try
@@ -782,7 +803,12 @@ public sealed class InstanceManageViewModel : ViewModelBase
                     InstanceDirectory = _instanceDirectory,
                     ReplacePath = row.Resource.FilePath,
                 },
-                new Progress<InstallProgress>(progress => StatusText = progress.Stage),
+                new Progress<InstallProgress>(progress =>
+                {
+                    StatusText = progress.Stage;
+                    DownloadSpeedText = InstallFileItem.FormatSpeed(progress.BytesPerSecond);
+                    _downloadRows.Update(progress.ActiveFiles);
+                }),
                 CancellationToken.None);
 
             if (result.Success)
@@ -802,6 +828,9 @@ public sealed class InstanceManageViewModel : ViewModelBase
         }
         finally
         {
+            IsDownloading = false;
+            DownloadSpeedText = string.Empty;
+            _downloadRows.Clear();
             IsBusy = false;
         }
 

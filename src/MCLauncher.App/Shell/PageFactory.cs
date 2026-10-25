@@ -12,6 +12,7 @@ public sealed class PageFactory
     public const string HomePageId = "home";
     public const string VersionsPageId = "versions";
     public const string AccountsPageId = "accounts";
+    public const string ConnectPageId = "connect";
     public const string LaunchLogPageId = "log";
     public const string SettingsPageId = "settings";
 
@@ -27,6 +28,7 @@ public sealed class PageFactory
     private SettingsViewModel? _settings;
     private VersionsViewModel? _versions;
     private InstanceManageViewModel? _instanceManage;
+    private ConnectViewModel? _connect;
 
     public PageFactory(LauncherStack stack)
     {
@@ -38,6 +40,7 @@ public sealed class PageFactory
         new NavItem(HomePageId, "首页", "\uE80F"),
         new NavItem(AccountsPageId, "账号", "\uE77B"),
         new NavItem(VersionsPageId, "实例列表", "\uE896"),
+        new NavItem(ConnectPageId, "联机", "\uE774"),
         new NavItem(LaunchLogPageId, "启动日志", "\uE9D9"),
         new NavItem(SettingsPageId, "设置", "\uE713"),
     };
@@ -58,6 +61,7 @@ public sealed class PageFactory
     {
         VersionsPageId => Versions,
         AccountsPageId => new AccountsViewModel(_stack),
+        ConnectPageId => Connect,
         LaunchLogPageId => new LaunchLogViewModel(_stack),
         SettingsPageId => Settings,
         InstanceManagePageId => InstanceManage,
@@ -107,6 +111,8 @@ public sealed class PageFactory
         _home ??= new HomeViewModel(_stack, OpenInstanceSettings, () => Navigate(AccountsPageId));
 
     private SettingsViewModel Settings => _settings ??= new SettingsViewModel(_stack);
+
+    private ConnectViewModel Connect => _connect ??= new ConnectViewModel(_stack, LaunchWithServer);
 
     private VersionsViewModel Versions => _versions ??= new VersionsViewModel(
         _stack, OpenGlobalSettings, OpenInstanceSettings, LaunchFromVersions, OpenInstanceManage);

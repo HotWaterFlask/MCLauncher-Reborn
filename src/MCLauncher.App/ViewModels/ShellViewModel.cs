@@ -20,6 +20,9 @@ public sealed class NavItem
 
     /// <summary>图标字形（Segoe MDL2 Assets 或普通字符）。</summary>
     public string Glyph { get; }
+
+    /// <summary>列表项的自动化名称；屏幕阅读器与 UI 测试都依赖它。</summary>
+    public override string ToString() => Title;
 }
 
 /// <summary>

@@ -60,14 +60,29 @@ public sealed class AuthlibInjectorService
                 "BMCLAPI"),
         };
 
-        var outcome = await _downloader
-            .DownloadAsync(candidates, target, FileChecker.ExistenceOnly, null, ct)
+        var batch = new DownloadBatch(_downloader, _log);
+        var result = await batch
+            .RunAsync(
+                new[]
+                {
+                    new DownloadRequest
+                    {
+                        Name = fileName,
+                        Candidates = candidates,
+                        TargetPath = target,
+                        Checker = FileChecker.ExistenceOnly,
+                    },
+                },
+                1,
+                null,
+                ct)
             .ConfigureAwait(false);
 
-        if (!outcome.Success || !File.Exists(target) || new FileInfo(target).Length < MinimumJarSize)
+        if (!result.Success || !File.Exists(target) || new FileInfo(target).Length < MinimumJarSize)
         {
+            var error = result.Failures.Count > 0 ? result.Failures[0].Error : "文件不完整";
             throw new AuthlibAuthException(
-                $"下载 authlib-injector 失败：{outcome.Error ?? "文件不完整"}。请检查网络后重试");
+                $"下载 authlib-injector 失败：{error}。请检查网络后重试");
         }
 
         _log.Info($"authlib-injector 已就绪：{target}");

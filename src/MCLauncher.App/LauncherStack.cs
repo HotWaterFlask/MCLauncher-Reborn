@@ -1,4 +1,5 @@
 using System.IO;
+using MCLauncher.Core.Connect;
 using MCLauncher.Core.Logging;
 using MCLauncher.Core.Models;
 using MCLauncher.Core.Network;
@@ -120,6 +121,15 @@ public sealed class LauncherStack : IDisposable
 
     public required ResourceUpdateService ResourceUpdates { get; init; }
 
+    /// <summary>好友直连房间。</summary>
+    public required DirectConnectService DirectConnect { get; init; }
+
+    /// <summary>樱花穿透 frpc。</summary>
+    public required FrpService Frp { get; init; }
+
+    /// <summary>陶瓦联机官方工具。</summary>
+    public required TerracottaService Terracotta { get; init; }
+
     /// <summary>启动日志缓冲（界面绑定）。</summary>
     public LaunchLogBuffer LaunchLog { get; } = new();
 
@@ -139,11 +149,19 @@ public sealed class LauncherStack : IDisposable
         var downloader = new HttpDownloader(log);
         var resolver = new DownloadSourceResolver(log)
         {
-            PreferMirror = config.Settings.PreferMirror,
+            VersionListSource = config.Settings.VersionListSource,
+            FileSource = config.Settings.FileSource,
             MirrorBase = string.IsNullOrWhiteSpace(config.Settings.MirrorBase)
                 ? DownloadSourceResolver.DefaultMirrorBase
                 : config.Settings.MirrorBase!,
         };
+
+        // 「自动选择下载源」要依据镜像连通性决定候选顺序：后台探测，不阻塞启动。
+        if (config.Settings.VersionListSource == DownloadSourcePreference.Auto
+            || config.Settings.FileSource == DownloadSourcePreference.Auto)
+        {
+            _ = ProbeMirrorAsync(downloader, resolver, log);
+        }
 
         var batch = new DownloadBatch(downloader, log);
         var repository = new VersionRepository(new VersionResolver(log), log);
@@ -190,6 +208,9 @@ public sealed class LauncherStack : IDisposable
             Modrinth = new ModrinthService(downloader, resolver, log),
             ResourceDownloads = new ResourceDownloadService(downloader, resolver, log),
             ResourceUpdates = new ResourceUpdateService(curseForge, log),
+            DirectConnect = new DirectConnectService(log),
+            Frp = new FrpService(log, config.ConfigDirectory),
+            Terracotta = new TerracottaService(log, config.ConfigDirectory),
         };
     }
 
@@ -561,9 +582,44 @@ public sealed class LauncherStack : IDisposable
         DownloadAssets = true,
         ExtractNatives = true,
         CreateLauncherProfiles = true,
-        MaxParallel = 16,
+        MaxParallel = Config.Settings.EffectiveDownloadThreads,
         VerifyExisting = true,
     };
 
-    public void Dispose() => Downloader.Dispose();
+    /// <summary>
+    /// 探测 BMCLAPI 是否可达，供「自动选择下载源」决定候选顺序。
+    /// 只读取版本清单（很小），探测失败只影响排序，不阻塞任何下载。
+    /// </summary>
+    private static async Task ProbeMirrorAsync(
+        HttpDownloader downloader,
+        DownloadSourceResolver resolver,
+        Core.Abstractions.ILogger log)
+    {
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            var candidates = new[]
+            {
+                new DownloadCandidate(
+                    resolver.MirrorBase + "/mc/game/version_manifest_v2.json", "BMCLAPI"),
+            };
+
+            await downloader.GetStringAsync(candidates, cts.Token).ConfigureAwait(false);
+            resolver.SetMirrorReachable(true);
+            log.Info("镜像源探测成功，自动模式优先使用镜像");
+        }
+        catch (Exception ex)
+        {
+            resolver.SetMirrorReachable(false);
+            log.Warn("镜像源探测失败，自动模式改用官方源", ex);
+        }
+    }
+
+    public void Dispose()
+    {
+        Terracotta.Dispose();
+        Frp.Dispose();
+        DirectConnect.Dispose();
+        Downloader.Dispose();
+    }
 }

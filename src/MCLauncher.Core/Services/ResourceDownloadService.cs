@@ -181,31 +181,27 @@ public sealed class ResourceDownloadService
     {
         var fileName = Path.GetFileName(file.FileName);
 
+        var requests = new[]
+        {
+            new DownloadRequest
+            {
+                Name = fileName,
+                Candidates = _resolver.Resolve(file.DownloadUrl!, DownloadUrlKind.ModPlatform),
+                TargetPath = tempPath,
+                Checker = FileChecker.Of(file.Sha1, file.FileLength),
+            },
+        };
+
+        var batch = new DownloadBatch(_downloader, _log);
         var progressAdapter = progress is null
             ? null
-            : new InlineProgress<DownloadProgress>(value =>
-            {
-                progress.Report(new InstallProgress
-                {
-                    Stage = "下载 " + fileName,
-                    Completed = (int)Math.Round((value.Fraction ?? 0) * 100),
-                    Total = 100,
-                    DownloadedBytes = value.BytesReceived,
-                    TotalBytes = value.TotalBytes,
-                    Current = fileName,
-                });
-            });
+            : new InlineProgress<DownloadBatchProgress>(value =>
+                progress.Report(ToInstallProgress("下载 " + fileName, value)));
 
-        DownloadOutcome outcome;
+        DownloadBatchResult batchResult;
         try
         {
-            outcome = await _downloader.DownloadAsync(
-                    _resolver.Resolve(file.DownloadUrl!, DownloadUrlKind.ModPlatform),
-                    tempPath,
-                    FileChecker.Of(file.Sha1, file.FileLength),
-                    progressAdapter,
-                    ct)
-                .ConfigureAwait(false);
+            batchResult = await batch.RunAsync(requests, 1, progressAdapter, ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -217,9 +213,12 @@ public sealed class ResourceDownloadService
             return ResourceDownloadResult.Fail("下载失败：" + ex.Message);
         }
 
-        if (!outcome.Success)
+        if (!batchResult.Success)
         {
-            return ResourceDownloadResult.Fail("下载失败：" + (outcome.Error ?? "没有可用的下载源"));
+            var error = batchResult.Failures.Count > 0
+                ? batchResult.Failures[0].Error
+                : "没有可用的下载源";
+            return ResourceDownloadResult.Fail("下载失败：" + error);
         }
 
         try
@@ -248,32 +247,33 @@ public sealed class ResourceDownloadService
 
         try
         {
+            var requests = new[]
+            {
+                new DownloadRequest
+                {
+                    Name = request.File.FileName,
+                    Candidates = _resolver.Resolve(request.File.DownloadUrl!, DownloadUrlKind.ModPlatform),
+                    TargetPath = tempZip,
+                    Checker = FileChecker.Of(request.File.Sha1, request.File.FileLength),
+                },
+            };
+
+            var batch = new DownloadBatch(_downloader, _log);
             var progressAdapter = progress is null
                 ? null
-                : new InlineProgress<DownloadProgress>(value =>
-                {
-                    progress.Report(new InstallProgress
-                    {
-                        Stage = "下载 " + request.File.FileName,
-                        Completed = (int)Math.Round((value.Fraction ?? 0) * 100),
-                        Total = 100,
-                        DownloadedBytes = value.BytesReceived,
-                        TotalBytes = value.TotalBytes,
-                        Current = request.File.FileName,
-                    });
-                });
+                : new InlineProgress<DownloadBatchProgress>(value =>
+                    progress.Report(ToInstallProgress("下载 " + request.File.FileName, value)));
 
-            var outcome = await _downloader.DownloadAsync(
-                    _resolver.Resolve(request.File.DownloadUrl!, DownloadUrlKind.ModPlatform),
-                    tempZip,
-                    FileChecker.Of(request.File.Sha1, request.File.FileLength),
-                    progressAdapter,
-                    ct)
+            var batchResult = await batch
+                .RunAsync(requests, 1, progressAdapter, ct)
                 .ConfigureAwait(false);
 
-            if (!outcome.Success)
+            if (!batchResult.Success)
             {
-                return ResourceDownloadResult.Fail("下载失败：" + (outcome.Error ?? "没有可用的下载源"));
+                var error = batchResult.Failures.Count > 0
+                    ? batchResult.Failures[0].Error
+                    : "没有可用的下载源";
+                return ResourceDownloadResult.Fail("下载失败：" + error);
             }
 
             progress?.Report(new InstallProgress { Stage = "解压存档", Completed = 0, Total = 1 });
@@ -315,6 +315,19 @@ public sealed class ResourceDownloadService
             TryDeleteFile(tempZip);
         }
     }
+
+    /// <summary>把批量下载进度转成界面统一的安装进度（单文件下载也走同一模型）。</summary>
+    private static InstallProgress ToInstallProgress(string stage, DownloadBatchProgress progress) => new()
+    {
+        Stage = stage,
+        Completed = progress.Completed + progress.Skipped,
+        Total = progress.Total,
+        DownloadedBytes = progress.DownloadedBytes,
+        TotalBytes = progress.TotalBytes,
+        Current = progress.Current,
+        ActiveFiles = progress.ActiveFiles,
+        BytesPerSecond = progress.BytesPerSecond,
+    };
 
     /// <summary>
     /// 在解压目录里找真正的存档根：优先根目录的 level.dat，其次一层子目录里的 level.dat。

@@ -130,6 +130,10 @@ public sealed class InstallFileItem : ViewModelBase
 
         return unit == 0 ? $"{value:0} B" : $"{value:0.0} {units[unit]}";
     }
+
+    /// <summary>下载速度文案；速度为 0 时返回空串，界面据此折叠。</summary>
+    public static string FormatSpeed(double bytesPerSecond) =>
+        bytesPerSecond > 0 ? $"下载速度 {FormatBytes(bytesPerSecond)}/s" : string.Empty;
 }
 
 /// <summary>
@@ -157,6 +161,7 @@ public sealed class VersionsViewModel : ViewModelBase
     private string _searchText = string.Empty;
     private string _statusText = "选择左侧游戏目录查看实例。";
     private double _progress;
+    private string _progressSpeedText = string.Empty;
     private bool _isBusy;
 
     private bool _isInstallDialogOpen;
@@ -190,6 +195,9 @@ public sealed class VersionsViewModel : ViewModelBase
     private string _modpackUrlStatus = string.Empty;
     private bool _isModpackDownloading;
     private double _modpackDownloadProgress;
+    private string _modpackDownloadSpeedText = string.Empty;
+    private string _modpackSpeedText = string.Empty;
+    private readonly DownloadFileRows _modpackRows = new();
     private CancellationTokenSource? _modpackDownloadCts;
 
     private bool _suppressStackChanged;
@@ -340,6 +348,13 @@ public sealed class VersionsViewModel : ViewModelBase
     {
         get => _progress;
         private set => SetProperty(ref _progress, value);
+    }
+
+    /// <summary>实例页底部补全时的实时下载速度文案。</summary>
+    public string ProgressSpeedText
+    {
+        get => _progressSpeedText;
+        private set => SetProperty(ref _progressSpeedText, value);
     }
 
     public bool IsBusy
@@ -573,6 +588,13 @@ public sealed class VersionsViewModel : ViewModelBase
         private set => SetProperty(ref _modpackDownloadProgress, value);
     }
 
+    /// <summary>整合包链接下载的实时速度文案。</summary>
+    public string ModpackDownloadSpeedText
+    {
+        get => _modpackDownloadSpeedText;
+        private set => SetProperty(ref _modpackDownloadSpeedText, value);
+    }
+
     public bool CanDownloadModpackUrl =>
         !IsModpackDownloading && !string.IsNullOrWhiteSpace(_modpackUrl);
 
@@ -625,6 +647,16 @@ public sealed class VersionsViewModel : ViewModelBase
         get => _modpackProgress;
         private set => SetProperty(ref _modpackProgress, value);
     }
+
+    /// <summary>整合包安装时的实时下载速度文案。</summary>
+    public string ModpackSpeedText
+    {
+        get => _modpackSpeedText;
+        private set => SetProperty(ref _modpackSpeedText, value);
+    }
+
+    /// <summary>整合包下载 / 安装时的文件队列（单文件时只有一行）。</summary>
+    public ObservableCollection<InstallFileItem> ModpackFiles => _modpackRows.Items;
 
     public bool CanConfirmModpack =>
         !IsModpackInstalling &&
@@ -970,6 +1002,7 @@ public sealed class VersionsViewModel : ViewModelBase
 
         IsBusy = true;
         Progress = 0;
+        ProgressSpeedText = string.Empty;
         StatusText = $"正在校验并补全 {row.Display} …";
 
         try
@@ -979,6 +1012,7 @@ public sealed class VersionsViewModel : ViewModelBase
                 new Progress<InstallProgress>(p =>
                 {
                     Progress = p.Fraction;
+                    ProgressSpeedText = InstallFileItem.FormatSpeed(p.BytesPerSecond);
                     StatusText = p.Total > 0
                         ? $"{p.Stage} {p.Completed}/{p.Total}"
                         : p.Stage;
@@ -996,6 +1030,7 @@ public sealed class VersionsViewModel : ViewModelBase
         finally
         {
             Progress = 1;
+            ProgressSpeedText = string.Empty;
             IsBusy = false;
         }
     }
@@ -1389,9 +1424,7 @@ public sealed class VersionsViewModel : ViewModelBase
         InstallProgress = progress.Fraction;
         UpdateInstallFiles(progress.ActiveFiles);
 
-        InstallSpeedText = progress.BytesPerSecond > 0
-            ? $"下载速度 {InstallFileItem.FormatBytes(progress.BytesPerSecond)}/s"
-            : string.Empty;
+        InstallSpeedText = InstallFileItem.FormatSpeed(progress.BytesPerSecond);
 
         if (progress.Total > 0)
         {
@@ -1548,6 +1581,8 @@ public sealed class VersionsViewModel : ViewModelBase
 
         IsModpackDownloading = true;
         ModpackDownloadProgress = 0;
+        ModpackDownloadSpeedText = string.Empty;
+        _modpackRows.Clear();
         ModpackUrlStatus = "正在下载整合包…";
 
         try
@@ -1564,6 +1599,8 @@ public sealed class VersionsViewModel : ViewModelBase
                     ModpackDownloadProgress = progress.Total > 0
                         ? (double)progress.Completed / progress.Total
                         : 0;
+                    ModpackDownloadSpeedText = InstallFileItem.FormatSpeed(progress.BytesPerSecond);
+                    _modpackRows.Update(progress.ActiveFiles);
                     ModpackUrlStatus = progress.Stage;
                 }),
                 cts.Token);
@@ -1592,6 +1629,9 @@ public sealed class VersionsViewModel : ViewModelBase
             {
                 _modpackDownloadCts = null;
             }
+
+            ModpackDownloadSpeedText = string.Empty;
+            _modpackRows.Clear();
 
             cts.Dispose();
             IsModpackDownloading = false;
@@ -1672,6 +1712,7 @@ public sealed class VersionsViewModel : ViewModelBase
 
         IsModpackInstalling = true;
         ModpackProgress = 0;
+        _modpackRows.Clear();
         ModpackStatus = "准备安装…";
 
         try
@@ -1792,6 +1833,8 @@ public sealed class VersionsViewModel : ViewModelBase
         }
         finally
         {
+            ModpackSpeedText = string.Empty;
+            _modpackRows.Clear();
             IsModpackInstalling = false;
         }
     }
@@ -1799,6 +1842,8 @@ public sealed class VersionsViewModel : ViewModelBase
     private void ReportModpackProgress(InstallProgress progress)
     {
         ModpackProgress = progress.Fraction;
+        ModpackSpeedText = InstallFileItem.FormatSpeed(progress.BytesPerSecond);
+        _modpackRows.Update(progress.ActiveFiles);
 
         if (progress.Total > 0)
         {
@@ -1823,6 +1868,9 @@ public sealed class VersionsViewModel : ViewModelBase
         IsModpackUrlDialogOpen = false;
         IsModpackDownloading = false;
         ModpackDownloadProgress = 0;
+        ModpackDownloadSpeedText = string.Empty;
+        ModpackSpeedText = string.Empty;
+        _modpackRows.Clear();
         Download.Close();
         OnPropertyChanged(nameof(IsAnyDialogOpen));
     }

@@ -1,7 +1,24 @@
 using System.Text.Json.Serialization;
 using MCLauncher.Core.Models;
+using MCLauncher.Core.Network;
 
 namespace MCLauncher.Core.Services;
+
+/// <summary>窗口背景图来源。</summary>
+public enum BackgroundMode
+{
+    /// <summary>默认底图（三种背景模式都未启用）。</summary>
+    None,
+
+    /// <summary>启动器目录下的 <c>bgskin</c> 目录，每次启动随机取一张。</summary>
+    Folder,
+
+    /// <summary>自定义目录（随机取图）或单张图片文件。</summary>
+    Custom,
+
+    /// <summary>从网络 URL 下载，每次启动重新拉取。</summary>
+    Network,
+}
 
 /// <summary>启动器全局设置。序列化到 %LOCALAPPDATA%\MCLauncher-Reborn\settings.json。</summary>
 public sealed class AppSettings
@@ -17,6 +34,18 @@ public sealed class AppSettings
     /// <summary>窗口高度（默认 450）。</summary>
     public int WindowHeight { get; set; } = 450;
 
+    /// <summary>窗口背景图来源；默认使用内置底图。</summary>
+    public BackgroundMode BackgroundMode { get; set; } = BackgroundMode.None;
+
+    /// <summary>用户是否明确选择过背景模式；未选择过时才按 bgskin 目录自动切换。</summary>
+    public bool BackgroundModeConfigured { get; set; }
+
+    /// <summary>自定义背景：目录（随机取图）或单张图片路径。</summary>
+    public string? BackgroundCustomPath { get; set; }
+
+    /// <summary>网络背景图直链；使用随机图片 API 时每次启动都会重新拉取。</summary>
+    public string? BackgroundUrl { get; set; }
+
     // ---- 游戏目录与实例 ----
     public List<string> GameFolders { get; set; } = new();
 
@@ -25,8 +54,31 @@ public sealed class AppSettings
     public string? SelectedInstanceId { get; set; }
 
     // ---- 下载 ----
-    /// <summary>是否优先使用镜像源（BMCLAPI）。</summary>
-    public bool PreferMirror { get; set; } = true;
+    /// <summary>版本清单、版本 JSON 的下载源偏好。</summary>
+    public DownloadSourcePreference VersionListSource { get; set; } = DownloadSourcePreference.Auto;
+
+    /// <summary>客户端、依赖库、资源对象等游戏文件的下载源偏好。</summary>
+    public DownloadSourcePreference FileSource { get; set; } = DownloadSourcePreference.Auto;
+
+    /// <summary>模组 / 资源包 / 光影等附加内容的默认检索与下载源。</summary>
+    public ResourceSource DefaultContentSource { get; set; } = ResourceSource.Modrinth;
+
+    /// <summary>是否自动选择下载并发数。</summary>
+    public bool AutoDownloadThreads { get; set; } = true;
+
+    /// <summary>自定义下载并发数（仅在关闭自动选择时生效）。</summary>
+    public int DownloadThreads { get; set; } = AutoThreadCount;
+
+    /// <summary>自动模式使用的下载并发数。</summary>
+    public const int AutoThreadCount = 16;
+
+    /// <summary>自定义下载并发数的上限。</summary>
+    public const int MaxThreadCount = 64;
+
+    /// <summary>实际生效的下载并发数。</summary>
+    [JsonIgnore]
+    public int EffectiveDownloadThreads =>
+        AutoDownloadThreads ? AutoThreadCount : Math.Clamp(DownloadThreads, 1, MaxThreadCount);
 
     /// <summary>自定义镜像根地址，为空时用内置默认值。</summary>
     public string? MirrorBase { get; set; }
@@ -68,6 +120,16 @@ public sealed class AppSettings
 
     /// <summary>已添加的外置登录认证服务器（默认带 LittleSkin）。</summary>
     public List<AuthServerEntry> AuthServers { get; set; } = new() { AuthServerEntry.LittleSkin() };
+
+    // ---- 联机 ----
+    /// <summary>樱花穿透访问密钥（玩家自备，只保存在本地设置里）。</summary>
+    public string? FrpAccessKey { get; set; }
+
+    /// <summary>樱花穿透隧道 ID。</summary>
+    public string? FrpTunnelId { get; set; }
+
+    /// <summary>陶瓦联机展示给其他玩家的名字；为空时用当前账号名。</summary>
+    public string? TerracottaPlayerName { get; set; }
 
     // ---- 凭据（均不由仓库分发，缺失时界面引导）----
     /// <summary>微软登录用 Azure 应用客户端 ID。</summary>

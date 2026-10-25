@@ -280,6 +280,17 @@
                                    TextTrimming="CharacterEllipsis" ToolTip="{Binding StatusText}"/>
                     </Border>
 
+                    <!-- 更新资源时的下载队列；单文件下载时队列里只有一行 -->
+                    <Border DockPanel.Dock="Bottom" Padding="10,6" Background="#FBFBFB"
+                            BorderBrush="{StaticResource ContentBorderBrush}" BorderThickness="0,1,0,0"
+                            Visibility="{Binding IsDownloading, Converter={StaticResource BoolToVis}}">
+                        <StackPanel>
+                            <ItemsControl ItemsSource="{Binding DownloadFiles}"
+                                          ItemTemplate="{StaticResource DownloadFileRowTemplate}"/>
+                            <TextBlock Text="{Binding DownloadSpeedText}" Style="{StaticResource SpeedText}"/>
+                        </StackPanel>
+                    </Border>
+
                     <Grid>
                         <ListBox ItemsSource="{Binding Items}"
                                  Background="Transparent" BorderThickness="0"

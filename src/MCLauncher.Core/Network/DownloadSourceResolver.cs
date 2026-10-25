@@ -2,6 +2,19 @@ using MCLauncher.Core.Abstractions;
 
 namespace MCLauncher.Core.Network;
 
+/// <summary>下载源偏好。</summary>
+public enum DownloadSourcePreference
+{
+    /// <summary>自动：探测镜像是否可用，可用时镜像优先，否则官方优先。</summary>
+    Auto,
+
+    /// <summary>尽量使用官方源，失败后回退镜像。</summary>
+    Official,
+
+    /// <summary>尽量使用镜像源，失败后回退官方。</summary>
+    Mirror,
+}
+
 /// <summary>
 /// 把一个官方下载地址展开成「官方 + 镜像」的候选列表。
 /// <para>
@@ -43,8 +56,25 @@ public sealed class DownloadSourceResolver
     /// <summary>Mod 平台镜像根地址。</summary>
     public string ModMirrorBase { get; set; } = DefaultModMirrorBase;
 
-    /// <summary>是否优先使用镜像源；关闭时官方源排第一。</summary>
-    public bool PreferMirror { get; set; } = true;
+    /// <summary>版本清单、版本 JSON 这类元数据使用的源。</summary>
+    public DownloadSourcePreference VersionListSource { get; set; } = DownloadSourcePreference.Auto;
+
+    /// <summary>客户端 jar、依赖库、资源对象等游戏文件使用的源。</summary>
+    public DownloadSourcePreference FileSource { get; set; } = DownloadSourcePreference.Auto;
+
+    private int _mirrorProbeState; // 0 = 未探测，1 = 可用，2 = 不可用
+
+    /// <summary>Auto 模式下的镜像探测结果；<c>null</c> 表示尚未探测。</summary>
+    public bool? MirrorReachable => Volatile.Read(ref _mirrorProbeState) switch
+    {
+        1 => true,
+        2 => false,
+        _ => null,
+    };
+
+    /// <summary>记录 Auto 模式下的镜像探测结果。</summary>
+    public void SetMirrorReachable(bool reachable) =>
+        Volatile.Write(ref _mirrorProbeState, reachable ? 1 : 2);
 
     /// <summary>
     /// 展开候选源。<paramref name="versionId"/> 仅在 <see cref="DownloadUrlKind.Client"/> 时使用，
@@ -68,7 +98,7 @@ public sealed class DownloadSourceResolver
         var mirrors = BuildMirrors(officialUrl, kind, versionId);
 
         // Mod 平台镜像不稳定，官方永远排第一。
-        var officialFirst = !PreferMirror || kind == DownloadUrlKind.ModPlatform;
+        var officialFirst = kind == DownloadUrlKind.ModPlatform || !ShouldPreferMirror(kind);
 
         var result = new List<DownloadCandidate>(mirrors.Count + 1);
         if (officialFirst)
@@ -90,6 +120,21 @@ public sealed class DownloadSourceResolver
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// 该类别是否优先镜像。元数据跟随「版本列表源」，其余游戏文件跟随「下载源」；
+    /// Auto 尚未探测出结果时按镜像可用处理，探测失败后才改为官方优先。
+    /// </summary>
+    private bool ShouldPreferMirror(DownloadUrlKind kind)
+    {
+        var preference = kind == DownloadUrlKind.Metadata ? VersionListSource : FileSource;
+        return preference switch
+        {
+            DownloadSourcePreference.Official => false,
+            DownloadSourcePreference.Mirror => true,
+            _ => MirrorReachable != false,
+        };
     }
 
     private List<DownloadCandidate> BuildMirrors(string url, DownloadUrlKind kind, string? versionId)

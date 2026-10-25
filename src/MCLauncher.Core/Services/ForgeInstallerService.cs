@@ -70,19 +70,29 @@ public sealed class ForgeInstallerService
             return path;
         }
 
-        var outcome = await _downloader
-            .DownloadAsync(
-                _resolver.Resolve(installerUrl, DownloadUrlKind.ModLoaderInstaller),
-                path,
-                FileChecker.ExistenceOnly,
+        var batch = new DownloadBatch(_downloader, _log);
+        var result = await batch
+            .RunAsync(
+                new[]
+                {
+                    new DownloadRequest
+                    {
+                        Name = fileName,
+                        Candidates = _resolver.Resolve(installerUrl, DownloadUrlKind.ModLoaderInstaller),
+                        TargetPath = path,
+                        Checker = FileChecker.ExistenceOnly,
+                    },
+                },
+                1,
                 null,
                 ct)
             .ConfigureAwait(false);
 
-        if (!outcome.Success)
+        if (!result.Success)
         {
+            var error = result.Failures.Count > 0 ? result.Failures[0].Error : "没有可用的下载源";
             throw new InvalidOperationException(
-                $"下载 {ModLoaderService.DisplayName(kind)} 安装器失败：{outcome.Error}");
+                $"下载 {ModLoaderService.DisplayName(kind)} 安装器失败：{error}");
         }
 
         return path;
@@ -688,19 +698,29 @@ public sealed class ForgeInstallerService
                 $"{gameVersion} 缺少客户端 jar，也没有可用于下载的路径");
         }
 
-        var outcome = await _downloader
-            .DownloadAsync(
-                _resolver.Resolve(url, DownloadUrlKind.Client, gameVersion),
-                target,
-                checker,
+        var batch = new DownloadBatch(_downloader, _log);
+        var result = await batch
+            .RunAsync(
+                new[]
+                {
+                    new DownloadRequest
+                    {
+                        Name = $"{gameVersion} 客户端 jar",
+                        Candidates = _resolver.Resolve(url, DownloadUrlKind.Client, gameVersion),
+                        TargetPath = target,
+                        Checker = checker,
+                    },
+                },
+                1,
                 null,
                 ct)
             .ConfigureAwait(false);
 
-        if (!outcome.Success)
+        if (!result.Success)
         {
+            var error = result.Failures.Count > 0 ? result.Failures[0].Error : "没有可用的下载源";
             throw new InvalidOperationException(
-                $"下载 {gameVersion} 客户端 jar 失败：{outcome.Error}");
+                $"下载 {gameVersion} 客户端 jar 失败：{error}");
         }
 
         return target;
