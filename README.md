@@ -1,44 +1,111 @@
 # MCLauncher Reborn
 
-一个从零实现的 **Minecraft: Java Edition** 第三方启动器，Windows 桌面端，基于 **.NET 10 + WPF**。
+一个从零实现的 **Minecraft: Java Edition** 第三方启动器，面向 Windows 桌面端，基于 **.NET 10 + WPF**。
 
-> 项目处于开发阶段。核心链路「下载 → 校验 → 安装 → 启动 → 登录 → 加载器」已打通，核心逻辑有自动化测试覆盖。
+界面延续原「忘却的旋律 Minecraft 启动器 5.31」的视觉标识——无边框窗口、铺满整窗的背景皮肤、贴角关闭按钮与左下角署名；信息架构扩展为「左侧导航 + 右侧内容区」的多页面布局。
+
+> **当前版本 6.0.0（Reborn）· 开发收尾阶段**
+>
+> 主要功能已全部接入界面，核心链路「下载 → 校验 → 安装 → 启动 → 登录 → 加载器 → 联机」已打通，核心逻辑有自动化测试覆盖。目前正在做稳定性、兼容性与界面细节打磨；尚未提供安装包、代码签名与自动更新，发布形式为单文件 exe。
 
 ![平台](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4)
 ![框架](https://img.shields.io/badge/.NET-10.0-512BD4)
+![版本](https://img.shields.io/badge/version-6.0.0-orange)
 
 ---
 
 ## 功能
 
-### 已接入界面
+### 页面一览
 
-| 页面 | 能力 |
+| 页面 | 主要能力 |
 |---|---|
-| **首页** | 已安装版本下拉选择、一键补全文件、启动游戏、打开游戏目录；顶部横向选项卡导航，窗口可自由缩放 |
-| **版本管理** | 拉取官方版本清单（正式版 / 快照 / 远古版本）、在线搜索过滤、下载安装、补全缺失文件、版本隔离开关、下载源选择（官方 / BMCLAPI 镜像）、Fabric / Quilt / Forge / NeoForge 加载器安装 |
-| **账号** | 离线账号（按协议派生 UUID）、微软正版登录（设备码流程，验证码可一键复制）、账号切换与删除 |
-| **启动日志** | 实时查看启动输出与退出码，定位游戏崩溃 |
-| **设置** | Java 自动探测与手动指定、内存与额外 JVM/游戏参数、游戏窗口类型与分辨率（预设或直接输入）、版本隔离默认值、微软客户端 ID、CurseForge API Key |
+| **首页** | 当前账号与实例、启动游戏、更新游戏、打开目录；启动后显示进度与实时输出，检测到游戏主窗口后自动收起；崩溃时弹出全屏分析覆盖层 |
+| **账号** | 离线、微软（正版）、外置登录三种账号；表格展示头像 / 游戏 ID / Xbox 用户名 / 类型 / 当前标记；支持设为当前与删除，微软账号支持皮肤个性化 |
+| **实例列表** | 多游戏目录管理；安装原版与 Forge / NeoForge / Fabric / Quilt；本地或链接安装整合包；启动、管理、打开目录、校验补全、删除、设为当前 |
+| **实例管理** | 模组、资源包、光影包、世界、原理图、服务器的管理；在线检索下载、启用 / 禁用、导入 / 删除、更新与备份；独立的游戏设置与引擎管理 |
+| **联机** | 好友直连、樱花穿透、陶瓦联机三种方式，以及按地址直接加入；支持自动启动对应实例进服 |
+| **启动日志** | 实时查看游戏输出、退出码与崩溃报告 |
+| **设置** | 游戏目录、下载源、下载线程、背景图、Java、内存、游戏窗口、附加参数、版本隔离与配置位置 |
 
-### 核心层已实现（界面接入中）
+### 启动与安装
 
-- **实例管理**：扫描 `versions\*`、每实例隔离目录、重命名/删除、游戏目录多开
-- **资源管理**：Mod / 资源包 / 光影包 / 数据包 / 世界存档 / 原理图 的扫描、元数据解析、启用禁用（重命名 `.disabled`）、导入与删除
-- **整合包导入**：MCBBS、MultiMC/Prism(`mmc-pack.json`)、Modrinth、CurseForge、普通压缩包 的格式识别与安装；`.rar` 会明确提示转 zip
+- **原版安装**：从官方版本清单安装，支持正式版、快照与远古版本；自动下载客户端、依赖库、资源文件与 natives。
+- **加载器**：Forge / NeoForge 自行实现官方 installer 的 processors 流程；Fabric / Quilt 通过官方元数据安装。安装完成后合并为单个自洽实例，卸载时还原为继承原版并保留 mods、存档等用户数据。
+- **整合包**：支持本地文件与下载链接，识别 MCBBS、MultiMC / Prism、Modrinth、CurseForge 等格式；安装时创建独立实例，不影响当前实例。
+- **校验补全**：按版本 JSON 检查缺失或损坏的文件并重新下载。
+- **版本隔离**：每个实例可独立存放 mods、存档与配置；可在全局与实例两级设置。
+- **启动参数**：自动匹配 Java，支持内存、JVM 参数、游戏参数、窗口类型与尺寸；首次启动按主显示器分辨率选择窗口大小，之后可在设置中调整。
+- **首次使用**：内置初始化引导，逐步完成账号、Java 与内存设置。
 
-### 尚未实现
+### 资源与实例
 
-- 在线资源检索（Modrinth 检索 UI；CurseForge 需 API Key）
-- 资源管理 / 整合包导入的独立页面（Core 已完成）
+- **实例管理**：模组、资源包、光影包、世界、原理图与服务器六类内容管理，支持启用 / 禁用、导入、删除、检查更新与备份。
+- **在线资源**：默认使用 Modrinth，可切换 CurseForge；支持按游戏版本与加载器筛选、查看前置依赖并安装。世界存档仅通过 CurseForge 检索。
+- **服务器管理**：直接读写实例的 `servers.dat`，与游戏内多人游戏列表互通，可添加、删除、排序并一键启动进服。
+- **引擎管理**：查看并安装 / 卸载 Forge、NeoForge、Fabric、Quilt；安装基于当前实例创建新实例，不修改原实例。
+- **下载调度**：所有文件统一进入下载队列，实时显示整体进度与网速；失败自动切换候选源，支持断点续传与哈希校验。
+
+### 账号
+
+- **离线账号**：无需密码，UUID 按协议从玩家名派生；头像按 UUID 从内置默认皮肤中选取。
+- **微软账号**：OAuth 2.0 设备码流程，打开验证页前自动复制验证码；优先加载真实皮肤，失败时回退默认头像。
+- **外置登录**：基于 authlib-injector，默认内置 LittleSkin；启动前自动校验令牌，失效时自动续期。
+- 账号列表采用表格布局，双击可设为当前账号；微软账号支持皮肤个性化。
+
+### 联机
+
+- **好友直连**：从游戏日志自动识别「对局域网开放」端口，提供公网 IPv6 / 公网 IPv4 / 局域网地址；可选 UPnP 映射，生成 24 小时有效的邀请码。好友粘贴邀请码后自动匹配同版本实例并进服。
+- **樱花穿透**：自动下载官方 frpc 客户端，填写访问密钥与隧道 ID 后建立隧道，从日志解析远程地址并展示运行状态与日志。
+- **陶瓦联机**：下载官方工具并按包与可执行文件双重 SHA-256 校验，支持创建房间、输入房间码加入；工具下载过程不会阻断界面。
+- **按地址加入**：可直接填写服务器地址进服；进服前写入对应实例的 `servers.dat`。
+- **快速进服**：1.20 及以上使用 `--quickPlayMultiplayer`，旧版本使用 `--server` / `--port`；IPv6 地址自动添加方括号。
+
+### 界面与体验
+
+- **背景图**：默认底图、`bgskin` 目录随机图、自定义图片 / 目录、网络图片 URL 四种来源。
+- **无边框窗口**：支持拖动与缩放，默认 720×450，可拉大为多页面完整布局。
+- **崩溃分析**：游戏异常退出时优先读取本次启动新生成的 `crash-reports`，给出可能原因与处理建议，并提供查看日志、打开目录、重新启动等操作。
+- **下载网速**：所有下载进度条实时显示当前网速，无速度时自动隐藏。
+- **便携配置**：设置、账号与日志统一保存在启动器目录下的 `.fmmcl`，替换 exe 升级时可原样保留。
+
+---
+
+## 当前开发阶段
+
+### 已完成
+
+- 版本安装、文件校验、Java 探测、启动参数与进程管理
+- Forge / NeoForge / Fabric / Quilt 安装与卸载
+- 实例管理、资源管理、整合包导入、服务器管理
+- 离线 / 微软 / 外置登录完整链路
+- Modrinth / CurseForge 资源检索与下载
+- 好友直连、樱花穿透、陶瓦联机
+- 崩溃检测与崩溃分析覆盖层
+- xUnit 自动化测试；联网用例单独标记为 `Live`
+
+### 尚未完成
+
+- 安装包、代码签名与自动更新（当前只提供单文件 exe）
+- 高 DPI、多显示器与更多系统版本的兼容性回归
+- 更多整合包格式、加载器组合与服务器的实际兼容性验证
+- 界面细节打磨与文档补全
+
+### 已知限制
+
+- 仅支持 Windows 10 1809+ / Windows 11，x64 与 arm64。
+- 微软正版登录需要构建时写入自己的 Azure 应用客户端 ID，并通过 Mojang AppID 审核；审核通过前可使用离线或外置登录。
+- 好友直连需要先在游戏内选择「对局域网开放」；樱花穿透需要自备访问密钥与隧道；陶瓦联机需要联网下载官方工具。
+- 部分镜像源在特定网络环境下可能不可达，启动器会自动回退官方源。
+- 单文件 exe 体积约 65 MB，首次启动需要解压运行时，可能比后续启动略慢。
 
 ---
 
 ## 环境要求
 
-- **运行**：Windows 10 1809+ / Windows 11，x64 或 arm64
-- **构建**：.NET 10 SDK
-- **游戏**：对应版本所需的 JDK（启动器会自动探测已安装的 Java；1.17+ 需要 Java 17，1.20.5+ 需要 Java 21）
+- **运行**：Windows 10 1809+ / Windows 11，x64 或 arm64。单文件发布为自包含程序，无需安装 .NET 运行时。
+- **构建**：.NET 10 SDK、Windows 10 / 11。
+- **游戏**：对应版本所需的 JDK。启动器会自动探测已安装的 Java；1.17+ 需要 Java 17，1.20.5+ 需要 Java 21。
 
 ---
 
@@ -57,15 +124,21 @@ dotnet run --project src/MCLauncher.App
 
 可执行文件：`src/MCLauncher.App/bin/Debug/net10.0-windows/MCLauncher-Reborn.exe`
 
+### 发布单文件
+
+```powershell
+dotnet publish src\MCLauncher.App\MCLauncher.App.csproj -c Release -p:PublishProfile=FolderProfile
+```
+
+输出：`artifacts/publish/win-x64/MCLauncher-Reborn.exe`。发布配置为自包含、单文件、压缩，并包含 WPF 原生库；WPF 不支持裁剪，已关闭 `PublishTrimmed`。
+
 ### 测试
 
 ```powershell
-dotnet test tests/MCLauncher.Core.Tests
-```
+# 仅运行不联网的用例
+dotnet test tests/MCLauncher.Core.Tests --filter "FullyQualifiedName!~Live"
 
-默认排除会访问真实网络的 Live 测试；需要连网验证下载链路时：
-
-```powershell
+# 需要验证真实网络与下载链路时
 dotnet test tests/MCLauncher.Core.Tests --filter "FullyQualifiedName~Live"
 ```
 
@@ -73,45 +146,40 @@ dotnet test tests/MCLauncher.Core.Tests --filter "FullyQualifiedName~Live"
 
 ## 首次使用
 
-1. 打开「设置」，确认已探测到合适的 Java（也可手动填入 `javaw.exe` 路径）。
-2. 进入「版本管理」，刷新清单并选择版本安装（首次会下载 client jar、依赖库、资源文件与 natives）。
-3. 回到「主页」，选择版本后点「启动游戏」。
-4. 需要正版账号时，到「账号」页登录；只想本地游玩时用离线账号即可。
+1. 首次启动会进入初始化引导，添加账号并确认内存与 Java 设置。
+2. 打开「设置」，确认已探测到合适的 Java；需要时可手动指定 `javaw.exe`。
+3. 进入「实例列表」，点击「安装新游戏」，选择 Minecraft 版本与可选的模组加载器。
+4. 回到「首页」，选择实例后点击「启动游戏」。
+5. 需要正版账号时，到「账号」页登录；只想本地游玩时使用离线账号即可。
 
-游戏目录默认是启动器同级的 `.minecraft`，可在设置中追加其他目录。
+游戏目录默认为启动器同级的 `.minecraft`，可在设置中追加其他游戏目录。启动器启动时会自动创建缺失的游戏目录。
 
 ---
 
-## 关于微软正版登录
+## 微软正版登录
 
-启动器使用 **OAuth 2.0 设备码流程（Device Code Flow）**，不包含任何内置凭据，也**不需要注册回调地址**。需要你自己注册一个 Azure 应用：
+启动器使用 **OAuth 2.0 设备码流程（Device Code Flow）**，不包含内置凭据，也不需要注册回调地址。需要构建者自己注册 Azure 应用：
 
 1. **Azure 门户 → 应用注册 → 新注册**
    - 「支持的账户类型」必须包含 **个人 Microsoft 账户**
 2. **身份验证 → 高级设置**
    - 「允许公共客户端流」设为 **是**（设备码流程必需）
-3. 把「应用程序(客户端) ID」填到「设置 → 微软正版登录」，或写入本地凭据文件（见下）
+3. 把「应用程序(客户端) ID」写入本机私有凭据文件（见下文），或通过环境变量提供。
 
-登录时的实际体验：
-
-1. 点「微软登录」，启动器申请一次性短码，并打开微软验证页 `https://www.microsoft.com/link`
-2. 在启动器里点「复制」，把短码粘贴到登录页，登录微软账号并确认授权
-3. 启动器在后台轮询令牌端点，授权完成后自动登录，无需回到启动器做任何操作
+登录流程：启动器申请一次性短码并自动复制，随后打开微软验证页；粘贴短码并完成授权后，启动器在后台轮询令牌端点并自动登录。若浏览器未自动打开，可手动打开验证页。
 
 > **不要给登录地址附加 `?otc=<短码>`**。微软会把这条免输入路径当作第一方应用授权处理，普通第三方应用会被拒绝，页面会报 `first party application ... invalid_request`。只能手动粘贴短码。
->
-> 如果浏览器没有自动打开，可点「重新打开登录页」；短码也可以直接选中复制。
 
-### 重要：Mojang AppID 审核
+### Mojang AppID 审核
 
-Mojang 对访问 Java 版游戏服务 API 的**新应用**实行允许清单制度。未通过审核的应用调用 `api.minecraftservices.com/authentication/login_with_xbox` 会被直接拒绝（HTTP 403，`Invalid app registration`）。
+Mojang 对访问 Java 版游戏服务 API 的新应用实行允许清单制度。未通过审核的应用调用 `api.minecraftservices.com/authentication/login_with_xbox` 会被直接拒绝（HTTP 403，`Invalid app registration`）。
 
 - 提交入口：<https://aka.ms/mce-reviewappid>
 - 审核每周进行一次，重复提交不会加快
-- 表单中的**应用名称不得包含** Mojang、Minecraft、Microsoft、Live、Xbox、Discord、Hypixel 等关键词
+- 表单中的应用名称不得包含 Mojang、Minecraft、Microsoft、Live、Xbox、Discord、Hypixel 等关键词
 - 已有的成熟启动器属于历史保留豁免，不能作为「新应用无需申请」的依据
 
-审核通过前，离线账号可正常使用。
+审核通过前，离线账号与外置登录可正常使用。
 
 ---
 
@@ -119,19 +187,22 @@ Mojang 对访问 Java 版游戏服务 API 的**新应用**实行允许清单制�
 
 | 内容 | 位置 |
 |---|---|
-| 设置、账号、实例信息 | `%LOCALAPPDATA%\MCLauncher-Reborn\settings.json` |
-| 运行日志 | `%LOCALAPPDATA%\MCLauncher-Reborn\logs\launcher-<日期>.log` |
+| 设置、账号、实例信息 | `<启动器目录>\.fmmcl\settings.json` |
+| 运行日志 | `<启动器目录>\.fmmcl\logs\launcher-<日期>.log` |
 | 游戏目录 | 默认 `<启动器目录>\.minecraft` |
+| 本机私有凭据 | `src\MCLauncher.Core\Secrets\LocalSecrets.cs`（已被 `.gitignore` 排除） |
+
+设置与数据都保存在启动器目录下，属于便携式布局；升级时替换 exe 即可保留配置。
 
 凭据解析优先级（高 → 低）：
 
 ```
-界面设置（settings.json） > 环境变量 > 代码内 LocalSecrets
+settings.json > 环境变量 > 代码内 LocalSecrets
 ```
 
-- `MCLR_MS_CLIENT_ID` / `MCLR_CURSEFORGE_API_KEY` 可用于环境变量
-- `src/MCLauncher.Core/Secrets/LocalSecrets.cs` 用于本地开发时写死默认值，**已被 `.gitignore` 排除，严禁提交**
-- 模板见同目录 `LocalSecrets.example.cs`；缺少该文件时构建会自动复制一份，但值为空
+- `MCLR_MS_CLIENT_ID`、`MCLR_CURSEFORGE_API_KEY` 可用于环境变量
+- `LocalSecrets.cs` 用于本地开发时写入默认值，**严禁提交**
+- 模板见同目录 `LocalSecrets.example.cs`；首次构建缺少真实文件时会自动复制模板，此时值为空
 
 ---
 
@@ -144,33 +215,37 @@ MCLauncher-reborn/
 │  ├─ MCLauncher.Core/          # 纯业务逻辑（net10.0，不引用任何 UI 框架）
 │  │  ├─ Abstractions/          # 日志、配置存储、服务容器
 │  │  ├─ Models/                # 版本 JSON、库、规则、账号、实例等模型
-│  │  ├─ Network/               # 多源下载、断点续传、校验、镜像映射
-│  │  ├─ Services/              # 安装、启动、Java、实例、加载器、资源、整合包
-│  │  │  └─ Auth/               # 微软登录（设备码流程）
-│  │  ├─ Utils/                 # 路径、哈希、归档、NBT、版本号
+│  │  ├─ Network/               # 多源下载、断点续传、校验、镜像映射、下载队列
+│  │  ├─ Services/              # 安装、启动、Java、实例、加载器、资源、整合包、服务器
+│  │  │  └─ Auth/               # 微软设备码与外置登录
+│  │  ├─ Connect/               # 好友直连、TCP 转发、UPnP、樱花穿透、陶瓦联机
+│  │  ├─ Utils/                 # 路径、哈希、归档、NBT、版本号、窗口尺寸
 │  │  └─ Logging/
 │  └─ MCLauncher.App/           # WPF 界面（net10.0-windows）
 │     ├─ Shell/                 # 无边框窗口、导航、页面工厂
-│     ├─ Views/                 # 页面
+│     ├─ Views/                 # 页面与弹窗
 │     ├─ ViewModels/            # MVVM（手写，无第三方 MVVM 框架）
-│     └─ Themes/
+│     ├─ Themes/
+│     └─ Assets/
 └─ tests/
-   └─ MCLauncher.Core.Tests/    # xUnit；Live 测试默认跳过
+   └─ MCLauncher.Core.Tests/    # xUnit；Live 测试需显式筛选
 ```
 
-`Core` 与 `App` 拆成两个工程，用编译期约束保证业务层不会依赖 WPF——便于将来复用到 CLI 或测试工程。
+`Core` 与 `App` 拆成两个工程，用编译期约束保证业务层不依赖 WPF，便于复用到 CLI、测试或其他前端。
 
 ---
 
 ## 实现要点
 
-- **多源下载**：官方源与镜像源按 URL 类型（资源 / 依赖库 / 元数据 / Forge 系库）分别映射；失败自动切换候选源
-- **断点续传**：`.part` 文件严格校验 `206 + Content-Length + ETag`，服务端返回 200 则丢弃重下；镜像返回 `X-BMCLAPI-Hash` 命中时直接复用
-- **版本合并**：`inheritsFrom` 时 `libraries` 子在前父在后、`arguments` 父在前子在后，并检测循环继承
-- **natives**：按架构优先匹配分类器（`natives-windows-arm64` → `-64` → 通用），解压后排除 `META-INF`
-- **远古资源**：`virtual` / `map_to_resources` 的索引会展开到 `assets/virtual/legacy`，避免 1.7 及更早版本贴图丢失
-- **进程启动**：使用 `ProcessStartInfo.ArgumentList` 逐项传参，避免 Windows 引号拼接问题；启动日志实时接管
-- **离线 UUID**：`MD5("OfflinePlayer:" + name)` 按协议置版本位与变体位
+- **多源下载**：官方源与镜像源按 URL 类型分别映射；失败自动切换候选源，Modrinth 请求失败时回退镜像。
+- **断点续传**：`.part` 文件严格校验 `206 + Content-Length + ETag`，服务端返回 200 时丢弃重下。
+- **版本合并**：处理 `inheritsFrom` 时保持库与参数顺序，并检测循环继承。
+- **natives**：按架构优先匹配分类器（`natives-windows-arm64` → `-64` → 通用），解压后排除 `META-INF`。
+- **远古资源**：`virtual` / `map_to_resources` 索引会展开到对应目录，避免 1.7 及更早版本贴图丢失。
+- **进程启动**：使用 `ProcessStartInfo.ArgumentList` 逐项传参，避免 Windows 引号拼接问题；启动日志实时接管。
+- **实例合并**：加载器安装后解析继承链并合并为单目录实例，`jar` 指向自身；卸载时还原为仅继承原版的薄配置。
+- **崩溃分析**：优先读取本次启动后新生成的 `crash-reports/crash-*.txt`，失败时回退游戏标准输出。
+- **离线 UUID**：`MD5("OfflinePlayer:" + name)` 按协议设置版本位与变体位。
 
 ---
 
@@ -181,10 +256,14 @@ MCLauncher-reborn/
 - 「Minecraft」是 Mojang Studios 的商标。本项目名称仅用于说明用途。
 - 使用本启动器造成的任何账号、数据或游戏问题，由使用者自行承担。
 
+---
+
 ## 致谢
 
-实现过程中参考了以下开源/公开项目的**行为与格式说明**（界面布局等信息）：
+- 原项目 **MCLauncher（忘却的旋律）**：本项目的界面视觉与使用习惯来源于此，项目为独立重写。
+- **Terracotta（陶瓦联机）**：运行时仅下载并调用其官方二进制（AGPL-3.0），不修改、不重打包、不内置其代码。
+- **SakuraFrp**：运行时下载官方 frpc 客户端，凭据由用户自备。
+- **authlib-injector**：外置登录的注入组件，启动前按官方源下载，失败时回退镜像。
+- **Modrinth / CurseForge**：资源检索与下载的公开 API。
 
-原项目MCLauncher（忘却的旋律）
-
-本项目为独立重写，**未复制**上述项目的任何源代码、资源文件或内嵌产物，也未使用其内置的客户端 ID / API Key。感谢这些项目为社区提供的参考。
+实现过程中参考了 HMCL、PCL 等项目的**公开行为、协议字段与磁盘布局**，但未复制其源代码、资源文件或内嵌产物。
