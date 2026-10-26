@@ -167,6 +167,7 @@ public sealed class GameLaunchService
             GameDirectory = request.Isolated
                 ? VersionRepository.VersionDirectory(request.GameRoot, request.VersionId)
                 : request.GameRoot,
+            WorkingDirectory = ResolveWorkingDirectory(request),
             AssetsRoot = assetsRoot,
             NativesDirectory = VersionRepository.NativesDirectory(request.GameRoot, request.VersionId),
             LibrariesDirectory = GameInstaller.LibrariesDirectory(request.GameRoot),
@@ -189,6 +190,35 @@ public sealed class GameLaunchService
         _log.Info($"使用 Java {java.MajorVersion}（{java.Path}）启动 {request.VersionId}");
 
         return _launcher.Start(command, logBuffer, java.MajorVersion);
+    }
+
+    /// <summary>
+    /// 规范游戏进程的工作目录：相对路径按游戏根目录解析，目录不存在时自动创建。
+    /// 留空则返回 null，由参数构建器回退到实例目录。
+    /// </summary>
+    private static string? ResolveWorkingDirectory(GameLaunchRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Options.WorkingDirectory))
+        {
+            return null;
+        }
+
+        var value = request.Options.WorkingDirectory!.Trim();
+        var path = Path.IsPathRooted(value) ? value : Path.Combine(request.GameRoot, value);
+
+        try
+        {
+            path = Path.GetFullPath(path);
+            PathUtil.EnsureDirectory(path);
+            return path;
+        }
+        catch (Exception ex) when (ex is ArgumentException
+                                       or IOException
+                                       or UnauthorizedAccessException
+                                       or NotSupportedException)
+        {
+            throw new InvalidOperationException($"游戏运行路径不可用：{path}", ex);
+        }
     }
 
     /// <summary>

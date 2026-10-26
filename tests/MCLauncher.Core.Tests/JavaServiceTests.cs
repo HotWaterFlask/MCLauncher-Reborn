@@ -125,13 +125,37 @@ public sealed class JavaServiceTests
         // 没有完全匹配 → 取不小于要求的最小主版本
         Assert.Equal("11", service.SelectBest(9, pool)!.RawVersion);
 
-        // 要求高于所有可用 → 退到最高版本
-        Assert.Equal("21", service.SelectBest(25, pool)!.RawVersion);
+        // 要求高于所有可用 → 返回 null，由上层下载对应版本
+        Assert.Null(service.SelectBest(25, pool));
 
         // 要求低于所有可用 → 取最小的可用版本
         Assert.Equal("8", service.SelectBest(7, pool)!.RawVersion);
 
         Assert.Null(service.SelectBest(17, Array.Empty<JavaInfo>()));
+    }
+
+    [Fact]
+    public void Java8只接受主版本完全匹配()
+    {
+        var service = new JavaService(new TestLog());
+
+        // 只有 11/17/21 时不拿新版去跑旧版 Forge，交给上层下载 Java 8
+        var newerOnly = new[]
+        {
+            Fake("11", 11, 0, 20),
+            Fake("17", 17, 0, 9),
+            Fake("21", 21, 0, 2),
+        };
+        Assert.Null(service.SelectBest(8, newerOnly));
+
+        // 有 8 时取补丁最高的
+        var pool = new[]
+        {
+            Fake("8.0.202", 8, 0, 202),
+            Fake("8.0.292", 8, 0, 292),
+            Fake("11", 11, 0, 20),
+        };
+        Assert.Equal("8.0.292", service.SelectBest(8, pool)!.RawVersion);
     }
 
     [Fact]

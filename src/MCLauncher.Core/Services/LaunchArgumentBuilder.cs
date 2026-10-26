@@ -20,6 +20,16 @@ public sealed class LaunchCommand
     /// <summary>进程工作目录。</summary>
     public required string WorkingDirectory { get; init; }
 
+    /// <summary>传给进程的额外环境变量。</summary>
+    public IReadOnlyDictionary<string, string> Environment { get; init; } =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>游戏进程优先级。</summary>
+    public GameProcessPriority Priority { get; init; } = GameProcessPriority.Normal;
+
+    /// <summary>放在 java 命令前面的包装命令。</summary>
+    public string? WrapperCommand { get; init; }
+
     /// <summary>已替换完变量的完整参数表（不含 java 自身路径）。</summary>
     public IReadOnlyList<string> ToArgumentList() =>
         JvmArguments.Concat(new[] { MainClass }).Concat(GameArguments).ToArray();
@@ -48,6 +58,9 @@ public sealed class LaunchContext
 
     /// <summary>实例目录（隔离时为 <c>versions/&lt;id&gt;</c>）。</summary>
     public required string GameDirectory { get; init; }
+
+    /// <summary>进程工作目录；为空时使用 <see cref="GameDirectory"/>。</summary>
+    public string? WorkingDirectory { get; init; }
 
     public required string AssetsRoot { get; init; }
 
@@ -184,6 +197,10 @@ public sealed class LaunchArgumentBuilder
                 game.Add(options.ServerPort.ToString());
             }
         }
+        else if (options.QuickPlayMode is QuickPlayMode.Singleplayer or QuickPlayMode.Realms)
+        {
+            AddQuickPlayArguments(game, options);
+        }
 
         if (!string.IsNullOrWhiteSpace(options.ExtraGameArgs))
         {
@@ -208,8 +225,34 @@ public sealed class LaunchArgumentBuilder
             JvmArguments = jvm,
             GameArguments = game,
             Classpath = classpath,
-            WorkingDirectory = context.GameDirectory,
+            WorkingDirectory = context.WorkingDirectory ?? context.GameDirectory,
+            Environment = options.EnvironmentVariables ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+            Priority = options.ProcessPriority,
+            WrapperCommand = options.WrapperCommand,
         };
+    }
+
+    /// <summary>单人 / Realms 的快速游玩参数；仅 1.20 及以上支持。</summary>
+    private void AddQuickPlayArguments(List<string> game, LaunchOptions options)
+    {
+        if (!McVersionUtil.IsAtLeast(options.GameVersion, 1, 20, 0))
+        {
+            _log.Warn("快速游玩（单人 / Realms）需要 Minecraft 1.20 及以上版本，已忽略该设置");
+            return;
+        }
+
+        if (options.QuickPlayMode == QuickPlayMode.Singleplayer
+            && !string.IsNullOrWhiteSpace(options.QuickPlayWorld))
+        {
+            game.Add("--quickPlaySingleplayer");
+            game.Add(options.QuickPlayWorld!);
+        }
+        else if (options.QuickPlayMode == QuickPlayMode.Realms
+                 && !string.IsNullOrWhiteSpace(options.QuickPlayRealmsId))
+        {
+            game.Add("--quickPlayRealms");
+            game.Add(options.QuickPlayRealmsId!);
+        }
     }
 
     /// <summary>

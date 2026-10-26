@@ -32,6 +32,7 @@ public sealed class ForgeInstallerService
     private readonly DownloadSourceResolver _resolver;
     private readonly GameInstaller _installer;
     private readonly JavaService _javaService;
+    private readonly ZuluJavaService? _zuluJava;
     private readonly ILogger _log;
 
     public ForgeInstallerService(
@@ -39,12 +40,14 @@ public sealed class ForgeInstallerService
         DownloadSourceResolver resolver,
         GameInstaller installer,
         JavaService javaService,
-        ILogger log)
+        ILogger log,
+        ZuluJavaService? zuluJava = null)
     {
         _downloader = downloader;
         _resolver = resolver;
         _installer = installer;
         _javaService = javaService;
+        _zuluJava = zuluJava;
         _log = log;
     }
 
@@ -238,9 +241,30 @@ public sealed class ForgeInstallerService
             }
 
             var requiredJava = ModLoaderService.RequiredJavaMajor(gameVersion);
-            var java = _javaService.SelectBest(requiredJava)
-                       ?? throw new InvalidOperationException(
-                           $"没有可用的 Java {requiredJava}，无法运行 {display} 处理器");
+            var java = _javaService.SelectBest(requiredJava);
+
+            if (java is null && _zuluJava is not null)
+            {
+                progress?.Report(new InstallProgress { Stage = $"正在下载 Java {requiredJava}…" });
+                var javaProgress = new InlineProgress<JavaRuntimeProgress>(p =>
+                    progress?.Report(new InstallProgress
+                    {
+                        Stage = p.Stage,
+                        FractionOverride = p.Fraction,
+                        BytesPerSecond = p.BytesPerSecond,
+                        ActiveFiles = p.ActiveFiles,
+                    }));
+
+                java = await _zuluJava
+                    .EnsureAsync(requiredJava, javaProgress, ct)
+                    .ConfigureAwait(false);
+            }
+
+            if (java is null)
+            {
+                throw new InvalidOperationException(
+                    $"没有可用的 Java {requiredJava}，无法运行 {display} 处理器");
+            }
 
             var minecraftJar = await EnsureClientJarAsync(
                     gameRoot, gameVersion, baseVersion, clientJarPath, ct)

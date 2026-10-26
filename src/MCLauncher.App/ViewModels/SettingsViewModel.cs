@@ -26,6 +26,22 @@ public sealed class ContentSourceChoice
     public required string Label { get; init; }
 }
 
+/// <summary>进程优先级下拉里的一项。</summary>
+public sealed class ProcessPriorityChoice
+{
+    public required GameProcessPriority Value { get; init; }
+
+    public required string Label { get; init; }
+}
+
+/// <summary>启动器可见性下拉里的一项。</summary>
+public sealed class LauncherVisibilityChoice
+{
+    public required LauncherVisibilityMode Value { get; init; }
+
+    public required string Label { get; init; }
+}
+
 /// <summary>
 /// 设置页：只放全局设置。
 /// 实例的独立设置由实例管理页的「游戏设置」在右侧原地展示。
@@ -40,6 +56,7 @@ public sealed class SettingsViewModel : ViewModelBase
 
     private string _statusText = "修改后点「保存设置」生效";
     private bool _isBusy;
+    private DetectedJava? _selectedJava;
 
     public SettingsViewModel(LauncherStack stack)
     {
@@ -51,6 +68,8 @@ public sealed class SettingsViewModel : ViewModelBase
         BrowseBackgroundFileCommand = new RelayCommand(BrowseBackgroundFile);
         BrowseBackgroundFolderCommand = new RelayCommand(BrowseBackgroundFolder);
         OpenBackgroundFolderCommand = new RelayCommand(OpenBackgroundFolder);
+        BrowseWorkingDirectoryCommand = new RelayCommand(BrowseWorkingDirectory);
+        OpenLogDirectoryCommand = new RelayCommand(OpenLogDirectory);
         _detectJavaCommand = new AsyncRelayCommand(DetectJavaAsync);
         DetectJavaCommand = _detectJavaCommand;
 
@@ -58,6 +77,8 @@ public sealed class SettingsViewModel : ViewModelBase
         {
             Javas.Add(java);
         }
+
+        SyncSelectedJava();
     }
 
     // ---------------------------------------------------------------- 全局设置
@@ -474,12 +495,46 @@ public sealed class SettingsViewModel : ViewModelBase
             _stack.Config.Settings.JavaPath = normalized;
             OnPropertyChanged();
             OnPropertyChanged(nameof(JavaHint));
+            SyncSelectedJava();
+        }
+    }
+
+    /// <summary>设置页 Java 列表里选中的项；选中即写入 <see cref="JavaPath"/>。</summary>
+    public DetectedJava? SelectedJava
+    {
+        get => _selectedJava;
+        set
+        {
+            if (!SetProperty(ref _selectedJava, value) || value is null)
+            {
+                return;
+            }
+
+            JavaPath = value.Path;
+            _stack.Config.Save();
         }
     }
 
     public string JavaHint => string.IsNullOrWhiteSpace(_stack.Config.Settings.JavaPath)
-        ? "留空时按版本要求自动挑选已探测到的 Java。"
+        ? "留空时按版本要求自动挑选；缺少合适版本会在启动时自动下载 Zulu JDK。"
         : "已手动指定，启动时将优先使用它。";
+
+    /// <summary>让列表选中项跟随当前 Java 路径（手动输入或探测完成后调用）。</summary>
+    private void SyncSelectedJava()
+    {
+        var path = _stack.Config.Settings.JavaPath;
+        var match = string.IsNullOrWhiteSpace(path)
+            ? null
+            : Javas.FirstOrDefault(j => string.Equals(j.Path, path, StringComparison.OrdinalIgnoreCase));
+
+        if (ReferenceEquals(_selectedJava, match))
+        {
+            return;
+        }
+
+        _selectedJava = match;
+        OnPropertyChanged(nameof(SelectedJava));
+    }
 
     public string ExtraJvmArgs
     {
@@ -509,6 +564,277 @@ public sealed class SettingsViewModel : ViewModelBase
             }
 
             _stack.Config.Settings.ExtraGameArgs = normalized;
+            OnPropertyChanged();
+        }
+    }
+
+    // ---------------------------------------------------------------- 快速游玩
+
+    public QuickPlayMode QuickPlayMode
+    {
+        get => _stack.Config.Settings.QuickPlayMode;
+        set
+        {
+            if (_stack.Config.Settings.QuickPlayMode == value)
+            {
+                return;
+            }
+
+            _stack.Config.Settings.QuickPlayMode = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(IsQuickPlayNone));
+            OnPropertyChanged(nameof(IsQuickPlayMultiplayer));
+            OnPropertyChanged(nameof(IsQuickPlaySingleplayer));
+            OnPropertyChanged(nameof(IsQuickPlayRealms));
+        }
+    }
+
+    public bool IsQuickPlayNone
+    {
+        get => QuickPlayMode == QuickPlayMode.None;
+        set
+        {
+            if (value)
+            {
+                QuickPlayMode = QuickPlayMode.None;
+            }
+        }
+    }
+
+    public bool IsQuickPlayMultiplayer
+    {
+        get => QuickPlayMode == QuickPlayMode.Multiplayer;
+        set
+        {
+            if (value)
+            {
+                QuickPlayMode = QuickPlayMode.Multiplayer;
+            }
+        }
+    }
+
+    public bool IsQuickPlaySingleplayer
+    {
+        get => QuickPlayMode == QuickPlayMode.Singleplayer;
+        set
+        {
+            if (value)
+            {
+                QuickPlayMode = QuickPlayMode.Singleplayer;
+            }
+        }
+    }
+
+    public bool IsQuickPlayRealms
+    {
+        get => QuickPlayMode == QuickPlayMode.Realms;
+        set
+        {
+            if (value)
+            {
+                QuickPlayMode = QuickPlayMode.Realms;
+            }
+        }
+    }
+
+    /// <summary>快速游玩：服务器地址（host:port，可省略端口）。</summary>
+    public string QuickPlayServer
+    {
+        get => _stack.Config.Settings.QuickPlayServer ?? string.Empty;
+        set
+        {
+            var normalized = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+            if (string.Equals(_stack.Config.Settings.QuickPlayServer, normalized, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _stack.Config.Settings.QuickPlayServer = normalized;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>快速游玩：单人存档的文件夹名。</summary>
+    public string QuickPlayWorld
+    {
+        get => _stack.Config.Settings.QuickPlayWorld ?? string.Empty;
+        set
+        {
+            var normalized = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+            if (string.Equals(_stack.Config.Settings.QuickPlayWorld, normalized, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _stack.Config.Settings.QuickPlayWorld = normalized;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>快速游玩：Realms 服务器 ID。</summary>
+    public string QuickPlayRealmsId
+    {
+        get => _stack.Config.Settings.QuickPlayRealmsId ?? string.Empty;
+        set
+        {
+            var normalized = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+            if (string.Equals(_stack.Config.Settings.QuickPlayRealmsId, normalized, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _stack.Config.Settings.QuickPlayRealmsId = normalized;
+            OnPropertyChanged();
+        }
+    }
+
+    // ---------------------------------------------------------------- 进程与启动器
+
+    /// <summary>游戏进程工作目录；留空时使用实例目录。</summary>
+    public string LaunchWorkingDirectory
+    {
+        get => _stack.Config.Settings.LaunchWorkingDirectory ?? string.Empty;
+        set
+        {
+            var normalized = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+            if (string.Equals(_stack.Config.Settings.LaunchWorkingDirectory, normalized, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _stack.Config.Settings.LaunchWorkingDirectory = normalized;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>额外环境变量，每行 NAME=VALUE。</summary>
+    public string EnvironmentVariablesText
+    {
+        get => _stack.Config.Settings.EnvironmentVariablesText ?? string.Empty;
+        set
+        {
+            var normalized = string.IsNullOrWhiteSpace(value) ? null : value;
+            if (string.Equals(_stack.Config.Settings.EnvironmentVariablesText, normalized, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _stack.Config.Settings.EnvironmentVariablesText = normalized;
+            OnPropertyChanged();
+        }
+    }
+
+    public IReadOnlyList<ProcessPriorityChoice> ProcessPriorityChoices { get; } = new[]
+    {
+        new ProcessPriorityChoice { Value = GameProcessPriority.Low, Label = "低" },
+        new ProcessPriorityChoice { Value = GameProcessPriority.BelowNormal, Label = "低于正常" },
+        new ProcessPriorityChoice { Value = GameProcessPriority.Normal, Label = "正常" },
+        new ProcessPriorityChoice { Value = GameProcessPriority.AboveNormal, Label = "高于正常" },
+        new ProcessPriorityChoice { Value = GameProcessPriority.High, Label = "高" },
+        new ProcessPriorityChoice { Value = GameProcessPriority.RealTime, Label = "实时（通常需要管理员权限）" },
+    };
+
+    public GameProcessPriority ProcessPriority
+    {
+        get => _stack.Config.Settings.ProcessPriority;
+        set
+        {
+            if (_stack.Config.Settings.ProcessPriority == value)
+            {
+                return;
+            }
+
+            _stack.Config.Settings.ProcessPriority = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public IReadOnlyList<LauncherVisibilityChoice> LauncherVisibilityChoices { get; } = new[]
+    {
+        new LauncherVisibilityChoice { Value = LauncherVisibilityMode.KeepVisible, Label = "保持启动器可见" },
+        new LauncherVisibilityChoice { Value = LauncherVisibilityMode.Hide, Label = "隐藏启动器" },
+        new LauncherVisibilityChoice { Value = LauncherVisibilityMode.Close, Label = "退出启动器" },
+        new LauncherVisibilityChoice { Value = LauncherVisibilityMode.HideAndReopen, Label = "隐藏，游戏结束后重新打开" },
+    };
+
+    public LauncherVisibilityMode LauncherVisibility
+    {
+        get => _stack.Config.Settings.LauncherVisibility;
+        set
+        {
+            if (_stack.Config.Settings.LauncherVisibility == value)
+            {
+                return;
+            }
+
+            _stack.Config.Settings.LauncherVisibility = value;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>启动前跳过完整性检查，直接启动。</summary>
+    public bool SkipIntegrityCheck
+    {
+        get => _stack.Config.Settings.SkipIntegrityCheck;
+        set
+        {
+            if (_stack.Config.Settings.SkipIntegrityCheck == value)
+            {
+                return;
+            }
+
+            _stack.Config.Settings.SkipIntegrityCheck = value;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>放在 java 命令前面的包装命令。</summary>
+    public string WrapperCommand
+    {
+        get => _stack.Config.Settings.WrapperCommand ?? string.Empty;
+        set
+        {
+            var normalized = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+            if (string.Equals(_stack.Config.Settings.WrapperCommand, normalized, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _stack.Config.Settings.WrapperCommand = normalized;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>游戏启动前执行的命令（cmd 语法）。</summary>
+    public string PreLaunchCommand
+    {
+        get => _stack.Config.Settings.PreLaunchCommand ?? string.Empty;
+        set
+        {
+            var normalized = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+            if (string.Equals(_stack.Config.Settings.PreLaunchCommand, normalized, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _stack.Config.Settings.PreLaunchCommand = normalized;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>游戏结束后执行的命令（cmd 语法）。</summary>
+    public string PostLaunchCommand
+    {
+        get => _stack.Config.Settings.PostLaunchCommand ?? string.Empty;
+        set
+        {
+            var normalized = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+            if (string.Equals(_stack.Config.Settings.PostLaunchCommand, normalized, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _stack.Config.Settings.PostLaunchCommand = normalized;
             OnPropertyChanged();
         }
     }
@@ -544,6 +870,10 @@ public sealed class SettingsViewModel : ViewModelBase
     public ICommand BrowseBackgroundFolderCommand { get; }
 
     public ICommand OpenBackgroundFolderCommand { get; }
+
+    public ICommand BrowseWorkingDirectoryCommand { get; }
+
+    public ICommand OpenLogDirectoryCommand { get; }
 
     public ICommand DetectJavaCommand { get; }
 
@@ -641,6 +971,41 @@ public sealed class SettingsViewModel : ViewModelBase
         }
     }
 
+    private void BrowseWorkingDirectory()
+    {
+        var dialog = new Microsoft.Win32.OpenFolderDialog
+        {
+            Title = "选择游戏运行路径",
+            Multiselect = false,
+        };
+
+        if (Directory.Exists(LaunchWorkingDirectory))
+        {
+            dialog.InitialDirectory = LaunchWorkingDirectory;
+        }
+
+        if (dialog.ShowDialog() == true)
+        {
+            LaunchWorkingDirectory = dialog.FolderName;
+        }
+    }
+
+    private void OpenLogDirectory()
+    {
+        var folder = Path.Combine(_stack.Config.ConfigDirectory, "logs");
+
+        try
+        {
+            Directory.CreateDirectory(folder);
+            Process.Start(new ProcessStartInfo(folder) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            _stack.Log.Warn($"打开日志目录失败：{folder}", ex);
+            StatusText = "打开日志目录失败：" + ex.Message;
+        }
+    }
+
     private async Task DetectJavaAsync()
     {
         IsBusy = true;
@@ -669,6 +1034,7 @@ public sealed class SettingsViewModel : ViewModelBase
             }
 
             _stack.Config.Save();
+            SyncSelectedJava();
             StatusText = detected.Count == 0
                 ? "没有探测到可用的 64 位 Java，请手动指定路径。"
                 : $"探测到 {detected.Count} 个可用 Java。";

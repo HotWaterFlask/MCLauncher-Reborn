@@ -2,11 +2,14 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using MCLauncher.App.ViewModels.Mvvm;
+using MCLauncher.Core.Connect;
 using MCLauncher.Core.Models;
 using MCLauncher.Core.Services;
+using MCLauncher.Core.Utils;
 
 namespace MCLauncher.App.ViewModels;
 
@@ -51,6 +54,7 @@ public sealed class HomeViewModel : ViewModelBase
     private CancellationTokenSource? _avatarCts;
     private string? _avatarUuid;
     private (string Host, int Port)? _pendingServer;
+    private bool _windowHiddenByLaunch;
 
     public HomeViewModel(LauncherStack stack, Action<string?> openInstanceSettings, Action openAccounts)
     {
@@ -430,6 +434,8 @@ public sealed class HomeViewModel : ViewModelBase
             }
         }
 
+        var quickPlay = ResolveQuickPlay(settings, server);
+
         var options = new LaunchOptions
         {
             MaxMemoryMb = instance.MaxMemoryMb ?? settings.MaxMemoryMb,
@@ -443,15 +449,133 @@ public sealed class HomeViewModel : ViewModelBase
             ExtraGameArgs = string.IsNullOrWhiteSpace(instance.ExtraGameArgs)
                 ? settings.ExtraGameArgs
                 : instance.ExtraGameArgs,
-            ServerIp = server?.Host,
-            ServerPort = server?.Port ?? 25565,
+            ServerIp = quickPlay.Host,
+            ServerPort = quickPlay.Port,
+            QuickPlayMode = quickPlay.Mode,
+            QuickPlayWorld = quickPlay.World,
+            QuickPlayRealmsId = quickPlay.RealmsId,
+            WorkingDirectory = settings.LaunchWorkingDirectory,
+            EnvironmentVariables = EnvironmentVariables.Parse(settings.EnvironmentVariablesText),
+            ProcessPriority = settings.ProcessPriority,
+            WrapperCommand = settings.WrapperCommand,
             GameVersion = version.VersionText,
-            CompleteBeforeLaunch = true,
+            CompleteBeforeLaunch = !settings.SkipIntegrityCheck,
             LauncherName = "MCLauncher-Reborn",
             LauncherVersion = "6.0",
         };
 
         return (options, java);
+    }
+
+    /// <summary>
+    /// 解析快速游玩目标：服务器管理页发起的加入优先于全局设置；
+    /// 缺少必要参数或地址无效时退回主菜单，避免把半截设置带进游戏。
+    /// </summary>
+    private (QuickPlayMode Mode, string? Host, int Port, string? World, string? RealmsId) ResolveQuickPlay(
+        AppSettings settings,
+        (string Host, int Port)? server)
+    {
+        if (server is not null)
+        {
+            return (QuickPlayMode.Multiplayer, server.Value.Host, server.Value.Port, null, null);
+        }
+
+        switch (settings.QuickPlayMode)
+        {
+            case QuickPlayMode.Multiplayer:
+                if (string.IsNullOrWhiteSpace(settings.QuickPlayServer))
+                {
+                    return (QuickPlayMode.None, null, 25565, null, null);
+                }
+
+                if (DirectProtocol.TryParseAddress(settings.QuickPlayServer!, out var host, out var port))
+                {
+                    return (QuickPlayMode.Multiplayer, host, port, null, null);
+                }
+
+                _stack.Log.Warn($"快速游玩的服务器地址无效，已忽略：{settings.QuickPlayServer}");
+                return (QuickPlayMode.None, null, 25565, null, null);
+
+            case QuickPlayMode.Singleplayer when !string.IsNullOrWhiteSpace(settings.QuickPlayWorld):
+                return (QuickPlayMode.Singleplayer, null, 25565, settings.QuickPlayWorld!.Trim(), null);
+
+            case QuickPlayMode.Realms when !string.IsNullOrWhiteSpace(settings.QuickPlayRealmsId):
+                return (QuickPlayMode.Realms, null, 25565, null, settings.QuickPlayRealmsId!.Trim());
+
+            default:
+                return (QuickPlayMode.None, null, 25565, null, null);
+        }
+    }
+
+    /// <summary>启动前 / 结束后命令的工作目录：自定义运行路径优先，否则用实例目录。</summary>
+    private string ResolveLaunchDirectory(InstalledVersionInfo version)
+    {
+        var settings = _stack.Config.Settings;
+        if (!string.IsNullOrWhiteSpace(settings.LaunchWorkingDirectory))
+        {
+            var value = settings.LaunchWorkingDirectory!.Trim();
+            return Path.IsPathRooted(value) ? value : Path.Combine(_stack.GameRoot, value);
+        }
+
+        return _stack.GetInstanceDirectory(version.Id, _stack.IsIsolated(version.Id));
+    }
+
+    /// <summary>命令输出同时写入启动日志和界面面板。</summary>
+    private void OnCommandOutput(string line)
+    {
+        _stack.LaunchLog.Append(line);
+        _stack.Log.Info($"[命令] {line}");
+    }
+
+    /// <summary>
+    /// 确保有能运行该版本的 Java：没有时从 Azul 下载对应的 Zulu JDK，
+    /// 下载进度复用首页启动面板。显式指定了 Java 时不介入。
+    /// </summary>
+    private async Task<JavaInfo?> EnsureJavaAsync(InstalledVersionInfo version, JavaInfo? manualJava)
+    {
+        if (manualJava is not null)
+        {
+            return manualJava;
+        }
+
+        var required = _stack.Repository.Resolve(_stack.GameRoot, version.Id).RequiredJavaMajor;
+        var available = await Task.Run(() => _stack.Java.SelectBest(required));
+        if (available is not null)
+        {
+            return available;
+        }
+
+        StatusText = $"未找到合适的 Java {required}，正在准备下载 Zulu JDK {required}…";
+        AppendLaunchLine($"未找到可用的 Java {required}（64 位），将自动下载官方 Zulu JDK {required}。");
+        _stack.Log.Info($"没有可用的 Java {required}，开始从 Azul 下载 Zulu JDK");
+
+        try
+        {
+            var info = await _stack.ZuluJava.EnsureAsync(
+                required,
+                new Progress<JavaRuntimeProgress>(OnJavaProgress));
+
+            AppendLaunchLine($"Java {info.MajorVersion} 已就绪：{info.Path}");
+            return info;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            throw new InvalidOperationException($"缺少 Java {required}，自动下载失败：{ex.Message}", ex);
+        }
+    }
+
+    private void OnJavaProgress(JavaRuntimeProgress progress)
+    {
+        Progress = progress.Fraction;
+        LaunchSpeedText = InstallFileItem.FormatSpeed(progress.BytesPerSecond);
+        _launchRows.Update(progress.ActiveFiles);
+        StatusText = progress.Stage;
+
+        if (!string.Equals(_lastStage, progress.Stage, StringComparison.Ordinal))
+        {
+            _lastStage = progress.Stage;
+            AppendLaunchLine(progress.Stage);
+        }
     }
 
     private async Task LaunchAsync()
@@ -515,6 +639,23 @@ public sealed class HomeViewModel : ViewModelBase
             }
 
             var (options, java) = BuildLaunchOptions(version, server);
+            java = await EnsureJavaAsync(version, java);
+
+            var preLaunch = _stack.Config.Settings.PreLaunchCommand;
+            if (!string.IsNullOrWhiteSpace(preLaunch))
+            {
+                var commandDirectory = ResolveLaunchDirectory(version);
+                Directory.CreateDirectory(commandDirectory);
+
+                StatusText = "正在执行启动前命令…";
+                AppendLaunchLine($"执行启动前命令：{preLaunch}");
+                var exitCode = await ShellCommand.RunAsync(preLaunch!, commandDirectory, OnCommandOutput);
+                if (exitCode != 0)
+                {
+                    throw new InvalidOperationException($"启动前命令执行失败（退出码 {exitCode}）");
+                }
+            }
+
             var request = new GameLaunchRequest
             {
                 GameRoot = _stack.GameRoot,
@@ -539,6 +680,9 @@ public sealed class HomeViewModel : ViewModelBase
 
             // 进程起来之后游戏还在持续刷 stdout，这些不再显示在首页面板里。
             _suppressLaunchOutput = true;
+
+            // 启动器窗口行为：保持显示 / 隐藏 / 退出 / 隐藏并等游戏结束后再显示。
+            ApplyLauncherVisibility();
         }
         catch (Exception ex)
         {
@@ -739,6 +883,8 @@ public sealed class HomeViewModel : ViewModelBase
             _stack.Log.Info($"游戏进程已退出：{exitCode}");
 
             var crash = AnalyzeCrash(exitCode, instanceDirectory, launchedAt);
+            var postLaunch = _stack.Config.Settings.PostLaunchCommand;
+            var commandDirectory = ResolveLaunchDirectory(version);
 
             UiThread.Post(() =>
             {
@@ -746,6 +892,9 @@ public sealed class HomeViewModel : ViewModelBase
                     ? GameLauncher.DescribeExitCode(exitCode)
                     : $"{crash.Title}（退出码 {exitCode}）";
                 AppendLaunchLine(StatusText);
+
+                // 崩溃时必须把启动器带回来，否则用户看不到崩溃界面。
+                RestoreLauncherWindow(force: crash is not null);
 
                 if (crash is not null)
                 {
@@ -758,6 +907,20 @@ public sealed class HomeViewModel : ViewModelBase
                     });
                 }
             });
+
+            if (!string.IsNullOrWhiteSpace(postLaunch))
+            {
+                try
+                {
+                    _stack.LaunchLog.Append($"执行结束后命令：{postLaunch}");
+                    var commandExit = await ShellCommand.RunAsync(postLaunch!, commandDirectory, OnCommandOutput);
+                    _stack.LaunchLog.Append($"结束后命令已结束（退出码 {commandExit}）");
+                }
+                catch (Exception ex)
+                {
+                    _stack.Log.Warn($"执行结束后命令失败：{postLaunch}", ex);
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -767,6 +930,52 @@ public sealed class HomeViewModel : ViewModelBase
         {
             process.Dispose();
         }
+    }
+
+    /// <summary>游戏进程成功启动后，按设置隐藏或关闭启动器。</summary>
+    private void ApplyLauncherVisibility()
+    {
+        var window = Application.Current?.MainWindow;
+        if (window is null)
+        {
+            return;
+        }
+
+        switch (_stack.Config.Settings.LauncherVisibility)
+        {
+            case LauncherVisibilityMode.Hide:
+            case LauncherVisibilityMode.HideAndReopen:
+                _windowHiddenByLaunch = true;
+                window.Hide();
+                break;
+
+            case LauncherVisibilityMode.Close:
+                _stack.Log.Info("游戏已启动，按设置退出启动器");
+                Application.Current!.Shutdown();
+                break;
+        }
+    }
+
+    /// <summary>
+    /// 游戏结束后恢复启动器窗口：只有「隐藏并重新打开」会自动恢复；
+    /// 崩溃时无论选了哪种隐藏方式都要显示，保证崩溃报告能被看到。
+    /// </summary>
+    private void RestoreLauncherWindow(bool force)
+    {
+        var window = Application.Current?.MainWindow;
+        if (window is null || !_windowHiddenByLaunch)
+        {
+            return;
+        }
+
+        if (!force && _stack.Config.Settings.LauncherVisibility != LauncherVisibilityMode.HideAndReopen)
+        {
+            return;
+        }
+
+        _windowHiddenByLaunch = false;
+        window.Show();
+        window.Activate();
     }
 
     /// <summary>退出码非 0 或本次启动产生了新崩溃报告时返回分析结果。</summary>

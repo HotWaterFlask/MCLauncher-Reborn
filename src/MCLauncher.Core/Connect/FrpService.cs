@@ -83,12 +83,15 @@ public sealed class FrpService : IDisposable
 
     public string BinaryPath => Path.Combine(_directory, "frpc.exe");
 
+    /// <summary>frpc 是否已经下载并通过基本校验。</summary>
+    public bool IsBinaryReady() => File.Exists(BinaryPath) && IsLikelyFrpc(BinaryPath);
+
     /// <summary>下载官方 frpc（已存在时直接复用）。</summary>
     public async Task EnsureBinaryAsync(Action<string>? log = null, CancellationToken ct = default)
     {
         var path = BinaryPath;
 
-        if (File.Exists(path) && IsLikelyFrpc(path))
+        if (IsBinaryReady())
         {
             return;
         }
@@ -128,10 +131,27 @@ public sealed class FrpService : IDisposable
             File.Move(temp, path, overwrite: true);
             log?.Invoke("frpc 下载完成");
             _log.Info($"frpc 已就绪：{path}");
+
+            // 独立下载完成后把状态从「下载中」收回来，避免界面一直停在下载态。
+            SetStateSafe(new FrpState
+            {
+                Status = FrpStatusKind.Idle,
+                Message = "frpc 已就绪",
+                Logs = SnapshotLogs(),
+            });
         }
-        catch (Exception ex) when (ex is HttpRequestException or IOException or TaskCanceledException)
+        catch (Exception ex) when (ex is HttpRequestException
+                                       or IOException
+                                       or TaskCanceledException
+                                       or InvalidDataException)
         {
             TryDelete(temp);
+            SetStateSafe(new FrpState
+            {
+                Status = FrpStatusKind.Error,
+                Message = "frpc 下载失败",
+                Logs = SnapshotLogs(),
+            });
             throw new InvalidOperationException(
                 $"frpc 下载失败：{ex.Message}。请检查网络后重试；也可以手动下载后放到 {_directory}", ex);
         }

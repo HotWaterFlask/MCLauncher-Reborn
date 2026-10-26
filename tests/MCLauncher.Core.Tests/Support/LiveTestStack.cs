@@ -28,6 +28,8 @@ internal sealed class LiveTestStack : IDisposable
 
     public required JavaService Java { get; init; }
 
+    public required ZuluJavaService ZuluJava { get; init; }
+
     public required LaunchArgumentBuilder ArgumentBuilder { get; init; }
 
     public required GameLauncher Launcher { get; init; }
@@ -54,7 +56,9 @@ internal sealed class LiveTestStack : IDisposable
         var batch = new DownloadBatch(downloader, log);
         var repository = new VersionRepository(new VersionResolver(log), log);
         var installer = new GameInstaller(downloader, resolver, batch, repository, log);
-        var java = new JavaService(log);
+        var javaRoot = Path.Combine(cacheDirectory, "java");
+        var java = new JavaService(log, javaRoot);
+        var zuluJava = new ZuluJavaService(downloader, batch, java, log, javaRoot);
         var forgeInstaller = new ForgeInstallerService(downloader, resolver, installer, java, log);
         var argumentBuilder = new LaunchArgumentBuilder(log);
         var launcher = new GameLauncher(log);
@@ -71,6 +75,7 @@ internal sealed class LiveTestStack : IDisposable
             Installer = installer,
             Manifests = new VersionManifestService(downloader, resolver, log, cacheDirectory),
             Java = java,
+            ZuluJava = zuluJava,
             ArgumentBuilder = argumentBuilder,
             Launcher = launcher,
             LaunchService = new GameLaunchService(

@@ -347,9 +347,7 @@ public sealed class EngineManagementViewModel : ViewModelBase
                     : value.Stage;
                 InstallSpeedText = InstallFileItem.FormatSpeed(value.BytesPerSecond);
                 _installRows.Update(value.ActiveFiles);
-                InstallProgress = value.Total > 0
-                    ? Math.Clamp((double)value.Completed / value.Total, 0, 1)
-                    : 0;
+                InstallProgress = value.Fraction;
             });
 
             // 自洽实例已经把原版合并进自己目录，装载加载器前要先补回基底。
