@@ -36,6 +36,24 @@ public sealed class ServerListService
             return Array.Empty<MinecraftServerEntry>();
         }
 
+        var servers = LoadBigEndian(path);
+
+        // 旧版本启动器曾用小端写入，游戏无法读取；这里尽量把数据捞回来并改写成标准格式。
+        if (servers.Count == 0 && IsLegacyLittleEndian(path))
+        {
+            servers = LoadLegacyLittleEndian(path);
+            if (servers.Count > 0)
+            {
+                _log.Warn($"检测到旧版小端 servers.dat，已读取 {servers.Count} 条并转换为标准格式：{path}");
+                Save(instanceDirectory, servers);
+            }
+        }
+
+        return servers;
+    }
+
+    private IReadOnlyList<MinecraftServerEntry> LoadBigEndian(string path)
+    {
         try
         {
             using var stream = File.OpenRead(path);
@@ -75,6 +93,144 @@ public sealed class ServerListService
         }
     }
 
+    /// <summary>识别旧版启动器写入的小端 NBT 文件头。</summary>
+    private static bool IsLegacyLittleEndian(string path)
+    {
+        try
+        {
+            using var stream = File.OpenRead(path);
+            var header = new byte[13];
+            if (stream.Read(header, 0, header.Length) != header.Length)
+            {
+                return false;
+            }
+
+            return header[0] == NbtReader.TagCompound
+                   && header[1] == 0
+                   && header[2] == 0
+                   && header[3] == NbtReader.TagList
+                   && header[4] == 7
+                   && header[5] == 0
+                   && Encoding.ASCII.GetString(header, 6, 7) == "servers";
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+    }
+
+    private IReadOnlyList<MinecraftServerEntry> LoadLegacyLittleEndian(string path)
+    {
+        try
+        {
+            using var stream = File.OpenRead(path);
+            using var reader = new BinaryReader(stream, Encoding.UTF8);
+
+            if (reader.ReadByte() != NbtReader.TagCompound)
+            {
+                return Array.Empty<MinecraftServerEntry>();
+            }
+
+            _ = ReadLegacyString(reader);
+
+            var type = reader.ReadByte();
+            var name = ReadLegacyString(reader);
+            if (type != NbtReader.TagList || name != "servers")
+            {
+                return Array.Empty<MinecraftServerEntry>();
+            }
+
+            var elementType = reader.ReadByte();
+            var count = reader.ReadInt32();
+            if (elementType != NbtReader.TagCompound || count <= 0 || count > 4096)
+            {
+                return Array.Empty<MinecraftServerEntry>();
+            }
+
+            var servers = new List<MinecraftServerEntry>(count);
+            for (var i = 0; i < count; i++)
+            {
+                if (!TryReadLegacyServer(reader, out var server))
+                {
+                    break;
+                }
+
+                servers.Add(server!);
+            }
+
+            return servers;
+        }
+        catch (Exception ex) when (ex is IOException or EndOfStreamException or InvalidDataException)
+        {
+            _log.Warn($"读取旧版服务器列表失败：{path}", ex);
+            return Array.Empty<MinecraftServerEntry>();
+        }
+    }
+
+    private static bool TryReadLegacyServer(BinaryReader reader, out MinecraftServerEntry? server)
+    {
+        server = new MinecraftServerEntry();
+
+        while (true)
+        {
+            var type = reader.ReadByte();
+            if (type == NbtReader.TagEnd)
+            {
+                return true;
+            }
+
+            var name = ReadLegacyString(reader);
+
+            if (type == NbtReader.TagString)
+            {
+                var value = ReadLegacyString(reader);
+                switch (name)
+                {
+                    case "name":
+                        server.Name = value;
+                        break;
+                    case "ip":
+                        server.Address = value;
+                        break;
+                    case "icon":
+                        server.IconBase64 = value;
+                        break;
+                }
+
+                continue;
+            }
+
+            if (type == NbtReader.TagByte)
+            {
+                var value = reader.ReadByte();
+                if (name == "acceptTextures")
+                {
+                    server.ResourcePolicy = value switch
+                    {
+                        1 => ServerResourcePackPolicy.Always,
+                        2 => ServerResourcePackPolicy.Never,
+                        _ => ServerResourcePackPolicy.Ask,
+                    };
+                }
+
+                continue;
+            }
+
+            return false;
+        }
+    }
+
+    private static string ReadLegacyString(BinaryReader reader)
+    {
+        var length = reader.ReadUInt16();
+        if (length == 0)
+        {
+            return string.Empty;
+        }
+
+        return Encoding.UTF8.GetString(reader.ReadBytes(length));
+    }
+
     /// <summary>写入服务器列表。列表为空时会写出空列表而不是删除文件，保证删除操作生效。</summary>
     public bool Save(string instanceDirectory, IReadOnlyList<MinecraftServerEntry> servers)
     {
@@ -94,7 +250,7 @@ public sealed class ServerListService
                 writer.Write(NbtReader.TagList);
                 WriteString(writer, "servers");
                 writer.Write(NbtReader.TagCompound); // 元素类型
-                writer.Write(servers.Count);
+                WriteInt32(writer, servers.Count);
 
                 foreach (var server in servers)
                 {
@@ -140,7 +296,7 @@ public sealed class ServerListService
     private static IReadOnlyList<MinecraftServerEntry> ReadServers(BinaryReader reader)
     {
         var elementType = reader.ReadByte();
-        var count = reader.ReadInt32();
+        var count = NbtReader.ReadInt32BigEndian(reader);
 
         // 损坏文件里的计数可能是任意值，先拦掉不合理的数量，避免按它分配内存。
         if (count <= 0 || count > 4096)
@@ -219,6 +375,7 @@ public sealed class ServerListService
         }
     }
 
+    /// <summary>NBT 的字符串长度与列表计数都是大端序，不能用 BinaryWriter 的默认小端写入。</summary>
     private static void WriteString(BinaryWriter writer, string value)
     {
         var bytes = Encoding.UTF8.GetBytes(value);
@@ -229,8 +386,17 @@ public sealed class ServerListService
             bytes = bytes[..ushort.MaxValue];
         }
 
-        writer.Write((ushort)bytes.Length);
+        writer.Write((byte)(bytes.Length >> 8));
+        writer.Write((byte)bytes.Length);
         writer.Write(bytes);
+    }
+
+    private static void WriteInt32(BinaryWriter writer, int value)
+    {
+        writer.Write((byte)(value >> 24));
+        writer.Write((byte)(value >> 16));
+        writer.Write((byte)(value >> 8));
+        writer.Write((byte)value);
     }
 
     private void TryDelete(string path)

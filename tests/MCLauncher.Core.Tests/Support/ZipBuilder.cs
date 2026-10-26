@@ -49,7 +49,8 @@ internal static class ZipBuilder
     private static void WriteString(BinaryWriter writer, string value)
     {
         var bytes = Encoding.UTF8.GetBytes(value);
-        writer.Write((ushort)bytes.Length);
+        writer.Write((byte)(bytes.Length >> 8));
+        writer.Write((byte)bytes.Length);
         writer.Write(bytes);
     }
 }
