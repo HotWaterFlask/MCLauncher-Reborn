@@ -136,22 +136,30 @@ public static class NbtReader
                 return true;
 
             case TagShort:
-                reader.ReadInt16();
+                reader.BaseStream.Seek(2, SeekOrigin.Current);
                 return true;
 
             case TagInt:
             case TagFloat:
-                reader.ReadInt32();
+                reader.BaseStream.Seek(4, SeekOrigin.Current);
                 return true;
 
             case TagLong:
             case TagDouble:
-                reader.ReadInt64();
+                reader.BaseStream.Seek(8, SeekOrigin.Current);
                 return true;
 
             case TagByteArray:
-                reader.BaseStream.Seek(reader.ReadInt32(), SeekOrigin.Current);
-                return true;
+                {
+                    var length = ReadInt32BigEndian(reader);
+                    if (length < 0)
+                    {
+                        return false;
+                    }
+
+                    reader.BaseStream.Seek(length, SeekOrigin.Current);
+                    return true;
+                }
 
             case TagString:
                 SeekString(reader);
@@ -160,7 +168,7 @@ public static class NbtReader
             case TagList:
                 {
                     var elementType = reader.ReadByte();
-                    var length = reader.ReadInt32();
+                    var length = ReadInt32BigEndian(reader);
                     if (length < 0)
                     {
                         return false;
@@ -194,12 +202,28 @@ public static class NbtReader
                 return SkipCompound(reader);
 
             case TagIntArray:
-                reader.BaseStream.Seek(reader.ReadInt32() * 4L, SeekOrigin.Current);
-                return true;
+                {
+                    var length = ReadInt32BigEndian(reader);
+                    if (length < 0)
+                    {
+                        return false;
+                    }
+
+                    reader.BaseStream.Seek(length * 4L, SeekOrigin.Current);
+                    return true;
+                }
 
             case TagLongArray:
-                reader.BaseStream.Seek(reader.ReadInt32() * 8L, SeekOrigin.Current);
-                return true;
+                {
+                    var length = ReadInt32BigEndian(reader);
+                    if (length < 0)
+                    {
+                        return false;
+                    }
+
+                    reader.BaseStream.Seek(length * 8L, SeekOrigin.Current);
+                    return true;
+                }
 
             default:
                 return false;
@@ -226,7 +250,7 @@ public static class NbtReader
 
     internal static string ReadString(BinaryReader reader)
     {
-        var length = reader.ReadUInt16();
+        var length = ReadUInt16BigEndian(reader);
         if (length == 0)
         {
             return string.Empty;
@@ -238,7 +262,24 @@ public static class NbtReader
 
     private static void SeekString(BinaryReader reader)
     {
-        var length = reader.ReadUInt16();
+        var length = ReadUInt16BigEndian(reader);
         reader.BaseStream.Seek(length, SeekOrigin.Current);
+    }
+
+    /// <summary>NBT 的所有多字节整数都是大端序，不能直接用 BinaryReader 的小端读取。</summary>
+    internal static ushort ReadUInt16BigEndian(BinaryReader reader)
+    {
+        var high = reader.ReadByte();
+        var low = reader.ReadByte();
+        return (ushort)((high << 8) | low);
+    }
+
+    internal static int ReadInt32BigEndian(BinaryReader reader)
+    {
+        var b0 = reader.ReadByte();
+        var b1 = reader.ReadByte();
+        var b2 = reader.ReadByte();
+        var b3 = reader.ReadByte();
+        return (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
     }
 }
