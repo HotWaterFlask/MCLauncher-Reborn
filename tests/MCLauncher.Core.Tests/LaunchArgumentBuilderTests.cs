@@ -77,7 +77,8 @@ public sealed class LaunchArgumentBuilderTests
         string versionJson,
         LaunchOptions options,
         Account account,
-        string gameDirectory)
+        string gameDirectory,
+        string? workingDirectory = null)
     {
         var version = Parse(versionJson);
         return new LaunchContext
@@ -88,6 +89,7 @@ public sealed class LaunchArgumentBuilderTests
             JavaPath = "C:/java/bin/java.exe",
             VersionId = version.Id!,
             GameDirectory = gameDirectory,
+            WorkingDirectory = workingDirectory,
             AssetsRoot = Path.Combine(gameDirectory, "assets"),
             NativesDirectory = Path.Combine(gameDirectory, "versions", version.Id!, "natives-windows"),
             LibrariesDirectory = Path.Combine(gameDirectory, "libraries"),
@@ -364,5 +366,83 @@ public sealed class LaunchArgumentBuilderTests
         Assert.Contains("--unknown", command.GameArguments);
         Assert.Equal(string.Empty, command.GameArguments[1]);
         Assert.True(log.Contains("not_a_real_var"), "应记录未识别的变量");
+    }
+
+    [Fact]
+    public void 单人存档快速游玩参数被追加()
+    {
+        var options = new LaunchOptions
+        {
+            QuickPlayMode = QuickPlayMode.Singleplayer,
+            QuickPlayWorld = "我的世界",
+            GameVersion = "1.20.4",
+        };
+
+        var game = Build(ModernJson, options).GameArguments;
+
+        Assert.Equal("我的世界", game[IndexOf(game, "--quickPlaySingleplayer") + 1]);
+        Assert.Equal(-1, IndexOf(game, "--quickPlayMultiplayer"));
+    }
+
+    [Fact]
+    public void Realms快速游玩参数被追加()
+    {
+        var options = new LaunchOptions
+        {
+            QuickPlayMode = QuickPlayMode.Realms,
+            QuickPlayRealmsId = "1234567",
+            GameVersion = "1.21.1",
+        };
+
+        var game = Build(ModernJson, options).GameArguments;
+
+        Assert.Equal("1234567", game[IndexOf(game, "--quickPlayRealms") + 1]);
+    }
+
+    [Fact]
+    public void 旧版本的快速游玩设置被忽略()
+    {
+        var options = new LaunchOptions
+        {
+            QuickPlayMode = QuickPlayMode.Singleplayer,
+            QuickPlayWorld = "world",
+            GameVersion = "1.19.4",
+        };
+
+        var game = Build(ModernJson, options).GameArguments;
+
+        Assert.Equal(-1, IndexOf(game, "--quickPlaySingleplayer"));
+        Assert.Equal(-1, IndexOf(game, "--quickPlayRealms"));
+    }
+
+    [Fact]
+    public void 工作目录环境变量优先级与包装命令被传递()
+    {
+        var options = new LaunchOptions
+        {
+            EnvironmentVariables = new Dictionary<string, string> { ["MY_VAR"] = "值" },
+            ProcessPriority = GameProcessPriority.High,
+            WrapperCommand = "wrapper.exe --flag",
+        };
+
+        var context = CreateContext(
+            ModernJson,
+            options,
+            Account.CreateOffline("P"),
+            @"C:\mc",
+            workingDirectory: @"D:\run");
+        var command = new LaunchArgumentBuilder(new TestLog()).Build(context);
+
+        Assert.Equal(@"D:\run", command.WorkingDirectory);
+        Assert.Equal("值", command.Environment["MY_VAR"]);
+        Assert.Equal(GameProcessPriority.High, command.Priority);
+        Assert.Equal("wrapper.exe --flag", command.WrapperCommand);
+    }
+
+    [Fact]
+    public void 未设置工作目录时回退到实例目录()
+    {
+        var command = Build(ModernJson, new LaunchOptions(), @"C:\mc");
+        Assert.Equal(@"C:\mc", command.WorkingDirectory);
     }
 }

@@ -20,6 +20,22 @@ public enum BackgroundMode
     Network,
 }
 
+/// <summary>游戏启动后启动器窗口的行为。</summary>
+public enum LauncherVisibilityMode
+{
+    /// <summary>保持显示。</summary>
+    KeepVisible = 0,
+
+    /// <summary>隐藏启动器窗口（进程保留，游戏结束后仍隐藏）。</summary>
+    Hide = 1,
+
+    /// <summary>结束启动器进程，游戏继续运行。</summary>
+    Close = 2,
+
+    /// <summary>隐藏启动器，游戏结束后重新显示。</summary>
+    HideAndReopen = 3,
+}
+
 /// <summary>启动器全局设置。序列化到 %LOCALAPPDATA%\MCLauncher-Reborn\settings.json。</summary>
 public sealed class AppSettings
 {
@@ -101,6 +117,42 @@ public sealed class AppSettings
 
     /// <summary>默认是否对实例启用版本隔离。</summary>
     public bool DefaultIsolation { get; set; } = true;
+
+    /// <summary>启动前跳过完整性与缺失文件检查（更快，但缺文件时可能启动失败）。</summary>
+    public bool SkipIntegrityCheck { get; set; }
+
+    /// <summary>游戏进程工作目录；为空时使用实例目录。</summary>
+    public string? LaunchWorkingDirectory { get; set; }
+
+    /// <summary>传给游戏进程的额外环境变量，每行 <c>NAME=VALUE</c>。</summary>
+    public string? EnvironmentVariablesText { get; set; }
+
+    /// <summary>游戏进程优先级。</summary>
+    public GameProcessPriority ProcessPriority { get; set; } = GameProcessPriority.Normal;
+
+    /// <summary>游戏启动后启动器窗口的行为。</summary>
+    public LauncherVisibilityMode LauncherVisibility { get; set; } = LauncherVisibilityMode.KeepVisible;
+
+    /// <summary>快速游玩模式。</summary>
+    public QuickPlayMode QuickPlayMode { get; set; } = QuickPlayMode.None;
+
+    /// <summary>快速游玩：服务器地址（<c>host:port</c>，端口省略时用 25565）。</summary>
+    public string? QuickPlayServer { get; set; }
+
+    /// <summary>快速游玩：单人存档文件夹名。</summary>
+    public string? QuickPlayWorld { get; set; }
+
+    /// <summary>快速游玩：Realms 服务器 ID。</summary>
+    public string? QuickPlayRealmsId { get; set; }
+
+    /// <summary>放在 java 命令前面的包装命令。</summary>
+    public string? WrapperCommand { get; set; }
+
+    /// <summary>游戏启动前执行的命令（Windows <c>cmd</c> 语法）。</summary>
+    public string? PreLaunchCommand { get; set; }
+
+    /// <summary>游戏结束后执行的命令（Windows <c>cmd</c> 语法）。</summary>
+    public string? PostLaunchCommand { get; set; }
 
     // ---- Java ----
     /// <summary>手动指定的 Java 可执行文件路径；为空时自动探测。</summary>

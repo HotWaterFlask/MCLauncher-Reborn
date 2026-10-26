@@ -40,6 +40,24 @@ public static class HashUtil
         return string.Equals(Sha1OfFile(path), expected, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>流式计算文件 SHA-256（Zulu 等第三方安装包用）。</summary>
+    public static string Sha256OfFile(string path)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16);
+        return ToHex(SHA256.HashData(stream));
+    }
+
+    /// <summary>校验文件 SHA-256，期望值为空时直接视为通过。</summary>
+    public static bool VerifySha256(string path, string? expected)
+    {
+        if (string.IsNullOrWhiteSpace(expected))
+        {
+            return true;
+        }
+
+        return string.Equals(Sha256OfFile(path), expected, StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>计算字符串的 MD5（离线账号 UUID 需要）。</summary>
     public static byte[] Md5OfBytes(byte[] data) => MD5.HashData(data);
 

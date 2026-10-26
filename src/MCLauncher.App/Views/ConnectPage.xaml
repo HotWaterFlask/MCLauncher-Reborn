@@ -305,7 +305,7 @@
                               Visibility="{Binding IsFrpPage, Converter={StaticResource BoolToVis}}">
                     <StackPanel>
                         <TextBlock Style="{StaticResource HintText}" Margin="0,0,0,6"
-                                   Text="在 natfrp.com 注册并创建 TCP 隧道，把隧道本地端口设为游戏里的局域网端口；然后填写访问密钥与隧道 ID。frpc 会由启动器自动下载官方版本。"/>
+                                   Text="在 natfrp.com 注册并创建 TCP 隧道，把隧道本地端口设为游戏里的局域网端口；然后填写访问密钥与隧道 ID。frpc 会由启动器自动下载官方版本，也可以先点下方「下载 / 校验 frpc」准备好。"/>
 
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -339,9 +339,17 @@
                             <Button Style="{StaticResource SkinButton}" Content="停止"
                                     Width="72" Height="28" FontSize="12" Margin="8,0,0,0"
                                     Command="{Binding StopFrpCommand}"/>
+                            <Button Style="{StaticResource SkinButton}" Content="下载 / 校验 frpc"
+                                    Width="118" Height="28" FontSize="12" Margin="8,0,0,0"
+                                    Command="{Binding InstallFrpCommand}"/>
                         </StackPanel>
 
+                        <ProgressBar Height="4" Margin="0,6,0,0" IsIndeterminate="True"
+                                     Visibility="{Binding IsFrpInstalling, Converter={StaticResource BoolToVis}}"/>
+
                         <TextBlock Text="{Binding FrpStatusText}" Style="{StaticResource StatusText}"/>
+                        <TextBlock Text="{Binding FrpPreparationHint}" Style="{StaticResource HintText}"
+                                   Margin="0,2,0,0" TextWrapping="Wrap"/>
 
                         <Grid Margin="0,6,0,0">
                             <Grid.ColumnDefinitions>

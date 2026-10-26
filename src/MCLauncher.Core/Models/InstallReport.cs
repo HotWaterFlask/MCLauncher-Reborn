@@ -48,7 +48,14 @@ public sealed class InstallProgress
     /// <summary>实时下载速度（字节/秒）。</summary>
     public double BytesPerSecond { get; init; }
 
-    public double Fraction => Total > 0 ? Math.Clamp((double)Completed / Total, 0d, 1d) : 0d;
+    /// <summary>
+    /// 由下载字节数直接给出的进度（0–1）。用于 Java 运行时这类单文件大下载；
+    /// 为空时按 <see cref="Completed"/> / <see cref="Total"/> 计算文件数进度。
+    /// </summary>
+    public double? FractionOverride { get; init; }
+
+    public double Fraction => FractionOverride
+                              ?? (Total > 0 ? Math.Clamp((double)Completed / Total, 0d, 1d) : 0d);
 
     public override string ToString() => $"{Stage} {Completed}/{Total}";
 }

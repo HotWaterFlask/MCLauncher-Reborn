@@ -178,7 +178,8 @@
                             Content="自动探测" Width="88" Height="26" FontSize="13"/>
                 </Grid>
                 <TextBlock Margin="0,6,0,0" Style="{StaticResource BodyText}" Text="{Binding JavaHint}"/>
-                <ListBox ItemsSource="{Binding Javas}" Height="96" Margin="0,8,0,0"
+                <ListBox ItemsSource="{Binding Javas}" SelectedItem="{Binding SelectedJava, Mode=TwoWay}"
+                         Height="96" Margin="0,8,0,0"
                          Background="White" BorderBrush="{StaticResource ContentBorderBrush}" BorderThickness="1">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
@@ -190,6 +191,8 @@
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
+                <TextBlock Margin="0,6,0,0" Style="{StaticResource BodyText}"
+                           Text="点击列表中的运行时即可设为当前 Java；缺少合适版本时，启动游戏会自动下载 Zulu JDK。"/>
 
                 <!-- 内存 -->
                 <TextBlock Text="内存" Style="{StaticResource SectionTitle}" Margin="0,18,0,8"/>
@@ -246,6 +249,61 @@
                            TextWrapping="Wrap"
                            Text="窗口大小可选预设，也可以直接输入数字；「最大化」按主显示器分辨率启动。首次使用时会按显示器分辨率自动选择一次，之后以你的设置为准。"/>
 
+                <!-- 快速游玩 -->
+                <TextBlock Text="快速游玩" Style="{StaticResource SectionTitle}" Margin="0,18,0,8"/>
+                <RadioButton Content="不自动进入"
+                             GroupName="QuickPlay"
+                             IsChecked="{Binding IsQuickPlayNone, Mode=TwoWay}"
+                             FontSize="13" Foreground="#1A1A1A"/>
+                <Grid Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <RadioButton Grid.Column="0" Content="进入多人游戏"
+                                 GroupName="QuickPlay"
+                                 IsChecked="{Binding IsQuickPlayMultiplayer, Mode=TwoWay}"
+                                 FontSize="13" Foreground="#1A1A1A" VerticalAlignment="Center"/>
+                    <TextBox Grid.Column="1" Margin="12,0,0,0" Height="26"
+                             VerticalContentAlignment="Center" Padding="6,0" FontSize="13"
+                             IsEnabled="{Binding IsQuickPlayMultiplayer}"
+                             Text="{Binding QuickPlayServer, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="服务器地址，例如 mc.example.com 或 mc.example.com:25565"/>
+                </Grid>
+                <Grid Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <RadioButton Grid.Column="0" Content="进入单人存档"
+                                 GroupName="QuickPlay"
+                                 IsChecked="{Binding IsQuickPlaySingleplayer, Mode=TwoWay}"
+                                 FontSize="13" Foreground="#1A1A1A" VerticalAlignment="Center"/>
+                    <TextBox Grid.Column="1" Margin="12,0,0,0" Height="26"
+                             VerticalContentAlignment="Center" Padding="6,0" FontSize="13"
+                             IsEnabled="{Binding IsQuickPlaySingleplayer}"
+                             Text="{Binding QuickPlayWorld, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="saves 目录下的存档文件夹名"/>
+                </Grid>
+                <Grid Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <RadioButton Grid.Column="0" Content="进入 Realms"
+                                 GroupName="QuickPlay"
+                                 IsChecked="{Binding IsQuickPlayRealms, Mode=TwoWay}"
+                                 FontSize="13" Foreground="#1A1A1A" VerticalAlignment="Center"/>
+                    <TextBox Grid.Column="1" Margin="12,0,0,0" Height="26"
+                             VerticalContentAlignment="Center" Padding="6,0" FontSize="13"
+                             IsEnabled="{Binding IsQuickPlayRealms}"
+                             Text="{Binding QuickPlayRealmsId, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="Realms 服务器 ID"/>
+                </Grid>
+                <TextBlock Margin="0,6,0,0" Style="{StaticResource BodyText}"
+                           TextWrapping="Wrap"
+                           Text="多人游戏在 1.20 及以上使用快速加入参数，更早版本退回服务器与端口参数；单人存档与 Realms 需要 1.20 及以上。"/>
+
                 <!-- 附加参数 -->
                 <TextBlock Text="附加启动参数" Style="{StaticResource SectionTitle}" Margin="0,18,0,8"/>
                 <TextBlock Style="{StaticResource BodyText}" Text="JVM 参数（支持 ${version_name} 等变量）"/>
@@ -254,6 +312,84 @@
                 <TextBlock Style="{StaticResource BodyText}" Text="游戏参数" Margin="0,8,0,0"/>
                 <TextBox Text="{Binding ExtraGameArgs, UpdateSourceTrigger=PropertyChanged}"
                          Margin="0,4,0,0" Height="26" VerticalContentAlignment="Center" Padding="6,0" FontSize="13"/>
+
+                <!-- 游戏运行路径 -->
+                <TextBlock Text="游戏运行路径" Style="{StaticResource SectionTitle}" Margin="0,18,0,8"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox Grid.Column="0" Text="{Binding LaunchWorkingDirectory, UpdateSourceTrigger=PropertyChanged}"
+                             Height="26" VerticalContentAlignment="Center" Padding="6,0" FontSize="13"/>
+                    <Button Grid.Column="1" Margin="8,0,0,0" Style="{StaticResource SkinButton}"
+                            Command="{Binding BrowseWorkingDirectoryCommand}"
+                            Content="浏览…" Width="72" Height="26" FontSize="13"/>
+                </Grid>
+                <TextBlock Margin="0,6,0,0" Style="{StaticResource BodyText}"
+                           TextWrapping="Wrap"
+                           Text="留空时使用实例目录；相对路径按游戏目录解析，目录不存在会自动创建。"/>
+
+                <!-- 环境变量 -->
+                <TextBlock Text="环境变量" Style="{StaticResource SectionTitle}" Margin="0,18,0,8"/>
+                <TextBox Text="{Binding EnvironmentVariablesText, UpdateSourceTrigger=PropertyChanged}"
+                         Height="76" AcceptsReturn="True" TextWrapping="NoWrap"
+                         VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top"
+                         Padding="6,4" FontFamily="Consolas, 宋体" FontSize="12"/>
+                <TextBlock Margin="0,6,0,0" Style="{StaticResource BodyText}"
+                           TextWrapping="Wrap"
+                           Text="每行一个 NAME=VALUE；以 # 开头的行会被忽略。变量只传给游戏进程，不影响启动器本身。"/>
+
+                <!-- 进程与启动器 -->
+                <TextBlock Text="进程与启动器" Style="{StaticResource SectionTitle}" Margin="0,18,0,8"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="游戏进程优先级"
+                               VerticalAlignment="Center" FontSize="13" Foreground="#1A1A1A"/>
+                    <ComboBox Grid.Row="0" Grid.Column="1" Width="220" Height="26" Margin="12,0,0,0"
+                              HorizontalAlignment="Left" FontSize="13"
+                              ItemsSource="{Binding ProcessPriorityChoices}"
+                              DisplayMemberPath="Label" SelectedValuePath="Value"
+                              SelectedValue="{Binding ProcessPriority, Mode=TwoWay}"/>
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="游戏启动后" Margin="0,8,0,0"
+                               VerticalAlignment="Center" FontSize="13" Foreground="#1A1A1A"/>
+                    <ComboBox Grid.Row="1" Grid.Column="1" Width="220" Height="26" Margin="12,8,0,0"
+                              HorizontalAlignment="Left" FontSize="13"
+                              ItemsSource="{Binding LauncherVisibilityChoices}"
+                              DisplayMemberPath="Label" SelectedValuePath="Value"
+                              SelectedValue="{Binding LauncherVisibility, Mode=TwoWay}"/>
+                </Grid>
+                <TextBlock Margin="0,6,0,0" Style="{StaticResource BodyText}"
+                           TextWrapping="Wrap"
+                           Text="「隐藏，游戏结束后重新打开」会在游戏退出后自动恢复启动器；游戏崩溃时也会显示启动器以便查看报告。"/>
+
+                <!-- 启动前检查 -->
+                <TextBlock Text="启动前检查" Style="{StaticResource SectionTitle}" Margin="0,18,0,8"/>
+                <CheckBox Content="跳过完整性与缺失文件检查（启动更快，缺文件时可能直接启动失败）"
+                          IsChecked="{Binding SkipIntegrityCheck}"
+                          FontSize="13" Foreground="#1A1A1A"/>
+
+                <!-- 自定义命令 -->
+                <TextBlock Text="自定义命令" Style="{StaticResource SectionTitle}" Margin="0,18,0,8"/>
+                <TextBlock Style="{StaticResource BodyText}" Text="包装命令（放在 java 命令前面，可选）"/>
+                <TextBox Text="{Binding WrapperCommand, UpdateSourceTrigger=PropertyChanged}"
+                         Margin="0,4,0,0" Height="26" VerticalContentAlignment="Center" Padding="6,0" FontSize="13"/>
+                <TextBlock Style="{StaticResource BodyText}" Text="启动前命令（cmd 语法，非 0 退出码会阻止启动）" Margin="0,8,0,0"/>
+                <TextBox Text="{Binding PreLaunchCommand, UpdateSourceTrigger=PropertyChanged}"
+                         Margin="0,4,0,0" Height="26" VerticalContentAlignment="Center" Padding="6,0" FontSize="13"/>
+                <TextBlock Style="{StaticResource BodyText}" Text="结束后命令（cmd 语法，游戏退出后执行）" Margin="0,8,0,0"/>
+                <TextBox Text="{Binding PostLaunchCommand, UpdateSourceTrigger=PropertyChanged}"
+                         Margin="0,4,0,0" Height="26" VerticalContentAlignment="Center" Padding="6,0" FontSize="13"/>
+                <TextBlock Margin="0,6,0,0" Style="{StaticResource BodyText}"
+                           TextWrapping="Wrap"
+                           Text="三条命令都在游戏进程的工作目录执行，输出会写入启动器日志。"/>
 
                 <!-- 版本隔离 -->
                 <TextBlock Text="版本隔离" Style="{StaticResource SectionTitle}" Margin="0,18,0,8"/>
@@ -266,6 +402,10 @@
                 <!-- 配置位置 -->
                 <TextBlock Text="配置文件位置" Style="{StaticResource SectionTitle}" Margin="0,18,0,8"/>
                 <TextBlock Style="{StaticResource BodyText}" Text="{Binding ConfigDirectory}" FontFamily="Consolas, 宋体"/>
+                <Button Margin="0,6,0,0" HorizontalAlignment="Left"
+                        Style="{StaticResource SkinButton}"
+                        Command="{Binding OpenLogDirectoryCommand}"
+                        Content="打开日志目录" Width="110" Height="26" FontSize="12"/>
 
                 <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
                     <Button Style="{StaticResource SkinButton}"

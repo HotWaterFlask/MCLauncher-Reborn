@@ -32,6 +32,7 @@ public sealed class ConnectViewModel : ViewModelBase
     private readonly AsyncRelayCommand _joinDirectCommand;
     private readonly AsyncRelayCommand _startFrpCommand;
     private readonly AsyncRelayCommand _stopFrpCommand;
+    private readonly AsyncRelayCommand _installFrpCommand;
     private readonly AsyncRelayCommand _installTcCommand;
     private readonly AsyncRelayCommand _startTcHostCommand;
     private readonly AsyncRelayCommand _joinTcCommand;
@@ -56,6 +57,8 @@ public sealed class ConnectViewModel : ViewModelBase
     private string _frpStatusText = "尚未启动";
     private string _frpRemoteAddress = string.Empty;
     private bool _isFrpRunning;
+    private bool _isFrpInstalling;
+    private bool _frpBinaryReady;
 
     // ---- 陶瓦联机 ----
     private string _tcPlayerName = string.Empty;
@@ -84,6 +87,7 @@ public sealed class ConnectViewModel : ViewModelBase
 
         _frpAccessKey = stack.Config.Settings.FrpAccessKey ?? string.Empty;
         _frpTunnelId = stack.Config.Settings.FrpTunnelId ?? string.Empty;
+        _frpBinaryReady = stack.Frp.IsBinaryReady();
         _tcPlayerName = stack.Config.Settings.TerracottaPlayerName
                         ?? stack.Accounts.Selected?.Name
                         ?? "MCLauncher";
@@ -111,11 +115,18 @@ public sealed class ConnectViewModel : ViewModelBase
 
         _startFrpCommand = new AsyncRelayCommand(
             StartFrpAsync,
-            () => !IsFrpRunning && !string.IsNullOrWhiteSpace(FrpAccessKey) && !string.IsNullOrWhiteSpace(FrpTunnelId),
+            () => !IsFrpRunning
+                  && !IsFrpInstalling
+                  && !string.IsNullOrWhiteSpace(FrpAccessKey)
+                  && !string.IsNullOrWhiteSpace(FrpTunnelId),
             ex => FrpStatusText = ex.Message);
         _stopFrpCommand = new AsyncRelayCommand(
             StopFrpAsync,
             () => IsFrpRunning,
+            ex => FrpStatusText = ex.Message);
+        _installFrpCommand = new AsyncRelayCommand(
+            InstallFrpAsync,
+            () => !IsFrpRunning && !IsFrpInstalling,
             ex => FrpStatusText = ex.Message);
 
         _installTcCommand = new AsyncRelayCommand(
@@ -347,6 +358,36 @@ public sealed class ConnectViewModel : ViewModelBase
         }
     }
 
+    /// <summary>frpc 二进制是否已下载并通过基本校验。</summary>
+    public bool FrpBinaryReady
+    {
+        get => _frpBinaryReady;
+        private set
+        {
+            if (SetProperty(ref _frpBinaryReady, value))
+            {
+                OnPropertyChanged(nameof(FrpPreparationHint));
+            }
+        }
+    }
+
+    /// <summary>正在下载或校验 frpc。</summary>
+    public bool IsFrpInstalling
+    {
+        get => _isFrpInstalling;
+        private set
+        {
+            if (SetProperty(ref _isFrpInstalling, value))
+            {
+                RaiseCommandStates();
+            }
+        }
+    }
+
+    public string FrpPreparationHint => FrpBinaryReady
+        ? "frpc 已就绪，可以直接启动穿透。"
+        : "frpc 尚未下载：启动穿透时会自动下载，也可以先点「下载 / 校验 frpc」准备好。";
+
     public string FrpLocalPortHint => string.IsNullOrWhiteSpace(LanPortText)
         ? "先在 natfrp.com 创建 TCP 隧道，本地端口填游戏里「对局域网开放」显示的端口。"
         : $"隧道本地端口应填 {LanPortText}（游戏里显示的局域网端口）。";
@@ -356,6 +397,8 @@ public sealed class ConnectViewModel : ViewModelBase
     public ICommand StartFrpCommand => _startFrpCommand;
 
     public ICommand StopFrpCommand => _stopFrpCommand;
+
+    public ICommand InstallFrpCommand => _installFrpCommand;
 
     public ICommand CopyFrpAddressCommand { get; }
 
@@ -801,9 +844,32 @@ public sealed class ConnectViewModel : ViewModelBase
 
     private void ApplyFrpState(FrpState state)
     {
+        IsFrpInstalling = state.Status == FrpStatusKind.Downloading;
         IsFrpRunning = state.Status is FrpStatusKind.Starting or FrpStatusKind.Running;
+        FrpBinaryReady = _stack.Frp.IsBinaryReady();
         FrpRemoteAddress = state.RemoteAddress ?? string.Empty;
         FrpStatusText = state.Message;
+    }
+
+    private async Task InstallFrpAsync()
+    {
+        FrpLogs.Clear();
+        FrpStatusText = "正在下载 / 校验 frpc…";
+        IsFrpInstalling = true;
+
+        try
+        {
+            await _stack.Frp
+                .EnsureBinaryAsync(line => UiThread.Post(() => AppendFrpLog(line)))
+                .ConfigureAwait(true);
+
+            FrpBinaryReady = _stack.Frp.IsBinaryReady();
+            FrpStatusText = FrpBinaryReady ? "frpc 已就绪" : "frpc 校验失败，请重试";
+        }
+        finally
+        {
+            IsFrpInstalling = false;
+        }
     }
 
     private void AppendFrpLog(string line)
@@ -1071,6 +1137,7 @@ public sealed class ConnectViewModel : ViewModelBase
         _joinDirectCommand.RaiseCanExecuteChanged();
         _startFrpCommand.RaiseCanExecuteChanged();
         _stopFrpCommand.RaiseCanExecuteChanged();
+        _installFrpCommand.RaiseCanExecuteChanged();
         _installTcCommand.RaiseCanExecuteChanged();
         _startTcHostCommand.RaiseCanExecuteChanged();
         _joinTcCommand.RaiseCanExecuteChanged();

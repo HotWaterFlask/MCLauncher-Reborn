@@ -27,11 +27,15 @@ public sealed partial class JavaService
     private const int ScanDirectoryLimit = 512;
 
     private readonly ILogger _log;
+    private readonly string? _managedRuntimeRoot;
     private IReadOnlyList<JavaInfo>? _cache;
 
-    public JavaService(ILogger log)
+    /// <param name="log">日志。</param>
+    /// <param name="managedRuntimeRoot">启动器自己管理的 Java 根目录（如 <c>.fmmcl\java</c>）；为空时用旧版记录的位置。</param>
+    public JavaService(ILogger log, string? managedRuntimeRoot = null)
     {
         _log = log;
+        _managedRuntimeRoot = managedRuntimeRoot;
     }
 
     [GeneratedRegex(@"java\.version\s*=\s*(\S+)")]
@@ -176,7 +180,11 @@ public sealed partial class JavaService
 
     /// <summary>
     /// 为指定主版本挑最合适的 Java：
-    /// 优先主版本完全一致 → 其次不小于要求的最小版本 → 最后退到最高版本。
+    /// 优先主版本完全一致 → 其次不小于要求的最小版本。
+    /// <para>
+    /// 找不到「不低版本要求」的 Java 时返回 null，交给上层下载对应版本，而不是退回更旧的 Java。
+    /// Java 8 是特殊情况：旧版 Forge / Mod 对 9+ 兼容性很差，没有 8 时也返回 null。
+    /// </para>
     /// </summary>
     public JavaInfo? SelectBest(int requiredMajor, IReadOnlyList<JavaInfo>? candidates = null)
     {
@@ -198,12 +206,9 @@ public sealed partial class JavaService
             .OrderBy(j => j.MajorVersion)
             .ThenByDescending(j => j.PatchVersion)
             .FirstOrDefault();
-        if (newer is not null)
-        {
-            return newer;
-        }
 
-        return pool.MaxBy(j => j.SortKey);
+        // Java 8 只认主版本完全匹配，避免拿 17/21 去跑 1.12 的 Forge。
+        return requiredMajor == JavaVersionRequirement.DefaultMajorVersion ? null : newer;
     }
 
     public void Invalidate() => _cache = null;
@@ -508,7 +513,7 @@ public sealed partial class JavaService
         }
 
         // 本启动器自己管理的 Java。
-        yield return System.IO.Path.Combine(ConfigRoot(localAppData), "java");
+        yield return _managedRuntimeRoot ?? System.IO.Path.Combine(ConfigRoot(localAppData), "java");
     }
 
     private static string ConfigRoot(string localAppData) => System.IO.Path.Combine(localAppData, "MCLauncher-Reborn");

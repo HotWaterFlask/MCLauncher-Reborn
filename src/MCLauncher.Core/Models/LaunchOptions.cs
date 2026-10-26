@@ -13,6 +13,33 @@ public enum GameWindowMode
     Maximized = 2,
 }
 
+/// <summary>快速游玩模式（1.20 及以上由游戏原生支持）。</summary>
+public enum QuickPlayMode
+{
+    /// <summary>正常进入游戏主菜单。</summary>
+    None = 0,
+
+    /// <summary>直接进入多人服务器。</summary>
+    Multiplayer = 1,
+
+    /// <summary>直接进入单人存档。</summary>
+    Singleplayer = 2,
+
+    /// <summary>直接进入 Realms 服务器。</summary>
+    Realms = 3,
+}
+
+/// <summary>游戏进程优先级；映射到 Windows 的进程优先级类。</summary>
+public enum GameProcessPriority
+{
+    Low = 0,
+    BelowNormal = 1,
+    Normal = 2,
+    AboveNormal = 3,
+    High = 4,
+    RealTime = 5,
+}
+
 /// <summary>一次启动的可调参数。</summary>
 public sealed class LaunchOptions
 {
@@ -36,6 +63,27 @@ public sealed class LaunchOptions
 
     /// <summary>附加游戏参数（空格分隔，支持 ${...} 变量）。</summary>
     public string? ExtraGameArgs { get; init; }
+
+    /// <summary>游戏进程工作目录；为空时使用实例目录。</summary>
+    public string? WorkingDirectory { get; init; }
+
+    /// <summary>传给游戏进程的额外环境变量。</summary>
+    public IReadOnlyDictionary<string, string>? EnvironmentVariables { get; init; }
+
+    /// <summary>游戏进程优先级。</summary>
+    public GameProcessPriority ProcessPriority { get; init; } = GameProcessPriority.Normal;
+
+    /// <summary>放在 java 命令前面的包装命令（可执行文件 + 参数）。</summary>
+    public string? WrapperCommand { get; init; }
+
+    /// <summary>快速游玩模式。</summary>
+    public QuickPlayMode QuickPlayMode { get; init; } = QuickPlayMode.None;
+
+    /// <summary>快速游玩：单人存档的文件夹名（saves 下的目录名）。</summary>
+    public string? QuickPlayWorld { get; init; }
+
+    /// <summary>快速游玩：Realms 服务器 ID。</summary>
+    public string? QuickPlayRealmsId { get; init; }
 
     /// <summary>启动后自动进入的服务器地址。</summary>
     public string? ServerIp { get; init; }

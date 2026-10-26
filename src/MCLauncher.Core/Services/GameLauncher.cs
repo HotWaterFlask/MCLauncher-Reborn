@@ -4,6 +4,7 @@ using System.Runtime.Versioning;
 using System.Text;
 using MCLauncher.Core.Abstractions;
 using MCLauncher.Core.Logging;
+using MCLauncher.Core.Models;
 
 namespace MCLauncher.Core.Services;
 
@@ -26,7 +27,7 @@ public sealed class GameLauncher
     {
         var encoding = ResolveOutputEncoding(javaMajorVersion);
 
-        var startInfo = new ProcessStartInfo(command.JavaPath)
+        var startInfo = new ProcessStartInfo
         {
             WorkingDirectory = command.WorkingDirectory,
             UseShellExecute = false,
@@ -37,9 +38,31 @@ public sealed class GameLauncher
             StandardErrorEncoding = encoding,
         };
 
+        // 包装命令：把 java 命令整体交给外层程序，例如 wrapper.exe --arg java ...
+        var wrapper = LaunchArgumentBuilder.SplitArguments(command.WrapperCommand ?? string.Empty);
+        if (wrapper.Count > 0)
+        {
+            startInfo.FileName = wrapper[0];
+            for (var i = 1; i < wrapper.Count; i++)
+            {
+                startInfo.ArgumentList.Add(wrapper[i]);
+            }
+
+            startInfo.ArgumentList.Add(command.JavaPath);
+        }
+        else
+        {
+            startInfo.FileName = command.JavaPath;
+        }
+
         foreach (var argument in command.ToArgumentList())
         {
             startInfo.ArgumentList.Add(argument);
+        }
+
+        foreach (var (key, value) in command.Environment)
+        {
+            startInfo.Environment[key] = value;
         }
 
         var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
@@ -69,10 +92,42 @@ public sealed class GameLauncher
             throw new InvalidOperationException($"无法启动 Java 进程：{command.JavaPath}");
         }
 
+        ApplyPriority(process, command.Priority);
+
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
 
         return new GameProcess(process);
+    }
+
+    private void ApplyPriority(Process process, GameProcessPriority priority)
+    {
+        if (priority == GameProcessPriority.Normal)
+        {
+            return;
+        }
+
+        var priorityClass = priority switch
+        {
+            GameProcessPriority.Low => ProcessPriorityClass.Idle,
+            GameProcessPriority.BelowNormal => ProcessPriorityClass.BelowNormal,
+            GameProcessPriority.AboveNormal => ProcessPriorityClass.AboveNormal,
+            GameProcessPriority.High => ProcessPriorityClass.High,
+            GameProcessPriority.RealTime => ProcessPriorityClass.RealTime,
+            _ => ProcessPriorityClass.Normal,
+        };
+
+        try
+        {
+            process.PriorityClass = priorityClass;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException
+                                       or System.ComponentModel.Win32Exception
+                                       or NotSupportedException)
+        {
+            // 实时优先级通常需要管理员权限；设置失败不影响游戏启动。
+            _log.Warn($"设置游戏进程优先级失败（{priority}）", ex);
+        }
     }
 
     /// <summary>

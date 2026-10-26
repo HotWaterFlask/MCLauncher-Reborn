@@ -87,6 +87,9 @@ public sealed class LauncherStack : IDisposable
 
     public required JavaService Java { get; init; }
 
+    /// <summary>缺少合适 Java 时从 Azul 下载 Zulu JDK。</summary>
+    public required ZuluJavaService ZuluJava { get; init; }
+
     public required LaunchArgumentBuilder ArgumentBuilder { get; init; }
 
     public required GameLauncher Launcher { get; init; }
@@ -167,8 +170,10 @@ public sealed class LauncherStack : IDisposable
         var repository = new VersionRepository(new VersionResolver(log), log);
         var manifests = new VersionManifestService(downloader, resolver, log, Path.Combine(config.ConfigDirectory, "cache"));
         var installer = new GameInstaller(downloader, resolver, batch, repository, log);
-        var java = new JavaService(log);
-        var forgeInstaller = new ForgeInstallerService(downloader, resolver, installer, java, log);
+        var javaRoot = Path.Combine(config.ConfigDirectory, "java");
+        var java = new JavaService(log, javaRoot);
+        var zuluJava = new ZuluJavaService(downloader, batch, java, log, javaRoot);
+        var forgeInstaller = new ForgeInstallerService(downloader, resolver, installer, java, log, zuluJava);
         var argumentBuilder = new LaunchArgumentBuilder(log);
         var launcher = new GameLauncher(log);
         var authlibAuth = new AuthlibAuthService(downloader, log);
@@ -191,6 +196,7 @@ public sealed class LauncherStack : IDisposable
             Manifests = manifests,
             Installer = installer,
             Java = java,
+            ZuluJava = zuluJava,
             ArgumentBuilder = argumentBuilder,
             Launcher = launcher,
             LaunchService = new GameLaunchService(
