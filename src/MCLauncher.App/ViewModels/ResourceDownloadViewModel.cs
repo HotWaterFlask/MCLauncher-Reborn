@@ -667,6 +667,20 @@ public sealed class ResourceDownloadViewModel : ViewModelBase
 
     // ---------------------------------------------------------------- 打开 / 关闭
 
+    /// <summary>
+    /// 只有真正的版本号才用于筛选；实例名之类的字符串会让资源站查不到结果，直接退回「全部」。
+    /// </summary>
+    private static string? NormalizeGameVersion(string? gameVersion)
+    {
+        if (string.IsNullOrWhiteSpace(gameVersion))
+        {
+            return null;
+        }
+
+        var text = gameVersion.Trim();
+        return ResourceVersionCatalog.IsGameVersionName(text) ? text : null;
+    }
+
     /// <summary>打开对话框（由实例管理页调用）。</summary>
     public void Show(
         ResourceKind kind,
@@ -678,7 +692,7 @@ public sealed class ResourceDownloadViewModel : ViewModelBase
         _kind = kind;
         _instanceId = instanceId;
         _instanceDirectory = instanceDirectory;
-        _gameVersion = string.IsNullOrWhiteSpace(gameVersion) ? null : gameVersion.Trim();
+        _gameVersion = NormalizeGameVersion(gameVersion);
         _loaderName = loaderName;
 
         Title = "下载" + ResourceRepository.DisplayName(kind);
@@ -1591,16 +1605,26 @@ public sealed class ResourceDownloadViewModel : ViewModelBase
             if (result.Success)
             {
                 DownloadProgress = 1;
-                _stack.Log.Info(
-                    $"下载 {ResourceRepository.DisplayName(_kind)}：{Path.GetFileName(result.InstalledPath ?? string.Empty)}");
+                var installedName = Path.GetFileName(result.InstalledPath ?? string.Empty);
+                _stack.Log.Info($"下载 {ResourceRepository.DisplayName(_kind)}：{installedName}");
                 ResourceDownloaded?.Invoke();
 
                 if (_kind == ResourceKind.Modpack && result.InstalledPath is { Length: > 0 } archive)
                 {
                     ModpackDownloaded?.Invoke(archive);
+                    Close();
                 }
-
-                Close();
+                else
+                {
+                    // 安装成功只收起版本弹窗，下载窗保持打开，方便接着装其它资源。
+                    IsVersionDialogOpen = false;
+                    IsFileNameDialogOpen = false;
+                    var message = installedName.Length == 0
+                        ? "安装完成，可继续下载其它资源。"
+                        : $"已安装 {installedName}，可继续下载其它资源。";
+                    StatusText = message;
+                    DetailStatusText = message;
+                }
             }
             else
             {
