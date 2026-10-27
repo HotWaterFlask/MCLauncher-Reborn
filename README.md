@@ -69,7 +69,7 @@
 - **无边框窗口**：支持拖动与缩放，默认 720×450，可拉大为多页面完整布局。
 - **崩溃分析**：游戏异常退出时优先读取本次启动新生成的 `crash-reports`，给出可能原因与处理建议，并提供查看日志、打开目录、重新启动等操作。
 - **下载网速**：所有下载进度条实时显示当前网速，无速度时自动隐藏。
-- **便携配置**：设置、账号与日志统一保存在启动器目录下的 `.fmmcl`，替换 exe 升级时可原样保留。
+- **便携配置**：设置、账号与日志统一保存在启动器目录下的 `mclcfg`，替换 exe 升级时可原样保留。
 
 ---
 
@@ -189,8 +189,8 @@ Mojang 对访问 Java 版游戏服务 API 的新应用实行允许清单制度�
 
 | 内容 | 位置 |
 |---|---|
-| 设置、账号、实例信息 | `<启动器目录>\.fmmcl\settings.json` |
-| 运行日志 | `<启动器目录>\.fmmcl\logs\launcher-<日期>.log` |
+| 设置、账号、实例信息 | `<启动器目录>\mclcfg\settings.json` |
+| 运行日志 | `<启动器目录>\mclcfg\logs\launcher-<日期>.log` |
 | 游戏目录 | 默认 `<启动器目录>\.minecraft` |
 | 本机私有凭据 | `src\MCLauncher.Core\Secrets\LocalSecrets.cs`（已被 `.gitignore` 排除） |
 
@@ -240,7 +240,7 @@ MCLauncher-reborn/
 ## 实现要点
 
 - **多源下载**：官方源与镜像源按 URL 类型分别映射；失败自动切换候选源，Modrinth 请求失败时回退镜像。
-- **Java 补全**：通过 Azul Metadata API 查询 Community Availability 的 Zulu JDK，按 SHA-256 与解压后探测双重确认；运行时存放在 `.fmmcl\java`，无需用户手动配置。
+- **Java 补全**：通过 Azul Metadata API 查询 Community Availability 的 Zulu JDK，按 SHA-256 与解压后探测双重确认；运行时存放在 `mclcfg\java`，无需用户手动配置。
 - **断点续传**：`.part` 文件严格校验 `206 + Content-Length + ETag`，服务端返回 200 时丢弃重下。
 - **版本合并**：处理 `inheritsFrom` 时保持库与参数顺序，并检测循环继承。
 - **natives**：按架构优先匹配分类器（`natives-windows-arm64` → `-64` → 通用），解压后排除 `META-INF`。

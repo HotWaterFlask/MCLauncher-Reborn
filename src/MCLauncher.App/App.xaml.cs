@@ -15,9 +15,6 @@ namespace MCLauncher.App;
 /// </summary>
 public partial class App : Application
 {
-    /// <summary>便携式配置目录：放在启动器所在目录，不再写入用户 AppData。</summary>
-    private const string AppFolderName = ".fmmcl";
-
     public static ServiceContainer Services { get; } = new();
 
     /// <summary>运行时装配好的服务栈（窗口关闭时释放）。</summary>
@@ -166,8 +163,9 @@ public partial class App : Application
         BackgroundPicker.Apply(window, config.Settings, AppContext.BaseDirectory, Stack.Downloader, Log.Default);
     }
 
+    /// <summary>便携式配置目录：放在启动器所在目录，不再写入用户 AppData。</summary>
     private static string GetConfigDirectory() =>
-        Path.Combine(AppContext.BaseDirectory, AppFolderName);
+        LauncherPaths.EnsureConfigDirectory(AppContext.BaseDirectory, Log.Default);
 
     /// <summary>
     /// 首次使用（还没有 settings.json）时，按主显示器分辨率挑一个合适的游戏窗口大小。

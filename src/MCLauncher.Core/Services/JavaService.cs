@@ -31,7 +31,7 @@ public sealed partial class JavaService
     private IReadOnlyList<JavaInfo>? _cache;
 
     /// <param name="log">日志。</param>
-    /// <param name="managedRuntimeRoot">启动器自己管理的 Java 根目录（如 <c>.fmmcl\java</c>）；为空时用旧版记录的位置。</param>
+    /// <param name="managedRuntimeRoot">启动器自己管理的 Java 根目录（如 <c>mclcfg\java</c>）；为空时用旧版记录的位置。</param>
     public JavaService(ILogger log, string? managedRuntimeRoot = null)
     {
         _log = log;

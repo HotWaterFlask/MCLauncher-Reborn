@@ -10,6 +10,7 @@ obj/
 src/MCLauncher.Core/Secrets/LocalSecrets.cs
 
 # 便携式配置目录（含账号令牌与 API Key），绝不入库
+mclcfg/
 .fmmcl/
 
 # 发布产物
