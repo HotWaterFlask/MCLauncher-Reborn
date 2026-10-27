@@ -65,7 +65,6 @@ public sealed class GameInstallerLiveTests
         Assert.NotEmpty(Directory.GetFiles(nativesDirectory, "*.dll", SearchOption.AllDirectories));
 
         Assert.True(File.Exists(Path.Combine(temp.Path, "launcher_profiles.json")), "launcher_profiles.json 缺失");
-        Assert.True(File.Exists(GameInstaller.ManagedManifestPath(temp.Path)), "受管清单缺失");
 
         // ---- 资源索引与对象 ----
         var indexPath = GameInstaller.AssetsIndexPath(temp.Path, version.Assets!);
@@ -82,13 +81,6 @@ public sealed class GameInstallerLiveTests
 
         // map_to_resources 展开
         Assert.True(Directory.Exists(GameInstaller.ResourcesDirectory(temp.Path)), "resources 目录缺失");
-
-        // ---- 受管清单内容 ----
-        var managed = JsonUtil.DeserializeFromFile<ManagedManifest>(GameInstaller.ManagedManifestPath(temp.Path))!;
-        Assert.Equal(versionId, managed.VersionId);
-        Assert.NotNull(managed.Assets);
-        Assert.Equal(version.Assets, managed.Assets!.IndexId);
-        Assert.NotEmpty(managed.Files);
 
         // ---- 进度确实按阶段上报 ----
         lock (progress)

@@ -142,7 +142,7 @@ public sealed class GameInstallerLegacyAssetsTests
     }
 
     [Fact]
-    public void 受管清单与launcher_profiles路径符合约定()
+    public void launcher_profiles路径符合约定()
     {
         using var temp = new TempDirectory();
         var installer = Create(out var downloader);
@@ -160,8 +160,21 @@ public sealed class GameInstallerLegacyAssetsTests
             File.WriteAllText(Path.Combine(temp.Path, "launcher_profiles.json"), "{\"profiles\":{\"mine\":{}}}");
             installer.CreateLauncherProfiles(temp.Path);
             Assert.Contains("mine", File.ReadAllText(Path.Combine(temp.Path, "launcher_profiles.json")));
-
-            Assert.EndsWith(".mclauncher\\manifest.json", GameInstaller.ManagedManifestPath(temp.Path), StringComparison.OrdinalIgnoreCase);
         }
+    }
+
+    [Fact]
+    public void 清理受管目录会删除旧清单与空目录()
+    {
+        using var temp = new TempDirectory();
+        var directory = Path.Combine(temp.Path, ".mclauncher");
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(Path.Combine(directory, "manifest.json"), "{}");
+
+        GameInstaller.CleanupManagedDirectory(temp.Path);
+
+        Assert.False(Directory.Exists(directory));
+        Assert.False(Directory.Exists(Path.Combine(temp.Path, "mods")));
+        Assert.False(Directory.Exists(Path.Combine(temp.Path, "schematics")));
     }
 }

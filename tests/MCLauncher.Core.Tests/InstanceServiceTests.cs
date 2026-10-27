@@ -99,6 +99,13 @@ public sealed class InstanceServiceTests
         Assert.Equal("26.3", config.GameVersion);
         Assert.Contains("Fabric 0.20.1", config.Loaders);
 
+        // 实例目录里只保留启动器元数据，游戏目录交给游戏与 Mod 自行创建。
+        var instanceDirectory = VersionRepository.VersionDirectory(temp.Path, "Fabric26.3");
+        Assert.False(Directory.Exists(Path.Combine(instanceDirectory, "mods")));
+        Assert.False(Directory.Exists(Path.Combine(instanceDirectory, "saves")));
+        Assert.False(Directory.Exists(Path.Combine(instanceDirectory, "schematics")));
+        Assert.False(Directory.Exists(Path.Combine(instanceDirectory, "shaderpacks")));
+
         Assert.Equal(new[] { "Fabric26.3" }, instances.ListVisibleInstanceIds(temp.Path));
     }
 
@@ -245,7 +252,9 @@ public sealed class InstanceServiceTests
         var config = instances.Load(temp.Path, "Fabric26.3");
         Assert.Equal("26.3", config.GameVersion);
         Assert.Contains("Fabric 0.20.1", config.Loaders);
-        Assert.True(Directory.Exists(Path.Combine(
+
+        // 只登记元数据，不预建 mods 等游戏目录。
+        Assert.False(Directory.Exists(Path.Combine(
             VersionRepository.VersionDirectory(temp.Path, "Fabric26.3"), "mods")));
 
         var vanillaPath = Path.Combine(

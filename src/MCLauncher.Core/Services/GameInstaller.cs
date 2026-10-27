@@ -18,7 +18,6 @@ namespace MCLauncher.Core.Services;
 /// &lt;游戏目录&gt;/assets/virtual/&lt;id&gt;/...        virtual 索引展开（1.7 及更早）
 /// &lt;游戏目录&gt;/resources/...                   map_to_resources 展开（远古版本）
 /// &lt;游戏目录&gt;/launcher_profiles.json         Forge 安装器必需
-/// &lt;游戏目录&gt;/.mclauncher/manifest.json      受管文件清单
 /// </code>
 /// </summary>
 public sealed class GameInstaller
@@ -107,8 +106,36 @@ public sealed class GameInstaller
     public static string LibraryFilePath(string gameDirectory, string artifactPath) =>
         Path.Combine(LibrariesDirectory(gameDirectory), artifactPath.Replace('/', Path.DirectorySeparatorChar));
 
-    public static string ManagedManifestPath(string gameDirectory) =>
-        Path.Combine(gameDirectory, ManagedDirectoryName, "manifest.json");
+    /// <summary>
+    /// 清理旧版本写入的受管清单；目录为空时一并删除。
+    /// 安装过程不需要持久化文件清单，相关数据只在内存中使用。
+    /// </summary>
+    public static void CleanupManagedDirectory(string gameDirectory)
+    {
+        var directory = Path.Combine(gameDirectory, ManagedDirectoryName);
+        if (!Directory.Exists(directory))
+        {
+            return;
+        }
+
+        try
+        {
+            var manifest = Path.Combine(directory, "manifest.json");
+            if (File.Exists(manifest))
+            {
+                File.Delete(manifest);
+            }
+
+            if (!Directory.EnumerateFileSystemEntries(directory).Any())
+            {
+                Directory.Delete(directory);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // 清理失败不影响安装结果，最多留下一个空目录。
+        }
+    }
 
     // ------------------------------------------------------------------ 入口
 
@@ -214,14 +241,8 @@ public sealed class GameInstaller
     {
         options ??= new InstallOptions();
 
-        // 叶节点（未合并）在磁盘上的 JSON 才有 inheritsFrom，用于记录基底版本。
-        var leaf = _repository.TryLoad(gameDirectory, versionId);
-        var baseVersionId = leaf?.InheritsFrom;
-
         // 合并继承链后拿到的才是可直接安装的自洽版本。
         var version = _repository.Resolve(gameDirectory, versionId);
-
-        var managed = new ManagedManifest { VersionId = versionId, BaseVersionId = baseVersionId };
 
         // ---- 阶段 1：资源索引与日志配置（后面展开资源对象要靠它）----
         var indexInfo = ResolveAssetIndexInfo(version);
@@ -236,15 +257,12 @@ public sealed class GameInstaller
                 TargetPath = AssetsIndexPath(gameDirectory, indexInfo.Id!),
                 Checker = MakeChecker(indexInfo, options.VerifyExisting),
             });
-
-            managed.Files.Add(ToManagedFile(gameDirectory, preRequests[^1]));
         }
 
         var logRequest = BuildLogConfigRequest(gameDirectory, version, options);
         if (logRequest is not null)
         {
             preRequests.Add(logRequest);
-            managed.Files.Add(ToManagedFile(gameDirectory, logRequest));
         }
 
         var downloaded = 0;
@@ -277,7 +295,6 @@ public sealed class GameInstaller
         if (jarRequest is not null)
         {
             requests.Add(jarRequest);
-            managed.Files.Add(ToManagedFile(gameDirectory, jarRequest));
         }
 
         foreach (var library in version.Libraries ?? new List<Library>())
@@ -294,7 +311,6 @@ public sealed class GameInstaller
             }
 
             requests.Add(request);
-            managed.Files.Add(ToManagedFile(gameDirectory, request));
 
             if (options.ExtractNatives && library.IsNativeLibrary && classifier is not null)
             {
@@ -361,15 +377,8 @@ public sealed class GameInstaller
             CreateLauncherProfiles(gameDirectory);
         }
 
-        managed.Assets = indexInfo is null
-            ? null
-            : new ManagedAssets
-            {
-                IndexId = indexInfo.Id ?? string.Empty,
-                ObjectCount = TryLoadIndex(gameDirectory, indexInfo)?.Objects.Count ?? 0,
-            };
-
-        WriteManagedManifest(gameDirectory, managed);
+        // 安装清单不再落盘；顺手清掉旧版本留下的 manifest.json 与空目录。
+        CleanupManagedDirectory(gameDirectory);
 
         Report(progress, "完成", downloaded, downloaded, totalBytes, totalBytes, null);
         _log.Info($"版本 {versionId} 安装完成：新下载 {downloaded} 个文件，已存在 {skipped} 个");
@@ -786,26 +795,6 @@ public sealed class GameInstaller
             return false;
         }
     }
-
-    private void WriteManagedManifest(string gameDirectory, ManagedManifest manifest)
-    {
-        try
-        {
-            JsonUtil.SerializeToFile(ManagedManifestPath(gameDirectory), manifest);
-            _log.Trace($"已写入受管清单：{ManagedManifestPath(gameDirectory)}");
-        }
-        catch (Exception ex)
-        {
-            _log.Warn("受管清单写入失败", ex);
-        }
-    }
-
-    private static ManagedFile ToManagedFile(string gameDirectory, DownloadRequest request) => new()
-    {
-        Path = PathUtil.GetRelative(gameDirectory, request.TargetPath),
-        Sha1 = request.Checker.Sha1,
-        Size = request.Checker.Size,
-    };
 
     private static FileChecker MakeChecker(string? sha1, long size, bool verifyHashes = true) =>
         verifyHashes ? FileChecker.Of(sha1, size) : FileChecker.OfSize(size);
