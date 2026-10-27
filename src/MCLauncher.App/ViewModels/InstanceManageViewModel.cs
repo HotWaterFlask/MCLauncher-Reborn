@@ -708,7 +708,8 @@ public sealed class InstanceManageViewModel : ViewModelBase
             return;
         }
 
-        Download.Show(kind, _instanceId, _instanceDirectory, _instance?.VersionText, _instance?.LoaderName);
+        // 用原版版本号筛选资源；拿不到时传 null，让下载页退回「全部」而不是拿实例名去筛。
+        Download.Show(kind, _instanceId, _instanceDirectory, _instance?.BaseVersionId, _instance?.LoaderName);
     }
 
     private void OnResourceDownloaded()

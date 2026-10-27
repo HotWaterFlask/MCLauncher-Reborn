@@ -338,7 +338,7 @@ public sealed class LauncherStack : IDisposable
             {
                 Id = id,
                 DisplayName = config.DisplayName,
-                BaseVersionId = json.InheritsFrom ?? config.GameVersion,
+                BaseVersionId = ResolveBaseVersionId(gameRoot, json, config, id),
                 Type = json.Type,
                 LoaderName = loaderName,
                 LoaderVersion = loaderVersion,
@@ -360,6 +360,26 @@ public sealed class LauncherStack : IDisposable
         });
 
         return result;
+    }
+
+    /// <summary>
+    /// 解析实例对应的原版版本：继承字段 → 实例配置 → 原版快照。
+    /// 都取不到时返回 null（纯原版实例改名后没有留下版本号），不要退回实例 id。
+    /// </summary>
+    private string? ResolveBaseVersionId(
+        string gameRoot, GameVersionJson json, InstanceConfig config, string id)
+    {
+        if (!string.IsNullOrWhiteSpace(json.InheritsFrom))
+        {
+            return json.InheritsFrom.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(config.GameVersion))
+        {
+            return config.GameVersion.Trim();
+        }
+
+        return Instances.ReadVanillaVersionId(gameRoot, id);
     }
 
     /// <summary>从版本 id 推断加载器类型（仅用于界面展示，不影响安装/启动逻辑）。</summary>

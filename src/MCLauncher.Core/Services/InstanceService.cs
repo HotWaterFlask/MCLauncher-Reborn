@@ -56,6 +56,8 @@ public sealed class InstanceService
     {
         var config = Load(gameDirectory, versionId);
         config.DisplayName = string.IsNullOrWhiteSpace(displayName) ? versionId : displayName.Trim();
+        // 纯原版实例的版本 id 就是游戏版本号；记下来，改名后仍能按原版版本筛选资源。
+        config.GameVersion ??= versionId;
         Save(gameDirectory, versionId, config);
 
         var marker = AutoBaseMarkerPath(gameDirectory, versionId);
@@ -122,6 +124,27 @@ public sealed class InstanceService
         {
             _log.Warn($"实例配置解析失败，已回退默认值：{path}", ex);
             return new InstanceConfig { VersionId = versionId };
+        }
+    }
+
+    /// <summary>读取实例目录里保存的原版版本号（自洽实例的还原快照）；没有快照时返回 null。</summary>
+    public string? ReadVanillaVersionId(string gameDirectory, string versionId)
+    {
+        var path = VanillaVersionPath(gameDirectory, versionId);
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        try
+        {
+            var vanilla = JsonUtil.DeserializeFromFile<GameVersionJson>(path);
+            return string.IsNullOrWhiteSpace(vanilla?.Id) ? null : vanilla!.Id!.Trim();
+        }
+        catch (Exception ex)
+        {
+            _log.Warn($"原版快照解析失败，已忽略：{path}", ex);
+            return null;
         }
     }
 

@@ -324,6 +324,53 @@ public sealed class InstanceServiceTests
         Assert.False(repository.IsInstalled(temp.Path, "One"));
     }
 
+    [Fact]
+    public void 登记原版实例会记录游戏版本()
+    {
+        using var temp = new TempDirectory();
+        var instances = Create(out var repository);
+
+        repository.Save(temp.Path, JsonUtil.Deserialize<GameVersionJson>(
+            """{"id":"26.3","mainClass":"net.minecraft.client.main.Main"}""")!);
+
+        instances.RegisterVersionAsInstance(temp.Path, "26.3");
+
+        Assert.Equal("26.3", instances.Load(temp.Path, "26.3").GameVersion);
+    }
+
+    [Fact]
+    public void 纯原版实例改名后仍记得原版版本()
+    {
+        using var temp = new TempDirectory();
+        var instances = Create(out var repository);
+
+        repository.Save(temp.Path, JsonUtil.Deserialize<GameVersionJson>(
+            """{"id":"26.3","mainClass":"net.minecraft.client.main.Main"}""")!);
+        instances.RegisterVersionAsInstance(temp.Path, "26.3");
+
+        var newId = instances.RenameInstance(temp.Path, "26.3", "Eternal");
+
+        Assert.Equal("Eternal", newId);
+        Assert.Equal("26.3", instances.Load(temp.Path, "Eternal").GameVersion);
+    }
+
+    [Fact]
+    public void 原版快照能读出基底版本()
+    {
+        using var temp = new TempDirectory();
+        var instances = Create(out var repository);
+
+        var vanilla = JsonUtil.Deserialize<GameVersionJson>(
+            """{"id":"26.3","mainClass":"net.minecraft.client.main.Main","libraries":[{"name":"base:a:1"}]}""")!;
+        repository.Save(temp.Path, JsonUtil.Deserialize<GameVersionJson>(
+            """{"id":"Fabric26.3","mainClass":"net.fabricmc.KnotClient","libraries":[{"name":"fabric:b:1"}]}""")!);
+        instances.RegisterSelfContainedInstance(
+            temp.Path, "Fabric26.3", "26.3", vanilla, "Fabric 0.20.1", "Fabric26.3");
+
+        Assert.Equal("26.3", instances.ReadVanillaVersionId(temp.Path, "Fabric26.3"));
+        Assert.Null(instances.ReadVanillaVersionId(temp.Path, "不存在"));
+    }
+
     private static void WriteBaseJar(TempDirectory temp, string versionId)
     {
         var path = VersionRepository.VersionJarPath(temp.Path, versionId);
