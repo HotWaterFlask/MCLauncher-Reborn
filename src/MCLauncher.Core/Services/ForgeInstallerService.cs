@@ -195,7 +195,15 @@ public sealed class ForgeInstallerService
             Total = 1,
         });
 
+        CleanupInstallerCache(gameRoot);
         return versionJson;
+    }
+
+    /// <summary>安装成功后清理安装器缓存；失败时保留，方便直接重试而不用重新下载。</summary>
+    private void CleanupInstallerCache(string gameRoot)
+    {
+        TryDeleteDirectory(Path.Combine(gameRoot, ".mclauncher", TempDirectoryName));
+        GameInstaller.CleanupManagedDirectory(gameRoot);
     }
 
     // ------------------------------------------------------------------ 处理器

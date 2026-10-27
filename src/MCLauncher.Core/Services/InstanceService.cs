@@ -95,11 +95,6 @@ public sealed class InstanceService
 
         Save(gameDirectory, instanceId, config);
 
-        if (isolated)
-        {
-            EnsureIsolatedLayout(gameDirectory, instanceId);
-        }
-
         _log.Info($"已登记自洽实例 {instanceId}（原版 {baseVersionId}）");
     }
 
@@ -160,33 +155,6 @@ public sealed class InstanceService
 
         PathUtil.EnsureDirectory(directory);
         return directory;
-    }
-
-    /// <summary>隔离模式下游戏会读写的子目录（用于界面提示与备份）。</summary>
-    public static IReadOnlyList<string> InstanceSubDirectories { get; } = new[]
-    {
-        "mods",
-        "resourcepacks",
-        "shaderpacks",
-        "saves",
-        "schematics",
-        "config",
-        "logs",
-        "crash-reports",
-    };
-
-    /// <summary>确保隔离目录结构与主游戏目录一致（首次开启隔离时调用）。</summary>
-    public void EnsureIsolatedLayout(string gameDirectory, string versionId)
-    {
-        var instanceDirectory = VersionRepository.VersionDirectory(gameDirectory, versionId);
-        PathUtil.EnsureDirectory(instanceDirectory);
-
-        foreach (var sub in InstanceSubDirectories)
-        {
-            PathUtil.EnsureDirectory(Path.Combine(instanceDirectory, sub));
-        }
-
-        _log.Trace($"已准备隔离目录：{instanceDirectory}");
     }
 
     /// <summary>记录该实例安装过的加载器。</summary>
@@ -366,11 +334,6 @@ public sealed class InstanceService
         config.GameVersion = baseVersionId;
         Save(gameDirectory, instanceId, config);
 
-        if (isolated)
-        {
-            EnsureIsolatedLayout(gameDirectory, instanceId);
-        }
-
         FlattenInstance(gameDirectory, instanceId, baseVersionId, deleteBaseVersion);
         _log.Info($"已创建实例 {instanceId}（原版 {baseVersionId}）");
         return instanceId;
@@ -408,11 +371,6 @@ public sealed class InstanceService
         }
 
         Save(gameDirectory, instanceId, config);
-
-        if (isolated)
-        {
-            EnsureIsolatedLayout(gameDirectory, instanceId);
-        }
 
         FlattenInstance(gameDirectory, instanceId, baseVersionId, deleteBaseVersion);
         _log.Info($"已把 {technicalVersionId} 接管为实例 {instanceId}（{loaderDescription}）");
