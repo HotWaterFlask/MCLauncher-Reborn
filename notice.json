@@ -1,0 +1,6 @@
+{
+  "id": "dev-stage-2026-10",
+  "title": "开发阶段提示",
+  "message": "当前版本仍在开发与打磨阶段，暂未提供安装包、代码签名与自动更新。遇到问题欢迎在 GitHub Issues 反馈。",
+  "url": "https://github.com/HotWaterFlask/MCLauncher-Reborn/issues"
+}

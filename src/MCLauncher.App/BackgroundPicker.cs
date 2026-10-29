@@ -11,7 +11,7 @@ namespace MCLauncher.App;
 
 /// <summary>
 /// 窗口背景图：按设置在默认底图、bgskin 目录、自定义路径、网络 URL 之间切换。
-/// 目录模式每次启动随机取一张；网络模式先显示默认底图，下载完成后再替换。
+/// 目录模式每次启动随机取一张；网络模式支持启动页预加载，避免主窗口先默认后换图。
 /// </summary>
 internal static class BackgroundPicker
 {
@@ -44,21 +44,36 @@ internal static class BackgroundPicker
     }
 
     /// <summary>按当前设置应用背景，必须在 UI 线程调用。</summary>
+    /// <param name="preloadedNetworkImage">启动页已下载好的网络图；有值时直接使用，不再重下。</param>
+    /// <param name="allowNetworkLoad">没有预加载图时是否仍发起后台下载；用户跳过启动页时传 false。</param>
     public static void Apply(
         Window window,
         AppSettings settings,
         string launcherDirectory,
         HttpDownloader downloader,
-        ILogger log)
+        ILogger log,
+        ImageSource? preloadedNetworkImage = null,
+        bool allowNetworkLoad = true)
     {
         var version = Interlocked.Increment(ref _applyVersion);
 
         if (settings.BackgroundMode == BackgroundMode.Network
             && !string.IsNullOrWhiteSpace(settings.BackgroundUrl))
         {
+            if (preloadedNetworkImage is not null)
+            {
+                window.Background = CreateBrush(preloadedNetworkImage);
+                return;
+            }
+
             // 网络图需要等待下载：先铺默认底图，避免窗口开场空白。
             window.Background = CreateBrush(LoadDefault());
-            _ = ApplyNetworkAsync(window, settings.BackgroundUrl.Trim(), version, downloader, log);
+
+            if (allowNetworkLoad)
+            {
+                _ = ApplyNetworkAsync(window, settings.BackgroundUrl.Trim(), version, downloader, log);
+            }
+
             return;
         }
 
@@ -70,6 +85,45 @@ internal static class BackgroundPicker
         };
 
         window.Background = CreateBrush(image);
+    }
+
+    /// <summary>启动页期间预取网络背景图；非网络模式、跳过或失败时返回 null。</summary>
+    public static async Task<ImageSource?> PreloadNetworkAsync(
+        AppSettings settings,
+        HttpDownloader downloader,
+        ILogger log,
+        CancellationToken ct)
+    {
+        if (settings.BackgroundMode != BackgroundMode.Network
+            || string.IsNullOrWhiteSpace(settings.BackgroundUrl))
+        {
+            return null;
+        }
+
+        var url = settings.BackgroundUrl.Trim();
+
+        try
+        {
+            var bytes = await downloader.GetBytesAsync(url, ct).ConfigureAwait(false);
+            var image = Decode(bytes);
+            if (image is null)
+            {
+                log.Warn($"网络背景图无法解码，改用默认底图：{url}");
+                return null;
+            }
+
+            log.Info($"已预加载网络背景图：{url}");
+            return image;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return null;
+        }
+        catch (Exception ex)
+        {
+            log.Warn($"预加载网络背景图失败，改用默认底图：{url}", ex);
+            return null;
+        }
     }
 
     private static async Task ApplyNetworkAsync(
