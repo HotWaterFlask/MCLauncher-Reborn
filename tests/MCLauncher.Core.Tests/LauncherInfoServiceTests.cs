@@ -1,3 +1,4 @@
+using System.Net;
 using MCLauncher.Core.Network;
 using MCLauncher.Core.Services;
 using MCLauncher.Core.Tests.Support;
@@ -14,6 +15,16 @@ public sealed class LauncherInfoServiceTests
     private const string ReleaseJson = """
     {"tag_name":"v6.1.0","name":"6.1.0 更新","body":"改进启动速度\n修复若干问题",
      "html_url":"https://example.com/release","published_at":"2026-10-20T10:00:00Z"}
+    """;
+
+    private const string ReleaseWithAssetsJson = """
+    {"tag_name":"v6.5.31","name":"6.5.31 测试版","body":"",
+     "html_url":"https://example.com/release",
+     "assets":[
+       {"name":"notes.txt","browser_download_url":"https://example.com/notes.txt","size":12},
+       {"name":"MCLauncher-Reborn.exe","browser_download_url":"https://example.com/app.exe","size":614912,
+        "digest":"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}
+     ]}
     """;
 
     private static LauncherInfoService Create(string content, out TestLog log, out HttpDownloader downloader)
@@ -66,9 +77,43 @@ public sealed class LauncherInfoServiceTests
     }
 
     [Fact]
+    public async Task 解析更新附件与摘要()
+    {
+        var service = Create(ReleaseWithAssetsJson, out _, out var downloader);
+        using (downloader)
+        {
+            var update = await service.CheckUpdateAsync();
+
+            Assert.NotNull(update);
+            Assert.Equal(2, update!.Assets.Count);
+
+            var asset = update.ExecutableAsset;
+            Assert.NotNull(asset);
+            Assert.Equal("MCLauncher-Reborn.exe", asset!.Name);
+            Assert.Equal(614912, asset.Size);
+            Assert.Equal(
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                asset.Sha256);
+        }
+    }
+
+    [Fact]
+    public async Task 没有exe附件时不能自更新()
+    {
+        var service = Create("""{"tag_name":"v6.5.31","assets":[{"name":"app.zip","browser_download_url":"https://example.com/app.zip"}]}""", out _, out var downloader);
+        using (downloader)
+        {
+            var update = await service.CheckUpdateAsync();
+
+            Assert.NotNull(update);
+            Assert.Null(update!.ExecutableAsset);
+        }
+    }
+
+    [Fact]
     public async Task 无效内容不会抛异常()
     {
-        var service = Create("<html>not json</html>", out var log, out var downloader);
+        var service = Create("not json at all", out var log, out var downloader);
         using (downloader)
         {
             Assert.Null(await service.FetchNoticeAsync());
@@ -88,5 +133,56 @@ public sealed class LauncherInfoServiceTests
     public void 版本号比较(string latest, string current, bool expected)
     {
         Assert.Equal(expected, LauncherInfoService.IsNewerVersion(latest, current));
+    }
+
+    private const string ReleasesAtom = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <feed xmlns="http://www.w3.org/2005/Atom">
+      <entry>
+        <title>6.5.31 测试版</title>
+        <link rel="alternate" type="text/html" href="https://github.com/HotWaterFlask/MCLauncher-Reborn/releases/tag/v6.5.31"/>
+        <content type="html">&lt;p&gt;用于测试更新提示&lt;/p&gt;</content>
+        <updated>2026-10-29T13:35:54Z</updated>
+      </entry>
+    </feed>
+    """;
+
+    [Fact]
+    public async Task REST被限流时退回Atom源()
+    {
+        var log = new TestLog();
+        using var downloader = new HttpDownloader(log, new AtomFallbackHandler(ReleasesAtom));
+        var service = new LauncherInfoService(downloader, log);
+
+        var update = await service.CheckUpdateAsync();
+
+        Assert.NotNull(update);
+        Assert.Equal("v6.5.31", update!.Version);
+        Assert.Equal("6.5.31 测试版", update.Title);
+        Assert.Equal("用于测试更新提示", update.Notes);
+        Assert.Empty(update.Assets);
+        Assert.Contains("改读 releases.atom", string.Join(" ", log.Lines));
+    }
+
+    /// <summary>API 一律 403（模拟限流），其它地址正常返回 Atom。</summary>
+    private sealed class AtomFallbackHandler : HttpMessageHandler
+    {
+        private readonly string _atom;
+
+        public AtomFallbackHandler(string atom) => _atom = atom;
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (request.RequestUri?.Host.Contains("api.github.com") == true)
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden) { RequestMessage = request });
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                RequestMessage = request,
+                Content = new StringContent(_atom),
+            });
+        }
     }
 }

@@ -1,7 +1,11 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.IO;
+using System.Windows;
 using System.Windows.Input;
 using MCLauncher.App.ViewModels.Mvvm;
+using MCLauncher.Core.Network;
+using MCLauncher.Core.Services;
 
 namespace MCLauncher.App.ViewModels;
 
@@ -47,7 +51,11 @@ public sealed class ShellViewModel : ViewModelBase
     private string _updateTitle = string.Empty;
     private string _updateMessage = string.Empty;
     private string? _updateUrl;
-    private Action? _updateDismiss;
+
+    private readonly LauncherUpdater? _updater;
+    private LauncherUpdate? _updateSource;
+    private bool _updateReady;
+    private bool _isUpdateDrawerOpen;
 
     public ShellViewModel(
         IEnumerable<NavItem> navItems,
@@ -56,7 +64,8 @@ public sealed class ShellViewModel : ViewModelBase
         int initialWidth,
         int initialHeight,
         CrashOverlayViewModel crash,
-        SetupViewModel setup)
+        SetupViewModel setup,
+        LauncherUpdater? updater = null)
     {
         _pageFactory = pageFactory;
         NavItems = new ObservableCollection<NavItem>(navItems);
@@ -67,11 +76,13 @@ public sealed class ShellViewModel : ViewModelBase
         InitialHeight = initialHeight;
         Crash = crash;
         Setup = setup;
+        _updater = updater;
 
         OpenNoticeCommand = new RelayCommand(() => OpenUrl(_noticeUrl));
         DismissNoticeCommand = new RelayCommand(DismissNotice);
-        OpenUpdateCommand = new RelayCommand(() => OpenUrl(_updateUrl));
-        DismissUpdateCommand = new RelayCommand(DismissUpdate);
+        UpdateActionCommand = new AsyncRelayCommand(RunUpdateAsync, () => _hasUpdate);
+        CollapseUpdateDrawerCommand = new RelayCommand(() => IsUpdateDrawerOpen = false);
+        OpenUpdateDrawerCommand = new RelayCommand(() => IsUpdateDrawerOpen = true);
     }
 
     /// <summary>全局崩溃界面，盖在所有页面之上。</summary>
@@ -123,7 +134,7 @@ public sealed class ShellViewModel : ViewModelBase
         set => SetProperty(ref _statusText, value);
     }
 
-    // ---------------------------------------------------------------- 启动公告 / 更新横幅
+    // ---------------------------------------------------------------- 启动公告 / 更新抽屉
 
     public bool HasNotice
     {
@@ -133,7 +144,6 @@ public sealed class ShellViewModel : ViewModelBase
             if (SetProperty(ref _hasNotice, value))
             {
                 OnPropertyChanged(nameof(HasNoticeUrl));
-                OnPropertyChanged(nameof(HasStartupBanners));
             }
         }
     }
@@ -159,8 +169,7 @@ public sealed class ShellViewModel : ViewModelBase
         {
             if (SetProperty(ref _hasUpdate, value))
             {
-                OnPropertyChanged(nameof(HasUpdateUrl));
-                OnPropertyChanged(nameof(HasStartupBanners));
+                OnPropertyChanged(nameof(IsUpdateDrawerCollapsed));
             }
         }
     }
@@ -177,18 +186,34 @@ public sealed class ShellViewModel : ViewModelBase
         private set => SetProperty(ref _updateMessage, value);
     }
 
-    public bool HasUpdateUrl => _hasUpdate && !string.IsNullOrWhiteSpace(_updateUrl);
+    /// <summary>更新抽屉是否展开：展开时从右侧滑出，收起后只在右边缘留一个小方块。</summary>
+    public bool IsUpdateDrawerOpen
+    {
+        get => _isUpdateDrawerOpen;
+        private set
+        {
+            if (SetProperty(ref _isUpdateDrawerOpen, value))
+            {
+                OnPropertyChanged(nameof(IsUpdateDrawerCollapsed));
+            }
+        }
+    }
 
-    /// <summary>公告或更新任一存在时，横幅区域才占位；都没有时不额外增加顶部间距。</summary>
-    public bool HasStartupBanners => _hasNotice || _hasUpdate;
+    /// <summary>抽屉已收起（有更新、但当前是收起态）。</summary>
+    public bool IsUpdateDrawerCollapsed => _hasUpdate && !_isUpdateDrawerOpen;
 
     public ICommand OpenNoticeCommand { get; }
 
     public ICommand DismissNoticeCommand { get; }
 
-    public ICommand OpenUpdateCommand { get; }
+    /// <summary>点抽屉正文：下载更新；已下载则替换并重启；没有 exe 附件时打开 Release 页面。</summary>
+    public ICommand UpdateActionCommand { get; }
 
-    public ICommand DismissUpdateCommand { get; }
+    /// <summary>点抽屉左侧的「&gt;」：缩回右边缘。</summary>
+    public ICommand CollapseUpdateDrawerCommand { get; }
+
+    /// <summary>点右边缘小方块的「&lt;」：把抽屉抽出来。</summary>
+    public ICommand OpenUpdateDrawerCommand { get; }
 
     /// <summary>显示公告横幅；<paramref name="onDismiss"/> 用于记住「不再显示」。</summary>
     public void ShowNotice(string title, string message, string? url, Action? onDismiss = null)
@@ -213,27 +238,82 @@ public sealed class ShellViewModel : ViewModelBase
         dismiss?.Invoke();
     }
 
-    /// <summary>显示新版本横幅；<paramref name="onDismiss"/> 用于记住「稍后提醒」。</summary>
-    public void ShowUpdate(string title, string message, string? url, Action? onDismiss = null)
+    /// <summary>显示更新抽屉；<paramref name="source"/> 带附件信息时支持原地自更新。</summary>
+    public void ShowUpdate(
+        string title,
+        string message,
+        string? url,
+        LauncherUpdate? source = null)
     {
         UpdateTitle = title;
         UpdateMessage = message;
         _updateUrl = url;
-        _updateDismiss = onDismiss;
+        _updateSource = source;
         HasUpdate = true;
+        IsUpdateDrawerOpen = true;
+
+        // 命令是在构造时创建的，那时还没有更新；这里要主动让按钮重新按 CanExecute 求值。
+        (UpdateActionCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+        _ = CollapseUpdateDrawerLaterAsync();
     }
 
-    public void DismissUpdate()
+    /// <summary>启动时展示 5 秒，然后自动缩回右侧边缘。</summary>
+    private async Task CollapseUpdateDrawerLaterAsync()
     {
-        if (!_hasUpdate)
+        await Task.Delay(TimeSpan.FromSeconds(5)).ConfigureAwait(true);
+        if (_hasUpdate)
+        {
+            IsUpdateDrawerOpen = false;
+        }
+    }
+
+    /// <summary>点抽屉正文：下载新版本；下载完成后再点一次替换并重启。</summary>
+    private async Task RunUpdateAsync()
+    {
+        if (_updateSource is null)
         {
             return;
         }
 
-        HasUpdate = false;
-        var dismiss = _updateDismiss;
-        _updateDismiss = null;
-        dismiss?.Invoke();
+        if (_updateReady && _updater is not null)
+        {
+            try
+            {
+                _updater.Apply();
+                LauncherUpdater.Restart();
+                Application.Current?.Shutdown();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                UpdateMessage = $"替换失败：{ex.Message}，可到 Release 页面手动下载";
+                throw;
+            }
+
+            return;
+        }
+
+        var asset = _updateSource.ExecutableAsset;
+        if (asset is null || _updater is null)
+        {
+            // 没有可替换的 exe 附件（或不是单文件 exe 启动）：退回打开 Release 页面。
+            OpenUrl(_updateUrl);
+            return;
+        }
+
+        UpdateMessage = "正在下载更新…";
+        var progress = new Progress<DownloadProgress>(p => UpdateMessage = p.Fraction is { } fraction
+            ? $"正在下载更新… {fraction:P0}"
+            : $"正在下载更新… {p.BytesReceived / 1024.0 / 1024.0:0.0} MB");
+
+        var staged = await _updater.DownloadAsync(asset, progress).ConfigureAwait(true);
+        if (staged is null)
+        {
+            UpdateMessage = "下载失败，点抽屉可到 Release 页面手动下载";
+            return;
+        }
+
+        _updateReady = true;
+        UpdateMessage = "已下载，再点一次完成替换并重启";
     }
 
     private static void OpenUrl(string? url)

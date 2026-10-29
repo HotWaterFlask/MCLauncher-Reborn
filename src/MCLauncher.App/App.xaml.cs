@@ -21,11 +21,15 @@ public partial class App : Application
     /// <summary>运行时装配好的服务栈（窗口关闭时释放）。</summary>
     public static LauncherStack? Stack { get; private set; }
 
+    /// <summary>文件日志 sink：普通日志是批量落盘的，退出前必须关掉才能把最后一批写进文件。</summary>
+    private static FileLogSink? _fileSink;
+
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
 
-        Log.Default.AttachSink(new FileLogSink(GetLogDirectory()));
+        _fileSink = new FileLogSink(GetLogDirectory());
+        Log.Default.AttachSink(_fileSink);
         var log = Log.Default;
 
         // 未单独处理异常的异步命令统一落到日志，避免静默吞掉或崩进程。
@@ -65,6 +69,10 @@ public partial class App : Application
             Stack = stack;
             Services.RegisterSingleton(stack);
 
+            // 上一次自更新留下的 .old 备份在这里清掉（那时旧进程已经退出）。
+            LauncherUpdater.CleanupLeftovers(log);
+            var updater = new LauncherUpdater(stack.Downloader, log, AppContext.BaseDirectory);
+
             // 首次启动不再自动创建离线账号，交给初始化设置让用户自己添加。
             var setup = new SetupViewModel(stack, needsSetup: !config.Settings.SetupCompleted);
             config.Save();
@@ -87,7 +95,8 @@ public partial class App : Application
                 config.Settings.WindowWidth,
                 config.Settings.WindowHeight,
                 crashOverlay,
-                setup);
+                setup,
+                updater);
 
             // 崩溃界面的「重新启动」：回到首页并用当前实例再启动一次。
             crashOverlay.RestartAction = () =>
@@ -132,7 +141,7 @@ public partial class App : Application
             splash.SetStatus("正在准备主界面…");
             await Task.WhenAll(noticeTask, updateTask, backgroundTask);
 
-            ApplyStartupContent(config, shellViewModel, noticeTask.Result, updateTask.Result, log);
+            ApplyStartupContent(shellViewModel, noticeTask.Result, updateTask.Result, log);
 
             // 启动阶段只使用预取结果：没拿到就保持默认底图，避免主窗口先默认后「换脸」。
             BackgroundPicker.Apply(
@@ -177,33 +186,30 @@ public partial class App : Application
 
         Stack?.Dispose();
         Log.Default.Info("================ MCLauncher-Reborn 退出 ================");
+
+        // 文件日志是批量的，这里关掉 sink 才能把缓冲区里的最后几行写完。
+        _fileSink?.Dispose();
+        _fileSink = null;
+
         base.OnExit(e);
     }
 
-    /// <summary>把启动页拿到的公告与更新显示到主界面横幅上。</summary>
+    /// <summary>把启动页拿到的公告与更新显示到主界面。</summary>
     private static void ApplyStartupContent(
-        ConfigService config,
         ShellViewModel shell,
         LauncherNotice? notice,
         LauncherUpdate? update,
         ILogger log)
     {
-        if (notice is not null
-            && !string.Equals(config.Settings.DismissedNoticeId, notice.Id, StringComparison.Ordinal))
+        // 公告每次启动都显示，「知道了」只关闭本次；停用公告请把 notice.json 的 enabled 设为 false。
+        if (notice is not null)
         {
-            shell.ShowNotice(notice.Title, notice.Message ?? string.Empty, notice.Url, () =>
-            {
-                config.Settings.DismissedNoticeId = notice.Id;
-                config.Save();
-            });
-
+            shell.ShowNotice(notice.Title, notice.Message ?? string.Empty, notice.Url);
             log.Info($"已显示启动公告：{notice.Id}");
         }
 
         var current = CurrentVersion();
-        if (update is null
-            || !LauncherInfoService.IsNewerVersion(update.Version, current)
-            || string.Equals(config.Settings.SkippedUpdateVersion, update.Version, StringComparison.OrdinalIgnoreCase))
+        if (update is null || !LauncherInfoService.IsNewerVersion(update.Version, current))
         {
             return;
         }
@@ -212,11 +218,7 @@ public partial class App : Application
             ? notes
             : TrimForBanner(update.Title);
 
-        shell.ShowUpdate($"发现新版本 {update.Version}", detail, update.Url, () =>
-        {
-            config.Settings.SkippedUpdateVersion = update.Version;
-            config.Save();
-        });
+        shell.ShowUpdate($"发现新版本 {update.Version}", detail, update.Url, update);
 
         log.Info($"发现启动器新版本：{update.Version}（当前 {current}）");
     }
