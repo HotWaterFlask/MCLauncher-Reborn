@@ -1778,15 +1778,7 @@ public sealed class VersionsViewModel : ViewModelBase
             }
             catch
             {
-                try
-                {
-                    _stack.Instances.Delete(_stack.GameRoot, instanceId);
-                }
-                catch (Exception cleanup)
-                {
-                    _stack.Log.Warn($"清理未完成的整合包实例 {instanceId} 失败", cleanup);
-                }
-
+                DeleteInstanceQuietly(instanceId);
                 throw;
             }
 
@@ -1794,20 +1786,33 @@ public sealed class VersionsViewModel : ViewModelBase
                 _stack.GameRoot, instanceId, info.GameVersion!, baseVersion, loaderText, instanceId);
 
             ModpackStatus = "正在铺开整合包文件…";
-            var import = await _stack.Modpacks.ImportAsync(
-                new ModpackImportRequest
-                {
-                    ArchivePath = archivePath,
-                    GameRoot = _stack.GameRoot,
-                    InstanceDirectory = VersionRepository.VersionDirectory(_stack.GameRoot, instanceId),
-                    DownloadFiles = true,
-                    CurseForgeApiKey = _stack.Config.ResolveCurseForgeApiKey(),
-                },
-                new Progress<InstallProgress>(ReportModpackProgress));
+
+            ModpackImportResult import;
+            try
+            {
+                import = await _stack.Modpacks.ImportAsync(
+                    new ModpackImportRequest
+                    {
+                        ArchivePath = archivePath,
+                        GameRoot = _stack.GameRoot,
+                        InstanceDirectory = VersionRepository.VersionDirectory(_stack.GameRoot, instanceId),
+                        DownloadFiles = true,
+                        CurseForgeApiKey = _stack.Config.ResolveCurseForgeApiKey(),
+                    },
+                    new Progress<InstallProgress>(ReportModpackProgress));
+            }
+            catch
+            {
+                DeleteInstanceQuietly(instanceId);
+                throw;
+            }
 
             if (!import.Success)
             {
-                throw new InvalidOperationException(import.Error ?? "整合包文件导入失败");
+                DeleteInstanceQuietly(instanceId);
+                throw new InvalidOperationException(
+                    (import.Error ?? "整合包文件导入失败")
+                    + (import.Failed > 0 ? $"（{import.Failed} 个文件）" : string.Empty));
             }
 
             _stack.Config.Settings.SelectedInstanceId = instanceId;
@@ -1836,6 +1841,19 @@ public sealed class VersionsViewModel : ViewModelBase
             ModpackSpeedText = string.Empty;
             _modpackRows.Clear();
             IsModpackInstalling = false;
+        }
+    }
+
+    /// <summary>安装失败时清掉未完成的实例；清理失败只记日志，不覆盖原始错误。</summary>
+    private void DeleteInstanceQuietly(string instanceId)
+    {
+        try
+        {
+            _stack.Instances.Delete(_stack.GameRoot, instanceId);
+        }
+        catch (Exception cleanup)
+        {
+            _stack.Log.Warn($"清理未完成的整合包实例 {instanceId} 失败", cleanup);
         }
     }
 

@@ -137,11 +137,11 @@ dotnet publish src\MCLauncher.App\MCLauncher.App.csproj -c Release -p:PublishPro
 ### 测试
 
 ```powershell
-# 仅运行不联网的用例
-dotnet test tests/MCLauncher.Core.Tests --filter "FullyQualifiedName!~Live"
+# 仅运行不联网的用例（默认）
+dotnet test tests/MCLauncher.Core.Tests --filter "Category!=Live"
 
 # 需要验证真实网络与下载链路时
-dotnet test tests/MCLauncher.Core.Tests --filter "FullyQualifiedName~Live"
+dotnet test tests/MCLauncher.Core.Tests --filter "Category=Live"
 ```
 
 ---

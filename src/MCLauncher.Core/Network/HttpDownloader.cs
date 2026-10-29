@@ -317,6 +317,14 @@ public sealed class HttpDownloader : IDisposable
 
         using (response)
         {
+            // 服务器认为请求范围无效（本地分片比远端文件还长，通常是远端换过文件）：清空重下。
+            if (existing > 0 && response.StatusCode == HttpStatusCode.RequestedRangeNotSatisfiable)
+            {
+                _log.Warn($"{candidate.SourceName} 拒绝了续传范围（416），已清空本地分片");
+                TryDelete(partPath);
+                throw new HttpRequestException("HTTP 416：断点续传范围无效，已重置本地分片");
+            }
+
             // 服务器忽略 Range 直接返回 200：已下载分片作废，从头再来。
             if (existing > 0 && response.StatusCode == HttpStatusCode.OK)
             {
@@ -328,6 +336,25 @@ public sealed class HttpDownloader : IDisposable
             if (response.StatusCode is not HttpStatusCode.OK and not HttpStatusCode.PartialContent)
             {
                 throw new HttpRequestException($"HTTP {(int)response.StatusCode} {response.ReasonPhrase}");
+            }
+
+            // 206 必须从本地已有长度处继续，否则拼接出来的文件是错的。
+            if (existing > 0 && response.StatusCode == HttpStatusCode.PartialContent)
+            {
+                var range = response.Content.Headers.ContentRange;
+                if (range?.From is not { } from || from != existing)
+                {
+                    TryDelete(partPath);
+                    throw new InvalidDataException(
+                        $"续传起点不一致：期望 {existing}，实际 {range?.From?.ToString() ?? "未知"}");
+                }
+
+                if (range.Length is { } remoteLength && checker.Size >= 0 && remoteLength != checker.Size)
+                {
+                    TryDelete(partPath);
+                    throw new InvalidDataException(
+                        $"远端文件长度与期望不符：期望 {checker.Size}，实际 {remoteLength}");
+                }
             }
 
             InspectBmclapiHashHint(response, checker);

@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using MCLauncher.App.Shell;
 using MCLauncher.App.ViewModels;
+using MCLauncher.App.ViewModels.Mvvm;
 using MCLauncher.Core.Abstractions;
 using MCLauncher.Core.Logging;
 using MCLauncher.Core.Services;
@@ -26,6 +27,9 @@ public partial class App : Application
 
         Log.Default.AttachSink(new FileLogSink(GetLogDirectory()));
         var log = Log.Default;
+
+        // 未单独处理异常的异步命令统一落到日志，避免静默吞掉或崩进程。
+        AsyncCommandErrors.Handler = exception => log.Error("界面命令执行失败", exception);
 
         try
         {

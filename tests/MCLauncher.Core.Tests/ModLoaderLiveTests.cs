@@ -9,6 +9,7 @@ namespace MCLauncher.Core.Tests;
 /// M8 的硬验证：真实拉取加载器版本列表，并真实安装出可启动的加载器版本。
 /// Fabric 走 meta 的 profile/json（不需要 Java）；Forge 走 installer jar 真实执行。
 /// </summary>
+[Trait("Category", "Live")]
 public sealed class ModLoaderLiveTests
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(20);

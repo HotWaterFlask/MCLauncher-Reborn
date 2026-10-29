@@ -9,6 +9,7 @@ namespace MCLauncher.Core.Tests;
 /// 用真实的官方数据验证解析层：清单 → 版本 JSON → 模型。
 /// 这能挡住"按文档猜字段名"造成的隐性错误。
 /// </summary>
+[Trait("Category", "Live")]
 public sealed class VersionManifestLiveTests
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(4);

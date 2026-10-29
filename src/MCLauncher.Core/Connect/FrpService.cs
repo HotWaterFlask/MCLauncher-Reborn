@@ -1,8 +1,9 @@
 using System.Diagnostics;
-using System.Net.Http;
 using System.Text;
 using System.Text.RegularExpressions;
 using MCLauncher.Core.Abstractions;
+using MCLauncher.Core.Network;
+using MCLauncher.Core.Utils;
 
 namespace MCLauncher.Core.Connect;
 
@@ -41,6 +42,14 @@ public sealed class FrpService : IDisposable
     private const string FrpcUrl =
         "https://nya.globalslb.net/natfrp/client/frpc/0.51.0-sakura-14/frpc_windows_amd64.exe";
 
+    /// <summary>
+    /// 固定版本官方客户端的 SHA-256。升级 frpc 时必须同步更新这里，
+    /// 否则校验失败会拒绝运行——这是刻意的「失败即关闭」。
+    /// </summary>
+    private const string FrpcSha256 = "b705262edad9f0de04b38f342e811e9d97d0beada75edab3f790e105dcfb5234";
+
+    private const long FrpcSize = 14_133_248;
+
     private const int MaxLogLines = 200;
 
     private static readonly Regex AnsiPattern = new(@"\x1b\[[0-9;]*[A-Za-z]", RegexOptions.Compiled);
@@ -57,21 +66,24 @@ public sealed class FrpService : IDisposable
         @"需要输\s*IP\s*[:：]\s*端口|远程地址|remote address|(?:电信|联通|移动)\s*[:：]",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    private static readonly HttpClient Http = CreateHttpClient();
-
     private readonly ILogger _log;
     private readonly string _directory;
+    private readonly HttpDownloader _downloader;
+    private readonly bool _ownsDownloader;
     private readonly List<string> _logs = new();
     private readonly object _logLock = new();
 
     private Process? _process;
     private FrpState _state = new() { Status = FrpStatusKind.Idle, Message = "尚未启动" };
     private int _epoch;
+    private bool _binaryVerified;
 
-    public FrpService(ILogger log, string configDirectory)
+    public FrpService(ILogger log, string configDirectory, HttpDownloader? downloader = null)
     {
         _log = log;
         _directory = Path.Combine(configDirectory, "frp");
+        _downloader = downloader ?? new HttpDownloader(log);
+        _ownsDownloader = downloader is null;
     }
 
     public FrpState State => _state;
@@ -83,8 +95,25 @@ public sealed class FrpService : IDisposable
 
     public string BinaryPath => Path.Combine(_directory, "frpc.exe");
 
-    /// <summary>frpc 是否已经下载并通过基本校验。</summary>
-    public bool IsBinaryReady() => File.Exists(BinaryPath) && IsLikelyFrpc(BinaryPath);
+    /// <summary>frpc 是否已经下载并通过大小、PE 头与 SHA-256 校验。</summary>
+    public bool IsBinaryReady()
+    {
+        // 校验一次后缓存结果：14 MB 文件的 SHA-256 不应在界面线程上反复算。
+        if (_binaryVerified)
+        {
+            return File.Exists(BinaryPath);
+        }
+
+        if (!File.Exists(BinaryPath)
+            || !IsLikelyFrpc(BinaryPath)
+            || !HashUtil.VerifySha256(BinaryPath, FrpcSha256))
+        {
+            return false;
+        }
+
+        _binaryVerified = true;
+        return true;
+    }
 
     /// <summary>下载官方 frpc（已存在时直接复用）。</summary>
     public async Task EnsureBinaryAsync(Action<string>? log = null, CancellationToken ct = default)
@@ -97,8 +126,6 @@ public sealed class FrpService : IDisposable
         }
 
         Directory.CreateDirectory(_directory);
-        var temp = path + ".part";
-        TryDelete(temp);
 
         SetStateSafe(new FrpState
         {
@@ -110,25 +137,36 @@ public sealed class FrpService : IDisposable
 
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, FrpcUrl);
-            using var response = await Http
-                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct)
+            // 旧版本或校验失败的残留一律删掉，绝不把未校验的文件交给进程执行。
+            if (File.Exists(path))
+            {
+                TryDelete(path);
+            }
+
+            _binaryVerified = false;
+
+            var outcome = await _downloader
+                .DownloadAsync(
+                    new[] { new DownloadCandidate(FrpcUrl, "SakuraFrp 官方") },
+                    path,
+                    FileChecker.OfSize(FrpcSize),
+                    null,
+                    ct)
                 .ConfigureAwait(false);
 
-            response.EnsureSuccessStatusCode();
-
-            await using (var source = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false))
-            await using (var target = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None, 64 * 1024, true))
+            if (!outcome.Success)
             {
-                await source.CopyToAsync(target, ct).ConfigureAwait(false);
+                throw new InvalidDataException(outcome.Error ?? "下载没有成功");
             }
 
-            if (!IsLikelyFrpc(temp))
+            if (!IsLikelyFrpc(path) || !HashUtil.VerifySha256(path, FrpcSha256))
             {
-                throw new InvalidDataException("下载到的 frpc 不是有效的 Windows 可执行文件");
+                TryDelete(path);
+                throw new InvalidDataException("frpc 完整性校验失败（SHA-256 与固定值不符）");
             }
 
-            File.Move(temp, path, overwrite: true);
+            _binaryVerified = true;
+
             log?.Invoke("frpc 下载完成");
             _log.Info($"frpc 已就绪：{path}");
 
@@ -140,12 +178,22 @@ public sealed class FrpService : IDisposable
                 Logs = SnapshotLogs(),
             });
         }
-        catch (Exception ex) when (ex is HttpRequestException
-                                       or IOException
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            TryDelete(path);
+            SetStateSafe(new FrpState
+            {
+                Status = FrpStatusKind.Error,
+                Message = "frpc 下载已取消",
+                Logs = SnapshotLogs(),
+            });
+            throw;
+        }
+        catch (Exception ex) when (ex is IOException
                                        or TaskCanceledException
                                        or InvalidDataException)
         {
-            TryDelete(temp);
+            TryDelete(path);
             SetStateSafe(new FrpState
             {
                 Status = FrpStatusKind.Error,
@@ -495,43 +543,33 @@ public sealed class FrpService : IDisposable
             : $"{key[..2]}***{key[^2..]}";
     }
 
-    private static HttpClient CreateHttpClient()
-    {
-        var handler = new SocketsHttpHandler
-        {
-            ConnectTimeout = TimeSpan.FromSeconds(15),
-            PooledConnectionLifetime = TimeSpan.FromMinutes(5),
-        };
-
-        var client = new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("MCLauncher-Reborn/6.0");
-        return client;
-    }
-
     public void Dispose()
     {
         ++_epoch;
         var process = _process;
         _process = null;
 
-        if (process is null)
+        if (process is not null)
         {
-            return;
-        }
-
-        try
-        {
-            if (!process.HasExited)
+            try
             {
-                process.Kill(entireProcessTree: true);
+                if (!process.HasExited)
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+            }
+            finally
+            {
+                process.Dispose();
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+
+        if (_ownsDownloader)
         {
-        }
-        finally
-        {
-            process.Dispose();
+            _downloader.Dispose();
         }
     }
 }

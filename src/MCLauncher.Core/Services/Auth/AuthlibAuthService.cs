@@ -46,10 +46,52 @@ public sealed class AuthlibAuthService
         _log = log;
     }
 
+    /// <summary>
+    /// 认证服务器地址是否安全：必须 HTTPS；<c>localhost</c> / 回环地址允许 HTTP，便于本机调试。
+    /// 密码与令牌走明文 HTTP 等于直接公开，不能只在界面上提醒。
+    /// </summary>
+    public static bool IsSecureServerUrl(string? url, out Uri? uri)
+    {
+        uri = null;
+
+        if (!Uri.TryCreate(url?.Trim(), UriKind.Absolute, out var parsed))
+        {
+            return false;
+        }
+
+        if (parsed.Scheme == Uri.UriSchemeHttps)
+        {
+            uri = parsed;
+            return true;
+        }
+
+        if (parsed.Scheme == Uri.UriSchemeHttp
+            && (parsed.IsLoopback
+                || parsed.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)))
+        {
+            uri = parsed;
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>校验并规范化认证服务器地址；不安全时抛出可直接展示的异常。</summary>
+    public static string RequireSecureServerUrl(string url)
+    {
+        if (!IsSecureServerUrl(url, out _))
+        {
+            throw new AuthlibAuthException(
+                "认证服务器地址必须使用 https（本机调试可用 http://localhost）。");
+        }
+
+        return NormalizeUrl(url);
+    }
+
     /// <summary>读取认证服务器元数据（用于确认地址有效、展示主页/注册入口、启动时预取）。</summary>
     public async Task<AuthServerMetadata> FetchMetadataAsync(string apiRoot, CancellationToken ct = default)
     {
-        var root = NormalizeUrl(apiRoot);
+        var root = RequireSecureServerUrl(apiRoot);
 
         string json;
         try
@@ -115,7 +157,7 @@ public sealed class AuthlibAuthService
             throw new AuthlibAuthException("密码不能为空");
         }
 
-        var root = NormalizeUrl(server.Url);
+        var root = RequireSecureServerUrl(server.Url);
         var clientToken = Guid.NewGuid().ToString("N");
         var payload = JsonSerializer.Serialize(new
         {
@@ -166,6 +208,12 @@ public sealed class AuthlibAuthService
             return false;
         }
 
+        if (!IsSecureServerUrl(account.AuthServer, out _))
+        {
+            _log.Warn($"认证服务器地址不是 HTTPS，已跳过令牌校验：{account.AuthServer}");
+            return false;
+        }
+
         var payload = JsonSerializer.Serialize(new
         {
             accessToken = account.AccessToken,
@@ -198,6 +246,8 @@ public sealed class AuthlibAuthService
             throw new AuthlibAuthException("外置登录信息不完整，请重新登录");
         }
 
+        var root = RequireSecureServerUrl(account.AuthServer!);
+
         var payload = JsonSerializer.Serialize(new
         {
             accessToken = account.AccessToken,
@@ -209,7 +259,7 @@ public sealed class AuthlibAuthService
         try
         {
             json = await _downloader
-                .PostJsonAsync($"{NormalizeUrl(account.AuthServer!)}/authserver/refresh", payload, null, ct)
+                .PostJsonAsync($"{root}/authserver/refresh", payload, null, ct)
                 .ConfigureAwait(false);
         }
         catch (HttpApiException ex)

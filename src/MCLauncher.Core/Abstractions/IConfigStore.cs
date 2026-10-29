@@ -6,12 +6,12 @@ namespace MCLauncher.Core.Abstractions;
 /// </summary>
 public interface IConfigStore
 {
-    /// <summary>配置目录（如 %LOCALAPPDATA%\MCLauncher-Reborn）。</summary>
+    /// <summary>配置目录（便携目录 <c>mclcfg</c>）。</summary>
     string ConfigDirectory { get; }
 
     /// <summary>读取配置；文件不存在或损坏时返回 createDefault() 的结果。</summary>
     T Load<T>(string fileName, Func<T> createDefault) where T : class;
 
-    /// <summary>原子写入配置。</summary>
-    void Save<T>(string fileName, T value) where T : class;
+    /// <summary>原子写入配置；返回是否真的写成功了，调用方据此提示用户。</summary>
+    bool Save<T>(string fileName, T value) where T : class;
 }

@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore MCLauncher-reborn.slnx
+
+      - name: Build
+        run: dotnet build MCLauncher-reborn.slnx -c Release --no-restore
+
+      - name: Test (non-Live)
+        run: dotnet test tests/MCLauncher.Core.Tests -c Release --no-build --filter "Category!=Live"

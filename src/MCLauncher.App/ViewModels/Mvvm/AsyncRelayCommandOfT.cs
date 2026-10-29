@@ -45,8 +45,8 @@ public sealed class AsyncRelayCommand<T> : ICommand
         }
         catch (Exception ex)
         {
-            // 命令内部应自行处理异常；这里兜底避免 async void 把进程带崩。
-            System.Diagnostics.Debug.WriteLine($"异步命令异常：{ex}");
+            // 命令内部应自行处理异常；这里兜底避免 async void 把进程带崩，同时交给全局处理器记录。
+            AsyncCommandErrors.Report(ex);
         }
         finally
         {

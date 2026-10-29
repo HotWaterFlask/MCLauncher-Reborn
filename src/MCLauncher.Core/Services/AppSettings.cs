@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using MCLauncher.Core.Models;
 using MCLauncher.Core.Network;
+using MCLauncher.Core.Utils;
 
 namespace MCLauncher.Core.Services;
 
@@ -36,7 +37,7 @@ public enum LauncherVisibilityMode
     HideAndReopen = 3,
 }
 
-/// <summary>启动器全局设置。序列化到 %LOCALAPPDATA%\MCLauncher-Reborn\settings.json。</summary>
+/// <summary>启动器全局设置。序列化到便携目录 <c>mclcfg/settings.json</c>。</summary>
 public sealed class AppSettings
 {
     // ---- 初始化 ----
@@ -174,7 +175,8 @@ public sealed class AppSettings
     public List<AuthServerEntry> AuthServers { get; set; } = new() { AuthServerEntry.LittleSkin() };
 
     // ---- 联机 ----
-    /// <summary>樱花穿透访问密钥（玩家自备，只保存在本地设置里）。</summary>
+    /// <summary>樱花穿透访问密钥（玩家自备，只保存在本地设置里；落盘时由 DPAPI 加密）。</summary>
+    [JsonConverter(typeof(ProtectedStringConverter))]
     public string? FrpAccessKey { get; set; }
 
     /// <summary>樱花穿透隧道 ID。</summary>
@@ -187,7 +189,8 @@ public sealed class AppSettings
     /// <summary>微软登录用 Azure 应用客户端 ID。</summary>
     public string? MsClientId { get; set; }
 
-    /// <summary>CurseForge API Key。</summary>
+    /// <summary>CurseForge API Key；落盘时由 DPAPI 加密。</summary>
+    [JsonConverter(typeof(ProtectedStringConverter))]
     public string? CurseForgeApiKey { get; set; }
 
     [JsonIgnore]

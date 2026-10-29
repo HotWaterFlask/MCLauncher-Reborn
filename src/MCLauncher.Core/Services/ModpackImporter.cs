@@ -94,6 +94,9 @@ public sealed class ModpackImportResult
 
     public int Skipped { get; init; }
 
+    /// <summary>下载失败的文件数；&gt;0 时 <see cref="Success"/> 为 false。</summary>
+    public int Failed { get; init; }
+
     public string? Error { get; init; }
 
     public IReadOnlyList<string> Warnings { get; init; } = Array.Empty<string>();
@@ -260,6 +263,8 @@ public sealed partial class ModpackImporter
         var warnings = new List<string>();
         var downloaded = 0;
         var skipped = 0;
+        var failed = 0;
+        var success = true;
 
         if (request.DownloadFiles)
         {
@@ -285,6 +290,8 @@ public sealed partial class ModpackImporter
             var result = await DownloadPlannedFilesAsync(request, plan, progress, ct).ConfigureAwait(false);
             downloaded += result.Downloaded;
             skipped += result.Skipped;
+            failed += result.Failed;
+            success &= result.Success;
             warnings.AddRange(result.Warnings);
         }
 
@@ -293,10 +300,12 @@ public sealed partial class ModpackImporter
 
         return new ModpackImportResult
         {
-            Success = true,
+            Success = success,
             Downloaded = downloaded,
             Overwritten = overwritten,
             Skipped = skipped,
+            Failed = failed,
+            Error = failed > 0 ? $"{failed} 个整合包文件下载失败" : null,
             Warnings = warnings,
             RequiredGameVersion = index.Dependencies?.GetValueOrDefault("minecraft"),
             RequiredLoader = BuildLoaderText(index.Dependencies),
@@ -321,6 +330,8 @@ public sealed partial class ModpackImporter
         var warnings = new List<string>();
         var downloaded = 0;
         var skipped = 0;
+        var failed = 0;
+        var success = true;
         var plan = new List<(string Path, string Url, string? Sha1, long Size)>();
 
         foreach (var addon in meta.Addons ?? new List<McbbsAddon>())
@@ -367,6 +378,8 @@ public sealed partial class ModpackImporter
             var result = await DownloadPlannedFilesAsync(request, plan, progress, ct).ConfigureAwait(false);
             downloaded += result.Downloaded;
             skipped += result.Skipped;
+            failed += result.Failed;
+            success &= result.Success;
             warnings.AddRange(result.Warnings);
         }
 
@@ -374,10 +387,12 @@ public sealed partial class ModpackImporter
 
         return new ModpackImportResult
         {
-            Success = true,
+            Success = success,
             Downloaded = downloaded,
             Overwritten = overwritten,
             Skipped = skipped,
+            Failed = failed,
+            Error = failed > 0 ? $"{failed} 个整合包文件下载失败" : null,
             Warnings = warnings,
             RequiredGameVersion = meta.LaunchInfo?.Version,
             RequiredLoader = meta.LaunchInfo?.LoaderType is { Length: > 0 } loader
@@ -506,6 +521,8 @@ public sealed partial class ModpackImporter
             Downloaded = result.Downloaded,
             Overwritten = overwritten,
             Skipped = result.Skipped,
+            Failed = result.Failed,
+            Error = result.Failed > 0 ? $"{result.Failed} 个整合包文件下载失败" : null,
             Warnings = warnings,
             RequiredGameVersion = manifest.Minecraft?.Version,
             RequiredLoader = manifest.Minecraft?.ModLoaders?.FirstOrDefault()?.Id,
@@ -609,6 +626,10 @@ public sealed partial class ModpackImporter
             Success = result.Failed == 0,
             Downloaded = result.Completed,
             Skipped = result.Skipped,
+            Failed = result.Failed,
+            Error = result.Failed > 0
+                ? $"{result.Failed} 个整合包文件下载失败：" + string.Join("；", result.Failures.Take(3).Select(f => f.Name))
+                : null,
             Warnings = warnings,
         };
     }

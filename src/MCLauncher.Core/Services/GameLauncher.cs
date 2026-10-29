@@ -84,7 +84,7 @@ public sealed class GameLauncher
         };
 
         _log.Info($"启动游戏：{command.JavaPath}（工作目录 {command.WorkingDirectory}）");
-        _log.Trace(command.ToDisplayString());
+        _log.Trace(command.ToSafeDisplayString());
 
         if (!process.Start())
         {

@@ -881,8 +881,16 @@ public sealed class SettingsViewModel : ViewModelBase
 
     private void Save()
     {
-        _stack.Config.Save();
+        var saved = _stack.Config.Save();
         App.RefreshBackground();
+
+        if (!saved)
+        {
+            StatusText = "设置保存失败：请检查配置目录是否可写，详情见日志。";
+            _stack.Log.Warn("设置保存失败");
+            return;
+        }
+
         StatusText = $"已保存到 {_stack.Config.ConfigDirectory}";
         _stack.Log.Info("设置已保存");
         _stack.RaiseChanged();

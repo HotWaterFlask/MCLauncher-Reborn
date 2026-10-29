@@ -3,6 +3,7 @@ using MCLauncher.Core.Tests.Support;
 namespace MCLauncher.Core.Tests;
 
 /// <summary>Azul Metadata API 的联网用例；不下载完整的 JDK 包。</summary>
+[Trait("Category", "Live")]
 public sealed class ZuluJavaServiceLiveTests
 {
     [Theory]

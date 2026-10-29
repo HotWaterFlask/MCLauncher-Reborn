@@ -12,6 +12,7 @@ namespace MCLauncher.Core.Tests;
 /// 现代版本（1.13.2）覆盖结构化参数版本 + 现代 natives 分类器。
 /// 这些用例会访问外网并下载数十 MB，默认按名称过滤时可跳过。
 /// </summary>
+[Trait("Category", "Live")]
 public sealed class GameInstallerLiveTests
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(12);

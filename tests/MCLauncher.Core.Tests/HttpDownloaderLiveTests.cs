@@ -8,6 +8,7 @@ namespace MCLauncher.Core.Tests;
 /// 真实网络验证：确认下载器能取到官方清单、能在镜像不可用时自动回退、
 /// 能对客户端/资源索引做真实 SHA-1 校验。这些用例会访问外网，属于里程碑的"硬验证"。
 /// </summary>
+[Trait("Category", "Live")]
 public sealed class HttpDownloaderLiveTests
 {
     private const string ManifestUrl = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";

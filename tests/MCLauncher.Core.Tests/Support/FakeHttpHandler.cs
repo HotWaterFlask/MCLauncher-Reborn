@@ -13,12 +13,21 @@ internal sealed class FakeHttpHandler : HttpMessageHandler
     private readonly byte[] _content;
     private readonly bool _supportsRange;
     private readonly int _failFirstRequests;
+    private readonly HttpStatusCode? _rangeErrorStatus;
+    private readonly long? _contentRangeStart;
 
-    public FakeHttpHandler(string content, bool supportsRange = true, int failFirstRequests = 0)
+    public FakeHttpHandler(
+        string content,
+        bool supportsRange = true,
+        int failFirstRequests = 0,
+        HttpStatusCode? rangeErrorStatus = null,
+        long? contentRangeStart = null)
     {
         _content = Encoding.UTF8.GetBytes(content);
         _supportsRange = supportsRange;
         _failFirstRequests = failFirstRequests;
+        _rangeErrorStatus = rangeErrorStatus;
+        _contentRangeStart = contentRangeStart;
     }
 
     public int RequestCount { get; private set; }
@@ -44,15 +53,25 @@ internal sealed class FakeHttpHandler : HttpMessageHandler
 
         var from = request.Headers.Range?.Ranges.FirstOrDefault()?.From;
 
-        if (from is { } start && start > 0 && _supportsRange)
+        if (from is { } start && start > 0 && _rangeErrorStatus is { } errorStatus)
         {
-            var slice = _content[(int)start..];
+            return Task.FromResult(new HttpResponseMessage(errorStatus)
+            {
+                RequestMessage = request,
+                Content = new ByteArrayContent(Array.Empty<byte>()),
+            });
+        }
+
+        if (from is { } rangeStart && rangeStart > 0 && _supportsRange)
+        {
+            var slice = _content[(int)rangeStart..];
+            var reportedStart = _contentRangeStart ?? rangeStart;
             var partial = new HttpResponseMessage(HttpStatusCode.PartialContent)
             {
                 RequestMessage = request,
                 Content = new ByteArrayContent(slice),
             };
-            partial.Content.Headers.ContentRange = new ContentRangeHeaderValue(start, _content.Length - 1, _content.Length);
+            partial.Content.Headers.ContentRange = new ContentRangeHeaderValue(reportedStart, _content.Length - 1, _content.Length);
             return Task.FromResult(partial);
         }
 

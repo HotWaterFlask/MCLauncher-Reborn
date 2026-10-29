@@ -103,8 +103,31 @@ public sealed class GameInstaller
     public static string LogConfigDirectory(string gameDirectory) =>
         Path.Combine(AssetsDirectory(gameDirectory), "log_configs");
 
-    public static string LibraryFilePath(string gameDirectory, string artifactPath) =>
-        Path.Combine(LibrariesDirectory(gameDirectory), artifactPath.Replace('/', Path.DirectorySeparatorChar));
+    /// <summary>
+    /// 依赖库在磁盘上的落位。制品路径来自版本元数据（可能是远端内容），
+    /// 必须保证解析结果仍位于 libraries 目录内，否则一律拒绝。
+    /// </summary>
+    public static string LibraryFilePath(string gameDirectory, string artifactPath)
+    {
+        var libraries = Path.GetFullPath(LibrariesDirectory(gameDirectory));
+
+        string full;
+        try
+        {
+            full = Path.GetFullPath(Path.Combine(libraries, artifactPath.Replace('/', Path.DirectorySeparatorChar)));
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            throw new InvalidDataException($"库路径不合法：{artifactPath}", ex);
+        }
+
+        if (!PathUtil.IsParentOf(libraries, full))
+        {
+            throw new InvalidDataException($"库路径越界：{artifactPath}");
+        }
+
+        return full;
+    }
 
     /// <summary>
     /// 清理旧版本写入的受管清单；目录为空时一并删除。

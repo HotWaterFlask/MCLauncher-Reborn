@@ -12,6 +12,7 @@ namespace MCLauncher.Core.Tests;
 /// 任何非法选项都会让退出码非 0，因此这能真实验证参数拼装与路径解析是否正确，
 /// 又不必真的把游戏窗口拉起来（本环境没有 GPU）。
 /// </summary>
+[Trait("Category", "Live")]
 public sealed class GameLaunchLiveTests
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(12);
