@@ -128,87 +128,9 @@
             </Grid>
         </Border>
 
-        <!-- ===== 内容区：启动公告/更新横幅 + 页面 ===== -->
+        <!-- ===== 内容区：页面 + 右侧更新抽屉 ===== -->
         <Grid Grid.Row="1">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
-
-            <StackPanel Grid.Row="0" Margin="8,8,8,0"
-                        Visibility="{Binding HasStartupBanners, Converter={StaticResource BoolToVis}}">
-                <!-- 公告：同一 id 关闭后不再显示 -->
-                <Border Background="{StaticResource ContentPanelBrush}"
-                        BorderBrush="{StaticResource ContentBorderBrush}" BorderThickness="1"
-                        CornerRadius="8" Padding="12,10" Margin="0,0,0,6"
-                        Visibility="{Binding HasNotice, Converter={StaticResource BoolToVis}}">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="&#xE7BA;" FontFamily="Segoe MDL2 Assets" FontSize="16"
-                                   Foreground="{StaticResource AccentBrush}"
-                                   VerticalAlignment="Center" Margin="0,0,10,0"/>
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                            <TextBlock Text="{Binding NoticeTitle}" FontSize="12.5" FontWeight="SemiBold"
-                                       Foreground="{StaticResource PanelTextBrush}"
-                                       TextTrimming="CharacterEllipsis"/>
-                            <TextBlock Text="{Binding NoticeMessage}" FontSize="11" Margin="0,3,0,0"
-                                       Foreground="{StaticResource PanelSubtleTextBrush}"
-                                       TextWrapping="Wrap" MaxHeight="50"/>
-                        </StackPanel>
-                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"
-                                    Margin="12,0,0,0">
-                            <Button Style="{StaticResource SkinButton}" Content="查看详情"
-                                    Width="80" Height="26" FontSize="11.5"
-                                    Visibility="{Binding HasNoticeUrl, Converter={StaticResource BoolToVis}}"
-                                    Command="{Binding OpenNoticeCommand}"/>
-                            <Button Style="{StaticResource SkinButton}" Content="知道了"
-                                    Width="66" Height="26" FontSize="11.5" Margin="8,0,0,0"
-                                    Command="{Binding DismissNoticeCommand}"/>
-                        </StackPanel>
-                    </Grid>
-                </Border>
-
-                <!-- 更新：用户选择「稍后提醒」后该版本不再出现 -->
-                <Border Background="{StaticResource ContentPanelBrush}"
-                        BorderBrush="{StaticResource ContentBorderBrush}" BorderThickness="1"
-                        CornerRadius="8" Padding="12,10"
-                        Visibility="{Binding HasUpdate, Converter={StaticResource BoolToVis}}">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="16"
-                                   Foreground="{StaticResource AccentBrush}"
-                                   VerticalAlignment="Center" Margin="0,0,10,0"/>
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                            <TextBlock Text="{Binding UpdateTitle}" FontSize="12.5" FontWeight="SemiBold"
-                                       Foreground="{StaticResource PanelTextBrush}"
-                                       TextTrimming="CharacterEllipsis"/>
-                            <TextBlock Text="{Binding UpdateMessage}" FontSize="11" Margin="0,3,0,0"
-                                       Foreground="{StaticResource PanelSubtleTextBrush}"
-                                       TextWrapping="Wrap" MaxHeight="50"/>
-                        </StackPanel>
-                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"
-                                    Margin="12,0,0,0">
-                            <Button Style="{StaticResource SkinButton}" Content="查看更新"
-                                    Width="80" Height="26" FontSize="11.5"
-                                    Visibility="{Binding HasUpdateUrl, Converter={StaticResource BoolToVis}}"
-                                    Command="{Binding OpenUpdateCommand}"/>
-                            <Button Style="{StaticResource SkinButton}" Content="稍后提醒"
-                                    Width="80" Height="26" FontSize="11.5" Margin="8,0,0,0"
-                                    Command="{Binding DismissUpdateCommand}"/>
-                        </StackPanel>
-                    </Grid>
-                </Border>
-            </StackPanel>
-
-            <Border Grid.Row="1">
+            <Border>
                 <Border.Style>
                     <Style TargetType="Border">
                         <Setter Property="Margin" Value="8,8,8,34"/>
@@ -227,6 +149,87 @@
                 </Border.Style>
                 <ContentControl Content="{Binding CurrentPage}"/>
             </Border>
+
+            <!-- 更新抽屉：有更新时从右侧滑出，点正文直接下载，启动 5 秒后自动缩回 -->
+            <Grid Width="300" HorizontalAlignment="Right" VerticalAlignment="Top"
+                  Margin="0,14,0,0"
+                  Panel.ZIndex="90"
+                  Visibility="{Binding HasUpdate, Converter={StaticResource BoolToVis}}">
+
+                <Button x:Name="UpdateDrawer"
+                        MinHeight="96"
+                        Command="{Binding UpdateActionCommand}"
+                        ToolTip="点击下载并更新启动器">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource DrawerSurfaceButton}">
+                            <Setter Property="RenderTransform">
+                                <Setter.Value>
+                                    <TranslateTransform X="300"/>
+                                </Setter.Value>
+                            </Setter>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsUpdateDrawerOpen}" Value="True">
+                                    <DataTrigger.EnterActions>
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation
+                                                    Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)"
+                                                    To="0" Duration="0:0:0.25">
+                                                    <DoubleAnimation.EasingFunction>
+                                                        <CubicEase EasingMode="EaseOut"/>
+                                                    </DoubleAnimation.EasingFunction>
+                                                </DoubleAnimation>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </DataTrigger.EnterActions>
+                                    <DataTrigger.ExitActions>
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation
+                                                    Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)"
+                                                    To="300" Duration="0:0:0.25">
+                                                    <DoubleAnimation.EasingFunction>
+                                                        <CubicEase EasingMode="EaseIn"/>
+                                                    </DoubleAnimation.EasingFunction>
+                                                </DoubleAnimation>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </DataTrigger.ExitActions>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+
+                    <StackPanel Margin="28,14,16,14">
+                        <TextBlock Text="{Binding UpdateTitle}"
+                                   Foreground="#FFFFD400" FontSize="14" FontWeight="SemiBold"
+                                   TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding UpdateMessage}"
+                                   Foreground="#99FFD400" FontSize="11.5" Margin="0,6,0,0"
+                                   TextWrapping="Wrap" MaxHeight="96"/>
+                    </StackPanel>
+                </Button>
+
+                <!-- 抽屉最左侧的 >：点击缩回右边缘 -->
+                <Button Style="{StaticResource DrawerBarButton}"
+                        Width="20" HorizontalAlignment="Left" VerticalAlignment="Stretch"
+                        Content="&gt;" FontSize="13" ToolTip="收起"
+                        Visibility="{Binding IsUpdateDrawerOpen, Converter={StaticResource BoolToVis}}"
+                        Command="{Binding CollapseUpdateDrawerCommand}"/>
+            </Grid>
+
+            <!-- 收起态：右边缘的小方块，点 < 抽出抽屉 -->
+            <Button Width="26" Height="56"
+                    HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Margin="0,14,0,0"
+                    Panel.ZIndex="91"
+                    Style="{StaticResource DrawerSurfaceButton}"
+                    ToolTip="查看更新"
+                    Visibility="{Binding IsUpdateDrawerCollapsed, Converter={StaticResource BoolToVis}}"
+                    Command="{Binding OpenUpdateDrawerCommand}">
+                <TextBlock Text="&lt;" FontSize="15" Foreground="#FFFFD400"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Button>
         </Grid>
 
         <!-- ===== 左下角署名：悬停变蓝，点击打开项目主页 ===== -->

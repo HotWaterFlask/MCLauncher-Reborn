@@ -63,13 +63,6 @@ public sealed class AppSettings
     /// <summary>网络背景图直链；使用随机图片 API 时每次启动都会重新拉取。</summary>
     public string? BackgroundUrl { get; set; }
 
-    // ---- 启动公告与更新 ----
-    /// <summary>已关闭的公告 id；同一条公告不再重复显示。</summary>
-    public string? DismissedNoticeId { get; set; }
-
-    /// <summary>用户选择「稍后提醒」的版本号；该版本不再重复弹提示。</summary>
-    public string? SkippedUpdateVersion { get; set; }
-
     // ---- 游戏目录与实例 ----
     public List<string> GameFolders { get; set; } = new();
 

@@ -29,6 +29,31 @@
             </StackPanel>
         </Button>
 
+        <!-- 启动公告：贴在账号块下方，窄卡片样式，不占整行 -->
+        <Border Width="300"
+                HorizontalAlignment="Left" VerticalAlignment="Top" Margin="16,76,0,0"
+                Background="#99000000" CornerRadius="6" Padding="10,9"
+                Visibility="{Binding DataContext.HasNotice, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
+            <StackPanel>
+                <TextBlock Text="{Binding DataContext.NoticeTitle, RelativeSource={RelativeSource AncestorType=Window}}"
+                           FontSize="12.5" FontWeight="SemiBold" Foreground="White"
+                           TextTrimming="CharacterEllipsis"/>
+                <TextBlock Text="{Binding DataContext.NoticeMessage, RelativeSource={RelativeSource AncestorType=Window}}"
+                           Margin="0,4,0,0"
+                           FontSize="11" Foreground="#CCFFFFFF"
+                           TextWrapping="Wrap" MaxHeight="80"/>
+                <StackPanel Orientation="Horizontal" Margin="0,8,0,0" HorizontalAlignment="Right">
+                    <Button Style="{StaticResource SkinButton}" Content="查看详情"
+                            Width="76" Height="24" FontSize="11"
+                            Visibility="{Binding DataContext.HasNoticeUrl, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}"
+                            Command="{Binding DataContext.OpenNoticeCommand, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                    <Button Style="{StaticResource SkinButton}" Content="知道了"
+                            Width="62" Height="24" FontSize="11" Margin="6,0,0,0"
+                            Command="{Binding DataContext.DismissNoticeCommand, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
         <!-- 启动输出：点击启动后才出现，进度条在这块下面 -->
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
                     Margin="0,0,0,120" Width="560"
