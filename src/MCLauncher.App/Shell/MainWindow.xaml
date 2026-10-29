@@ -128,26 +128,106 @@
             </Grid>
         </Border>
 
-        <!-- ===== 内容区：首页不铺白底（保持背景图观感），其它页面带半透明圆角底板 ===== -->
-        <Border Grid.Row="1">
-            <Border.Style>
-                <Style TargetType="Border">
-                    <Setter Property="Margin" Value="8,8,8,34"/>
-                    <Setter Property="Background" Value="{StaticResource ContentPanelBrush}"/>
-                    <Setter Property="BorderBrush" Value="{StaticResource ContentBorderBrush}"/>
-                    <Setter Property="BorderThickness" Value="1"/>
-                    <Setter Property="CornerRadius" Value="8"/>
-                    <Style.Triggers>
-                        <DataTrigger Binding="{Binding IsHomePage}" Value="True">
-                            <Setter Property="Margin" Value="0"/>
-                            <Setter Property="Background" Value="Transparent"/>
-                            <Setter Property="BorderThickness" Value="0"/>
-                        </DataTrigger>
-                    </Style.Triggers>
-                </Style>
-            </Border.Style>
-            <ContentControl Content="{Binding CurrentPage}"/>
-        </Border>
+        <!-- ===== 内容区：启动公告/更新横幅 + 页面 ===== -->
+        <Grid Grid.Row="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <StackPanel Grid.Row="0" Margin="8,8,8,0"
+                        Visibility="{Binding HasStartupBanners, Converter={StaticResource BoolToVis}}">
+                <!-- 公告：同一 id 关闭后不再显示 -->
+                <Border Background="{StaticResource ContentPanelBrush}"
+                        BorderBrush="{StaticResource ContentBorderBrush}" BorderThickness="1"
+                        CornerRadius="8" Padding="12,10" Margin="0,0,0,6"
+                        Visibility="{Binding HasNotice, Converter={StaticResource BoolToVis}}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE7BA;" FontFamily="Segoe MDL2 Assets" FontSize="16"
+                                   Foreground="{StaticResource AccentBrush}"
+                                   VerticalAlignment="Center" Margin="0,0,10,0"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding NoticeTitle}" FontSize="12.5" FontWeight="SemiBold"
+                                       Foreground="{StaticResource PanelTextBrush}"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text="{Binding NoticeMessage}" FontSize="11" Margin="0,3,0,0"
+                                       Foreground="{StaticResource PanelSubtleTextBrush}"
+                                       TextWrapping="Wrap" MaxHeight="50"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"
+                                    Margin="12,0,0,0">
+                            <Button Style="{StaticResource SkinButton}" Content="查看详情"
+                                    Width="80" Height="26" FontSize="11.5"
+                                    Visibility="{Binding HasNoticeUrl, Converter={StaticResource BoolToVis}}"
+                                    Command="{Binding OpenNoticeCommand}"/>
+                            <Button Style="{StaticResource SkinButton}" Content="知道了"
+                                    Width="66" Height="26" FontSize="11.5" Margin="8,0,0,0"
+                                    Command="{Binding DismissNoticeCommand}"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- 更新：用户选择「稍后提醒」后该版本不再出现 -->
+                <Border Background="{StaticResource ContentPanelBrush}"
+                        BorderBrush="{StaticResource ContentBorderBrush}" BorderThickness="1"
+                        CornerRadius="8" Padding="12,10"
+                        Visibility="{Binding HasUpdate, Converter={StaticResource BoolToVis}}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="16"
+                                   Foreground="{StaticResource AccentBrush}"
+                                   VerticalAlignment="Center" Margin="0,0,10,0"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding UpdateTitle}" FontSize="12.5" FontWeight="SemiBold"
+                                       Foreground="{StaticResource PanelTextBrush}"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text="{Binding UpdateMessage}" FontSize="11" Margin="0,3,0,0"
+                                       Foreground="{StaticResource PanelSubtleTextBrush}"
+                                       TextWrapping="Wrap" MaxHeight="50"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"
+                                    Margin="12,0,0,0">
+                            <Button Style="{StaticResource SkinButton}" Content="查看更新"
+                                    Width="80" Height="26" FontSize="11.5"
+                                    Visibility="{Binding HasUpdateUrl, Converter={StaticResource BoolToVis}}"
+                                    Command="{Binding OpenUpdateCommand}"/>
+                            <Button Style="{StaticResource SkinButton}" Content="稍后提醒"
+                                    Width="80" Height="26" FontSize="11.5" Margin="8,0,0,0"
+                                    Command="{Binding DismissUpdateCommand}"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </StackPanel>
+
+            <Border Grid.Row="1">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Margin" Value="8,8,8,34"/>
+                        <Setter Property="Background" Value="{StaticResource ContentPanelBrush}"/>
+                        <Setter Property="BorderBrush" Value="{StaticResource ContentBorderBrush}"/>
+                        <Setter Property="BorderThickness" Value="1"/>
+                        <Setter Property="CornerRadius" Value="8"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsHomePage}" Value="True">
+                                <Setter Property="Margin" Value="0"/>
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <ContentControl Content="{Binding CurrentPage}"/>
+            </Border>
+        </Grid>
 
         <!-- ===== 左下角署名：悬停变蓝，点击打开项目主页 ===== -->
         <Button Grid.Row="1"

@@ -21,7 +21,7 @@ public partial class App : Application
     /// <summary>运行时装配好的服务栈（窗口关闭时释放）。</summary>
     public static LauncherStack? Stack { get; private set; }
 
-    protected override void OnStartup(StartupEventArgs e)
+    protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
 
@@ -30,6 +30,8 @@ public partial class App : Application
 
         // 未单独处理异常的异步命令统一落到日志，避免静默吞掉或崩进程。
         AsyncCommandErrors.Handler = exception => log.Error("界面命令执行失败", exception);
+
+        SplashWindow? splash = null;
 
         try
         {
@@ -105,8 +107,42 @@ public partial class App : Application
 
             var window = new MainWindow { DataContext = shellViewModel };
 
-            // 背景：按设置加载（默认底图 / bgskin 目录 / 自定义路径 / 网络 URL）。
-            BackgroundPicker.Apply(window, config.Settings, AppContext.BaseDirectory, stack.Downloader, log);
+            // ---- 启动页：预取网络背景图、公告与更新；可随时跳过 ----
+            // 启动阶段先不让主窗口成为「最后一个窗口」，否则启动页一关进程就退出。
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+            splash = new SplashWindow();
+            splash.Show();
+
+            using var startupCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            splash.SkipClicked += (_, _) => startupCts.Cancel();
+
+            var launcherInfo = new LauncherInfoService(stack.Downloader, log);
+
+            splash.SetStatus("正在获取公告…");
+            var noticeTask = launcherInfo.FetchNoticeAsync(startupCts.Token);
+
+            splash.SetStatus("正在检查更新…");
+            var updateTask = launcherInfo.CheckUpdateAsync(startupCts.Token);
+
+            splash.SetStatus("正在加载背景图…");
+            var backgroundTask = BackgroundPicker.PreloadNetworkAsync(
+                config.Settings, stack.Downloader, log, startupCts.Token);
+
+            splash.SetStatus("正在准备主界面…");
+            await Task.WhenAll(noticeTask, updateTask, backgroundTask);
+
+            ApplyStartupContent(config, shellViewModel, noticeTask.Result, updateTask.Result, log);
+
+            // 启动阶段只使用预取结果：没拿到就保持默认底图，避免主窗口先默认后「换脸」。
+            BackgroundPicker.Apply(
+                window,
+                config.Settings,
+                AppContext.BaseDirectory,
+                stack.Downloader,
+                log,
+                backgroundTask.Result,
+                allowNetworkLoad: false);
 
             // 显式设置初始尺寸：Window.Width/Height 的绑定在 DataContext 赋值时序上不可靠，
             // 这里直接按配置赋初值，低于最小尺寸时钳到 720×450。
@@ -115,11 +151,14 @@ public partial class App : Application
 
             log.Info("外壳已创建，准备显示窗口");
             window.Show();
+            ShutdownMode = ShutdownMode.OnLastWindowClose;
+            splash.Close();
             log.Info($"窗口已显示：{window.ActualWidth}x{window.ActualHeight}");
         }
         catch (Exception ex)
         {
             log.Error("启动失败", ex);
+            splash?.Close();
             MessageBox.Show(
                 $"启动器启动失败：{ex.Message}{Environment.NewLine}{Environment.NewLine}详情见日志：{GetLogDirectory()}",
                 "MCLauncher-Reborn",
@@ -139,6 +178,68 @@ public partial class App : Application
         Stack?.Dispose();
         Log.Default.Info("================ MCLauncher-Reborn 退出 ================");
         base.OnExit(e);
+    }
+
+    /// <summary>把启动页拿到的公告与更新显示到主界面横幅上。</summary>
+    private static void ApplyStartupContent(
+        ConfigService config,
+        ShellViewModel shell,
+        LauncherNotice? notice,
+        LauncherUpdate? update,
+        ILogger log)
+    {
+        if (notice is not null
+            && !string.Equals(config.Settings.DismissedNoticeId, notice.Id, StringComparison.Ordinal))
+        {
+            shell.ShowNotice(notice.Title, notice.Message ?? string.Empty, notice.Url, () =>
+            {
+                config.Settings.DismissedNoticeId = notice.Id;
+                config.Save();
+            });
+
+            log.Info($"已显示启动公告：{notice.Id}");
+        }
+
+        var current = CurrentVersion();
+        if (update is null
+            || !LauncherInfoService.IsNewerVersion(update.Version, current)
+            || string.Equals(config.Settings.SkippedUpdateVersion, update.Version, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var detail = TrimForBanner(update.Notes) is { Length: > 0 } notes
+            ? notes
+            : TrimForBanner(update.Title);
+
+        shell.ShowUpdate($"发现新版本 {update.Version}", detail, update.Url, () =>
+        {
+            config.Settings.SkippedUpdateVersion = update.Version;
+            config.Save();
+        });
+
+        log.Info($"发现启动器新版本：{update.Version}（当前 {current}）");
+    }
+
+    private static string CurrentVersion()
+    {
+        var version = typeof(App).Assembly.GetName().Version;
+        return version is null ? "0.0.0" : $"{version.Major}.{version.Minor}.{version.Build}";
+    }
+
+    /// <summary>发布说明是多行 Markdown，横幅只保留一段单行摘要。</summary>
+    private static string TrimForBanner(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return string.Empty;
+        }
+
+        var normalized = string.Join(
+            " ",
+            text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)).Trim();
+
+        return normalized.Length <= 200 ? normalized : normalized[..200] + "…";
     }
 
     private static async Task PrefetchManifestAsync(LauncherStack stack, ILogger log)

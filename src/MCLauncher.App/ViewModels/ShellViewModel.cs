@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Windows.Input;
 using MCLauncher.App.ViewModels.Mvvm;
 
@@ -36,6 +37,18 @@ public sealed class ShellViewModel : ViewModelBase
     private NavItem? _selectedNavItem;
     private string _statusText = "就绪";
 
+    private bool _hasNotice;
+    private string _noticeTitle = string.Empty;
+    private string _noticeMessage = string.Empty;
+    private string? _noticeUrl;
+    private Action? _noticeDismiss;
+
+    private bool _hasUpdate;
+    private string _updateTitle = string.Empty;
+    private string _updateMessage = string.Empty;
+    private string? _updateUrl;
+    private Action? _updateDismiss;
+
     public ShellViewModel(
         IEnumerable<NavItem> navItems,
         Func<string, object> pageFactory,
@@ -54,6 +67,11 @@ public sealed class ShellViewModel : ViewModelBase
         InitialHeight = initialHeight;
         Crash = crash;
         Setup = setup;
+
+        OpenNoticeCommand = new RelayCommand(() => OpenUrl(_noticeUrl));
+        DismissNoticeCommand = new RelayCommand(DismissNotice);
+        OpenUpdateCommand = new RelayCommand(() => OpenUrl(_updateUrl));
+        DismissUpdateCommand = new RelayCommand(DismissUpdate);
     }
 
     /// <summary>全局崩溃界面，盖在所有页面之上。</summary>
@@ -103,6 +121,138 @@ public sealed class ShellViewModel : ViewModelBase
     {
         get => _statusText;
         set => SetProperty(ref _statusText, value);
+    }
+
+    // ---------------------------------------------------------------- 启动公告 / 更新横幅
+
+    public bool HasNotice
+    {
+        get => _hasNotice;
+        private set
+        {
+            if (SetProperty(ref _hasNotice, value))
+            {
+                OnPropertyChanged(nameof(HasNoticeUrl));
+                OnPropertyChanged(nameof(HasStartupBanners));
+            }
+        }
+    }
+
+    public string NoticeTitle
+    {
+        get => _noticeTitle;
+        private set => SetProperty(ref _noticeTitle, value);
+    }
+
+    public string NoticeMessage
+    {
+        get => _noticeMessage;
+        private set => SetProperty(ref _noticeMessage, value);
+    }
+
+    public bool HasNoticeUrl => _hasNotice && !string.IsNullOrWhiteSpace(_noticeUrl);
+
+    public bool HasUpdate
+    {
+        get => _hasUpdate;
+        private set
+        {
+            if (SetProperty(ref _hasUpdate, value))
+            {
+                OnPropertyChanged(nameof(HasUpdateUrl));
+                OnPropertyChanged(nameof(HasStartupBanners));
+            }
+        }
+    }
+
+    public string UpdateTitle
+    {
+        get => _updateTitle;
+        private set => SetProperty(ref _updateTitle, value);
+    }
+
+    public string UpdateMessage
+    {
+        get => _updateMessage;
+        private set => SetProperty(ref _updateMessage, value);
+    }
+
+    public bool HasUpdateUrl => _hasUpdate && !string.IsNullOrWhiteSpace(_updateUrl);
+
+    /// <summary>公告或更新任一存在时，横幅区域才占位；都没有时不额外增加顶部间距。</summary>
+    public bool HasStartupBanners => _hasNotice || _hasUpdate;
+
+    public ICommand OpenNoticeCommand { get; }
+
+    public ICommand DismissNoticeCommand { get; }
+
+    public ICommand OpenUpdateCommand { get; }
+
+    public ICommand DismissUpdateCommand { get; }
+
+    /// <summary>显示公告横幅；<paramref name="onDismiss"/> 用于记住「不再显示」。</summary>
+    public void ShowNotice(string title, string message, string? url, Action? onDismiss = null)
+    {
+        NoticeTitle = title;
+        NoticeMessage = message;
+        _noticeUrl = url;
+        _noticeDismiss = onDismiss;
+        HasNotice = true;
+    }
+
+    public void DismissNotice()
+    {
+        if (!_hasNotice)
+        {
+            return;
+        }
+
+        HasNotice = false;
+        var dismiss = _noticeDismiss;
+        _noticeDismiss = null;
+        dismiss?.Invoke();
+    }
+
+    /// <summary>显示新版本横幅；<paramref name="onDismiss"/> 用于记住「稍后提醒」。</summary>
+    public void ShowUpdate(string title, string message, string? url, Action? onDismiss = null)
+    {
+        UpdateTitle = title;
+        UpdateMessage = message;
+        _updateUrl = url;
+        _updateDismiss = onDismiss;
+        HasUpdate = true;
+    }
+
+    public void DismissUpdate()
+    {
+        if (!_hasUpdate)
+        {
+            return;
+        }
+
+        HasUpdate = false;
+        var dismiss = _updateDismiss;
+        _updateDismiss = null;
+        dismiss?.Invoke();
+    }
+
+    private static void OpenUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch (Exception ex) when (ex is InvalidOperationException
+                                       or System.ComponentModel.Win32Exception
+                                       or ArgumentException)
+        {
+            Debug.WriteLine($"打开链接失败：{url}（{ex.Message}）");
+        }
     }
 
     public ICommand NavigateCommand => new RelayCommand<object>(param =>

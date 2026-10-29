@@ -1,0 +1,91 @@
+﻿<Window x:Class="MCLauncher.App.SplashWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="MCLauncher Reborn"
+        Icon="pack://application:,,,/MCLauncher-Reborn.ico"
+        Width="430" Height="238"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterScreen"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        FontFamily="Microsoft YaHei UI, Microsoft YaHei, Segoe UI">
+
+    <Border Background="#EE10141B" CornerRadius="10"
+            BorderBrush="#40FFFFFF" BorderThickness="1"
+            Padding="22,20,22,18">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- 标题 -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal">
+                <Border Width="42" Height="42" CornerRadius="8" Background="#1F6FEB">
+                    <TextBlock Text="MC" Foreground="White" FontSize="16" FontWeight="Bold"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Text="MCLauncher Reborn" Foreground="White"
+                               FontSize="17" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="VersionText" Foreground="#9AA4B2"
+                               FontSize="11" Margin="0,3,0,0"/>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- 当前阶段 -->
+            <StackPanel Grid.Row="1" VerticalAlignment="Center">
+                <TextBlock x:Name="StatusText" Text="正在准备启动…"
+                           Foreground="#D6DCE5" FontSize="12.5"
+                           TextWrapping="Wrap" TextTrimming="CharacterEllipsis"/>
+                <ProgressBar IsIndeterminate="True" Height="4" Margin="0,12,0,0"
+                             Background="#22FFFFFF" Foreground="#4C9AFF"
+                             BorderThickness="0"/>
+            </StackPanel>
+
+            <!-- 底部：提示 + 跳过 -->
+            <Grid Grid.Row="2">
+                <TextBlock Text="联网获取底图、公告与更新，可随时跳过"
+                           Foreground="#7C8798" FontSize="10.5" VerticalAlignment="Center"/>
+                <Button x:Name="SkipButton" Content="跳过" Width="78" Height="28"
+                        HorizontalAlignment="Right" Click="OnSkipClick"
+                        Foreground="White" Cursor="Hand" FontSize="12">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Background" Value="#2A3442"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="Bd" CornerRadius="4"
+                                                Background="{TemplateBinding Background}"
+                                                BorderBrush="#44FFFFFF" BorderThickness="1">
+                                            <ContentPresenter HorizontalAlignment="Center"
+                                                              VerticalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Bd" Property="Background" Value="#3A4759"/>
+                                            </Trigger>
+                                            <Trigger Property="IsPressed" Value="True">
+                                                <Setter TargetName="Bd" Property="Background" Value="#1F2834"/>
+                                            </Trigger>
+                                            <Trigger Property="IsEnabled" Value="False">
+                                                <Setter Property="Foreground" Value="#7C8798"/>
+                                                <Setter TargetName="Bd" Property="Background" Value="#1A2029"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Style>
+                </Button>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

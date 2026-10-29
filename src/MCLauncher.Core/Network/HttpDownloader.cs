@@ -217,6 +217,13 @@ public sealed class HttpDownloader : IDisposable
                 {
                     throw;
                 }
+                catch (HttpRequestException ex) when (IsPermanentClientError(ex))
+                {
+                    // 404 / 403 这类客户端错误重试没有意义，直接换下一个候选源。
+                    lastError = ex;
+                    _log.Info($"获取文本失败（{candidate.SourceName}，HTTP {ex.StatusCode}，不再重试）：{candidate.Url}");
+                    break;
+                }
                 catch (Exception ex)
                 {
                     lastError = ex;
@@ -500,6 +507,13 @@ public sealed class HttpDownloader : IDisposable
 
         return await gate.EnterAsync(ct).ConfigureAwait(false);
     }
+
+    private static bool IsPermanentClientError(HttpRequestException exception) =>
+        exception.StatusCode is { } status
+        && (int)status >= 400
+        && (int)status < 500
+        && status is not HttpStatusCode.RequestTimeout
+        && status is not HttpStatusCode.TooManyRequests;
 
     private static void TryDelete(string path)
     {
