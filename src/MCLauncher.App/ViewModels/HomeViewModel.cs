@@ -680,9 +680,6 @@ public sealed class HomeViewModel : ViewModelBase
 
             // 进程起来之后游戏还在持续刷 stdout，这些不再显示在首页面板里。
             _suppressLaunchOutput = true;
-
-            // 启动器窗口行为：保持显示 / 隐藏 / 退出 / 隐藏并等游戏结束后再显示。
-            ApplyLauncherVisibility();
         }
         catch (Exception ex)
         {
@@ -712,16 +709,19 @@ public sealed class HomeViewModel : ViewModelBase
     /// <summary>
     /// 收起启动面板：启动成功时轮询游戏主窗口，窗口真的出现后再停留 3 秒；
     /// 启动失败或进程提前退出时只停留 3 秒，让红色错误提示有时间被看到。
+    /// 游戏窗口确认出现后才执行「隐藏 / 退出启动器」设置，避免启动器先于游戏窗口消失。
     /// </summary>
     private async Task HideLaunchPanelAsync(int session, GameProcess? process)
     {
+        var appeared = false;
+
         if (process is null)
         {
             await Task.Delay(TimeSpan.FromSeconds(3));
         }
         else
         {
-            var appeared = await WaitForGameWindowAsync(process, session);
+            appeared = await WaitForGameWindowAsync(process, session);
             if (session != _launchSession)
             {
                 return;
@@ -745,6 +745,12 @@ public sealed class HomeViewModel : ViewModelBase
         _launchRows.Clear();
         LaunchOutput = string.Empty;
         _launchBuilder.Clear();
+
+        // 启动器窗口行为：保持显示 / 隐藏 / 退出 / 隐藏并等游戏结束后再显示。
+        if (appeared)
+        {
+            ApplyLauncherVisibility();
+        }
     }
 
     /// <summary>
@@ -932,7 +938,10 @@ public sealed class HomeViewModel : ViewModelBase
         }
     }
 
-    /// <summary>游戏进程成功启动后，按设置隐藏或关闭启动器。</summary>
+    /// <summary>
+    /// 游戏窗口真正出现后，按设置隐藏或关闭启动器。
+    /// 不能在进程刚起时调用，否则启动器会先于游戏窗口消失，用户会以为没启动成功。
+    /// </summary>
     private void ApplyLauncherVisibility()
     {
         var window = Application.Current?.MainWindow;
