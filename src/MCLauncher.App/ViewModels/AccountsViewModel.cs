@@ -1054,10 +1054,9 @@ public sealed class AccountsViewModel : ViewModelBase
     public async Task<AuthServerItem> RegisterServerAsync(string name, string url)
     {
         var trimmed = url.Trim();
-        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) ||
-            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        if (!AuthlibAuthService.IsSecureServerUrl(trimmed, out var uri) || uri is null)
         {
-            throw new AuthlibAuthException("请输入 http(s) 开头的 API 根地址");
+            throw new AuthlibAuthException("请输入 https 开头的 API 根地址（本机调试可用 http://localhost）");
         }
 
         var metadata = await _stack.AuthlibAuth.FetchMetadataAsync(trimmed);
@@ -1091,10 +1090,9 @@ public sealed class AccountsViewModel : ViewModelBase
         ServerError = string.Empty;
         var url = NewServerUrl.Trim();
 
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
-            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        if (!AuthlibAuthService.IsSecureServerUrl(url, out var uri) || uri is null)
         {
-            ServerError = "请输入 http(s) 开头的 API 根地址";
+            ServerError = "请输入 https 开头的 API 根地址（本机调试可用 http://localhost）";
             return;
         }
 

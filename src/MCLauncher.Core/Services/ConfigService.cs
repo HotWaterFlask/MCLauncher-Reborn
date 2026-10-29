@@ -45,9 +45,10 @@ public sealed class ConfigService
         _log.Info($"已加载设置：{path}");
     }
 
-    public void Save()
+    /// <summary>保存设置；返回 false 表示落盘失败，调用方应提示用户而不是显示「已保存」。</summary>
+    public bool Save()
     {
-        _store.Save(SettingsFileName, Settings);
+        return _store.Save(SettingsFileName, Settings);
     }
 
     /// <summary>

@@ -97,6 +97,46 @@ public sealed class HttpDownloaderTests
     }
 
     [Fact]
+    public async Task 服务器返回416时清掉分片并重下()
+    {
+        using var temp = new TempDirectory();
+        var handler = new FakeHttpHandler(
+            Content,
+            rangeErrorStatus: System.Net.HttpStatusCode.RequestedRangeNotSatisfiable);
+        var log = new TestLog();
+        using var downloader = new HttpDownloader(log, handler);
+
+        var target = temp.File("out.bin");
+        File.WriteAllBytes(target + ".part", Encoding.UTF8.GetBytes(Content)[..10]);
+
+        var outcome = await downloader.DownloadAsync(Candidates(Url), target, Checker());
+
+        Assert.True(outcome.Success, outcome.Error);
+        Assert.Equal(Content, File.ReadAllText(target));
+        Assert.Equal(2, outcome.Attempts);
+        Assert.True(log.Contains("416"), "应记录 416 并重置分片");
+    }
+
+    [Fact]
+    public async Task 续传起点不一致时清掉分片并重下()
+    {
+        using var temp = new TempDirectory();
+        var handler = new FakeHttpHandler(Content, contentRangeStart: 5);
+        var log = new TestLog();
+        using var downloader = new HttpDownloader(log, handler);
+
+        var target = temp.File("out.bin");
+        File.WriteAllBytes(target + ".part", Encoding.UTF8.GetBytes(Content)[..10]);
+
+        var outcome = await downloader.DownloadAsync(Candidates(Url), target, Checker());
+
+        Assert.True(outcome.Success, outcome.Error);
+        Assert.Equal(Content, File.ReadAllText(target));
+        Assert.Equal(2, outcome.Attempts);
+        Assert.True(log.Contains("续传起点不一致"), "应记录起点不一致");
+    }
+
+    [Fact]
     public async Task 哈希不符时判失败并清掉残留文件()
     {
         using var temp = new TempDirectory();
@@ -192,16 +232,26 @@ public sealed class HttpDownloaderTests
             Checker = Checker(),
         }).ToList();
 
-        DownloadBatchProgress? last = null;
-        var result = await batch.RunAsync(requests, maxParallel: 4, new InlineProgress<DownloadBatchProgress>(p => last = p));
+        // 并发上报时最后一条不一定就是最完整的，只认「已完成数等于总数」的快照。
+        DownloadBatchProgress? finished = null;
+        var result = await batch.RunAsync(
+            requests,
+            maxParallel: 4,
+            new InlineProgress<DownloadBatchProgress>(p =>
+            {
+                if (p.Completed == p.Total)
+                {
+                    finished = p;
+                }
+            }));
 
         Assert.True(result.Success);
         Assert.Equal(4, result.Completed);
         Assert.Equal(0, result.Failed);
-        Assert.NotNull(last);
-        Assert.Equal(4, last!.Total);
-        Assert.Equal(4, last.Completed);
-        Assert.Equal(Encoding.UTF8.GetByteCount(Content) * 4, last.DownloadedBytes);
+        Assert.NotNull(finished);
+        Assert.Equal(4, finished!.Total);
+        Assert.Equal(4, finished.Completed);
+        Assert.Equal(Encoding.UTF8.GetByteCount(Content) * 4, finished.DownloadedBytes);
     }
 
     [Fact]

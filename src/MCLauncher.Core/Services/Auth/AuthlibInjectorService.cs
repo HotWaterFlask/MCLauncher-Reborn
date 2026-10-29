@@ -16,6 +16,10 @@ public sealed class AuthlibInjectorService
     private const int FallbackBuild = 56;
     private const long MinimumJarSize = 100_000;
 
+    /// <summary>latest.json 不可达时使用固定版本的 SHA-256，避免在没有哈希的情况下下载 jar。</summary>
+    private const string FallbackSha256 =
+        "9c7f4343e6c82034958ffb48c14a2cb0c85928be7283103ce17da00c6d5a7b10";
+
     private readonly HttpDownloader _downloader;
     private readonly ILogger _log;
 
@@ -41,15 +45,22 @@ public sealed class AuthlibInjectorService
         var fileName = $"authlib-injector-{artifact.Version}.jar";
         var target = Path.Combine(directory, fileName);
 
-        if (File.Exists(target) && new FileInfo(target).Length < MinimumJarSize)
+        if (File.Exists(target) && Matches(target, artifact.Sha256))
         {
-            // 上次没下完的残片，删掉重来。
-            File.Delete(target);
+            WriteSidecar(target, artifact.Sha256 ?? ReadSidecar(target));
+            return target;
+        }
+
+        if (string.IsNullOrWhiteSpace(artifact.Sha256))
+        {
+            throw new AuthlibAuthException(
+                "authlib-injector 元数据没有提供 SHA-256 校验值，已拒绝下载；请稍后重试或手动把 jar 放到缓存目录。");
         }
 
         if (File.Exists(target))
         {
-            return target;
+            // 上次没下完或被篡改的残片，删掉重来。
+            TryDelete(target);
         }
 
         var candidates = new List<DownloadCandidate>
@@ -78,29 +89,89 @@ public sealed class AuthlibInjectorService
                 ct)
             .ConfigureAwait(false);
 
-        if (!result.Success || !File.Exists(target) || new FileInfo(target).Length < MinimumJarSize)
+        if (!result.Success || !File.Exists(target) || !Matches(target, artifact.Sha256))
         {
-            var error = result.Failures.Count > 0 ? result.Failures[0].Error : "文件不完整";
+            var error = result.Failures.Count > 0
+                ? result.Failures[0].Error
+                : "文件不完整或 SHA-256 校验失败";
+            TryDelete(target);
             throw new AuthlibAuthException(
                 $"下载 authlib-injector 失败：{error}。请检查网络后重试");
         }
 
+        WriteSidecar(target, artifact.Sha256);
         _log.Info($"authlib-injector 已就绪：{target}");
         return target;
+    }
+
+    /// <summary>校验缓存 jar：优先用元数据里的 SHA-256，其次用同目录的 <c>.sha256</c> 旁路文件。</summary>
+    private static bool Matches(string path, string? sha256)
+    {
+        if (!File.Exists(path) || new FileInfo(path).Length < MinimumJarSize)
+        {
+            return false;
+        }
+
+        var expected = string.IsNullOrWhiteSpace(sha256) ? ReadSidecar(path) : sha256;
+        return !string.IsNullOrWhiteSpace(expected) && HashUtil.VerifySha256(path, expected);
+    }
+
+    private static string? ReadSidecar(string path)
+    {
+        try
+        {
+            var sidecar = path + ".sha256";
+            return File.Exists(sidecar) ? File.ReadAllText(sidecar).Trim() : null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+    }
+
+    private static void WriteSidecar(string path, string? sha256)
+    {
+        if (string.IsNullOrWhiteSpace(sha256))
+        {
+            return;
+        }
+
+        try
+        {
+            File.WriteAllText(path + ".sha256", sha256);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // 旁路文件只是缓存加速，写失败不影响本次启动。
+        }
+    }
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
     }
 
     private static string? FindCachedJar(string directory)
     {
         var jar = Directory
             .GetFiles(directory, "authlib-injector-*.jar")
-            .Where(path => new FileInfo(path).Length >= MinimumJarSize)
+            .Where(path => Matches(path, null))
             .OrderByDescending(File.GetLastWriteTimeUtc)
             .FirstOrDefault();
 
         return jar;
     }
 
-    private async Task<(string Version, int Build, string DownloadUrl)> ResolveLatestAsync(CancellationToken ct)
+    private async Task<(string Version, int Build, string DownloadUrl, string? Sha256)> ResolveLatestAsync(CancellationToken ct)
     {
         try
         {
@@ -113,10 +184,14 @@ public sealed class AuthlibInjectorService
             var version = root.TryGetProperty("version", out var v) ? v.GetString() : null;
             var url = root.TryGetProperty("download_url", out var u) ? u.GetString() : null;
             var build = root.TryGetProperty("build_number", out var b) ? b.GetInt32() : FallbackBuild;
+            var sha256 = root.TryGetProperty("checksums", out var checksums)
+                         && checksums.TryGetProperty("sha256", out var s)
+                ? s.GetString()
+                : null;
 
             if (!string.IsNullOrWhiteSpace(version) && !string.IsNullOrWhiteSpace(url))
             {
-                return (version!, build, url!);
+                return (version!, build, url!, string.IsNullOrWhiteSpace(sha256) ? null : sha256);
             }
         }
         catch (Exception ex)
@@ -127,6 +202,7 @@ public sealed class AuthlibInjectorService
         return (
             FallbackVersion,
             FallbackBuild,
-            $"https://authlib-injector.yushi.moe/artifact/{FallbackBuild}/authlib-injector-{FallbackVersion}.jar");
+            $"https://authlib-injector.yushi.moe/artifact/{FallbackBuild}/authlib-injector-{FallbackVersion}.jar",
+            FallbackSha256);
     }
 }

@@ -2,6 +2,28 @@ using System.Windows.Input;
 
 namespace MCLauncher.App.ViewModels.Mvvm;
 
+/// <summary>
+/// 异步命令的统一异常出口。没有单独传入 onError 的命令都走这里，
+/// 由 App 启动时接到日志上，既不会让 async void 把进程带崩，也不会静默吞掉。
+/// </summary>
+public static class AsyncCommandErrors
+{
+    /// <summary>全局处理器；App 启动时设置为写日志。</summary>
+    public static Action<Exception>? Handler { get; set; }
+
+    internal static void Report(Exception exception)
+    {
+        var handler = Handler;
+        if (handler is not null)
+        {
+            handler(exception);
+            return;
+        }
+
+        System.Diagnostics.Debug.WriteLine($"异步命令异常：{exception}");
+    }
+}
+
 /// <summary>同步命令。</summary>
 public sealed class RelayCommand : ICommand
 {
@@ -91,7 +113,7 @@ public sealed class AsyncRelayCommand : ICommand
             }
             else
             {
-                throw;
+                AsyncCommandErrors.Report(ex);
             }
         }
         finally

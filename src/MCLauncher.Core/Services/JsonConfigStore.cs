@@ -37,16 +37,18 @@ public sealed class JsonConfigStore : IConfigStore
         }
     }
 
-    public void Save<T>(string fileName, T value) where T : class
+    public bool Save<T>(string fileName, T value) where T : class
     {
         var path = Path.Combine(ConfigDirectory, fileName);
         try
         {
             JsonUtil.SerializeToFile(path, value);
+            return true;
         }
         catch (Exception ex)
         {
             _log.Error($"配置文件写入失败：{path}", ex);
+            return false;
         }
     }
 }

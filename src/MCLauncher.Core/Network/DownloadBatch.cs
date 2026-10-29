@@ -57,11 +57,6 @@ public sealed class DownloadBatch
 
     private readonly HttpDownloader _downloader;
     private readonly ILogger _log;
-    private readonly object _reportLock = new();
-    private long _lastReportTicks;
-    private long _speedWindowTicks;
-    private long _speedWindowBytes;
-    private double _lastSpeed;
 
     public DownloadBatch(HttpDownloader downloader, ILogger log)
     {
@@ -95,12 +90,11 @@ public sealed class DownloadBatch
         var activeLock = new object();
         var activeSequence = 0;
 
-        _lastReportTicks = 0;
-        _speedWindowTicks = 0;
-        _speedWindowBytes = 0;
-        _lastSpeed = 0;
+        // 上报状态必须随本次运行走：共享的 DownloadBatch 并发跑两批时，
+        // 用实例字段会互相覆盖节流时间与速度窗口。
+        var reportState = new ReportState();
 
-        Report(progress, total, 0, 0, 0, totalBytes, 0, null, null, "开始下载", force: true);
+        Report(progress, total, 0, 0, 0, totalBytes, 0, null, null, "开始下载", force: true, reportState);
 
         _log.Info($"开始批量下载：共 {total} 个文件，并发 {maxParallel}");
 
@@ -133,7 +127,8 @@ public sealed class DownloadBatch
                     }
 
                     Report(progress, total, Volatile.Read(ref completed), Volatile.Read(ref skipped), Volatile.Read(ref failed),
-                        totalBytes, Interlocked.Read(ref downloadedBytes), active, activeLock, request.Name, force: false);
+                        totalBytes, Interlocked.Read(ref downloadedBytes), active, activeLock, request.Name, force: false,
+                        reportState);
                 });
 
                 DownloadOutcome outcome;
@@ -188,7 +183,8 @@ public sealed class DownloadBatch
                 }
 
                 Report(progress, total, Volatile.Read(ref completed), Volatile.Read(ref skipped), Volatile.Read(ref failed),
-                    totalBytes, Interlocked.Read(ref downloadedBytes), active, activeLock, request.Name, force: true);
+                    totalBytes, Interlocked.Read(ref downloadedBytes), active, activeLock, request.Name, force: true,
+                    reportState);
             }).ConfigureAwait(false);
 
         var result = new DownloadBatchResult
@@ -249,42 +245,43 @@ public sealed class DownloadBatch
         Dictionary<int, ActiveFile>? active,
         object? activeLock,
         string? current,
-        bool force)
+        bool force,
+        ReportState state)
     {
         if (progress is null)
         {
             return;
         }
 
-        lock (_reportLock)
+        lock (state.Gate)
         {
             var now = Stopwatch.GetTimestamp();
 
             if (!force)
             {
-                var last = _lastReportTicks;
+                var last = state.LastReportTicks;
                 if (last != 0 && Stopwatch.GetElapsedTime(last, now) < ReportInterval)
                 {
                     return;
                 }
             }
 
-            _lastReportTicks = now;
+            state.LastReportTicks = now;
 
-            if (_speedWindowTicks == 0)
+            if (state.SpeedWindowTicks == 0)
             {
-                _speedWindowTicks = now;
-                _speedWindowBytes = downloadedBytes;
+                state.SpeedWindowTicks = now;
+                state.SpeedWindowBytes = downloadedBytes;
             }
             else
             {
-                var elapsed = Stopwatch.GetElapsedTime(_speedWindowTicks, now);
+                var elapsed = Stopwatch.GetElapsedTime(state.SpeedWindowTicks, now);
                 if (elapsed >= SpeedWindow)
                 {
-                    var delta = Math.Max(0, downloadedBytes - _speedWindowBytes);
-                    _lastSpeed = delta / elapsed.TotalSeconds;
-                    _speedWindowTicks = now;
-                    _speedWindowBytes = downloadedBytes;
+                    var delta = Math.Max(0, downloadedBytes - state.SpeedWindowBytes);
+                    state.LastSpeed = delta / elapsed.TotalSeconds;
+                    state.SpeedWindowTicks = now;
+                    state.SpeedWindowBytes = downloadedBytes;
                 }
             }
 
@@ -302,9 +299,23 @@ public sealed class DownloadBatch
                 DownloadedBytes = downloadedBytes,
                 Current = current,
                 ActiveFiles = activeFiles,
-                BytesPerSecond = _lastSpeed,
+                BytesPerSecond = state.LastSpeed,
             });
         }
+    }
+
+    /// <summary>单次 <see cref="RunAsync"/> 的进度上报状态。</summary>
+    private sealed class ReportState
+    {
+        public object Gate { get; } = new();
+
+        public long LastReportTicks;
+
+        public long SpeedWindowTicks;
+
+        public long SpeedWindowBytes;
+
+        public double LastSpeed;
     }
 
     /// <summary>单个正在下载的文件状态；由并行线程并发更新。</summary>

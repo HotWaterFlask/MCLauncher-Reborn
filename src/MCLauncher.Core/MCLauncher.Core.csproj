@@ -13,6 +13,11 @@
     <Compile Remove="Secrets\LocalSecrets.example.cs" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- DPAPI（ProtectedData）用于加密落盘的账号令牌与 API Key。 -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.14" />
+  </ItemGroup>
+
   <!--
     新克隆的仓库里没有 LocalSecrets.cs，首次构建时从模板自动生成一份，保证开箱即可编译。
     生成后需要用户自己把凭据填进去；此时该文件已存在，后续构建走常规的 **/*.cs 通配。

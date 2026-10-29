@@ -445,4 +445,27 @@ public sealed class LaunchArgumentBuilderTests
         var command = Build(ModernJson, new LaunchOptions(), @"C:\mc");
         Assert.Equal(@"C:\mc", command.WorkingDirectory);
     }
+
+    [Fact]
+    public void 安全展示会隐藏访问令牌()
+    {
+        var account = new Account
+        {
+            Kind = AccountKind.Microsoft,
+            Name = "Steve",
+            Uuid = "5627dd98e6be3c21b8a8e92344183641",
+            AccessToken = "secret-access-token",
+        };
+
+        var context = CreateContext(LegacyJson, new LaunchOptions(), account, @"C:\mc");
+        var command = new LaunchArgumentBuilder(new TestLog()).Build(context);
+
+        // 旧式参数把 ${auth_session} 当位置参数，没有名字可依，也必须按值打码。
+        var safe = command.ToSafeDisplayString();
+        Assert.DoesNotContain("secret-access-token", safe);
+        Assert.Contains("--accessToken ***", safe);
+
+        // 原始形式只用于开发期排查。
+        Assert.Contains("secret-access-token", command.ToDisplayString());
+    }
 }

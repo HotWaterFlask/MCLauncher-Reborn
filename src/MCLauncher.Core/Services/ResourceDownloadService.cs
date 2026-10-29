@@ -159,6 +159,13 @@ public sealed class ResourceDownloadService
 
         if (!result.Success)
         {
+            // 临时文件与 .part 在失败后都没有价值，留着只会越积越多。
+            if (!PathUtil.IsSamePath(temp, target))
+            {
+                TryDeleteFile(temp);
+                TryDeleteFile(temp + ".part");
+            }
+
             return result;
         }
 

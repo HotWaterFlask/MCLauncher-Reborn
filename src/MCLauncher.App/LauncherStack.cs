@@ -215,7 +215,7 @@ public sealed class LauncherStack : IDisposable
             ResourceDownloads = new ResourceDownloadService(downloader, resolver, log),
             ResourceUpdates = new ResourceUpdateService(curseForge, log),
             DirectConnect = new DirectConnectService(log),
-            Frp = new FrpService(log, config.ConfigDirectory),
+            Frp = new FrpService(log, config.ConfigDirectory, downloader),
             Terracotta = new TerracottaService(log, config.ConfigDirectory),
         };
     }

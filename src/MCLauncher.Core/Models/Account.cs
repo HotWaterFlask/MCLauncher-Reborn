@@ -31,7 +31,8 @@ public sealed class Account
     /// <summary>UUID（32 位十六进制，无横杠）。</summary>
     public string Uuid { get; set; } = string.Empty;
 
-    /// <summary>访问令牌。离线账号使用占位值。</summary>
+    /// <summary>访问令牌。离线账号使用占位值；落盘时由 DPAPI 加密。</summary>
+    [JsonConverter(typeof(ProtectedStringConverter))]
     public string AccessToken { get; set; } = "0";
 
     /// <summary>Xbox 用户 ID（仅微软账号有）。</summary>
@@ -40,7 +41,8 @@ public sealed class Account
     /// <summary>Xbox 玩家代号（仅微软账号有，来自 XSTS 的 gtg；旧数据可能为空）。</summary>
     public string? XboxName { get; set; }
 
-    /// <summary>微软 OAuth 刷新令牌（仅微软账号有）。</summary>
+    /// <summary>微软 OAuth 刷新令牌（仅微软账号有），落盘时由 DPAPI 加密。</summary>
+    [JsonConverter(typeof(ProtectedStringConverter))]
     public string? RefreshToken { get; set; }
 
     /// <summary>外置登录认证服务器 API 根地址（authlib-injector）。</summary>
@@ -49,7 +51,8 @@ public sealed class Account
     /// <summary>外置登录认证服务器显示名。</summary>
     public string? AuthServerName { get; set; }
 
-    /// <summary>authlib clientToken，刷新令牌时要用。</summary>
+    /// <summary>authlib clientToken，刷新令牌时要用；落盘时由 DPAPI 加密。</summary>
+    [JsonConverter(typeof(ProtectedStringConverter))]
     public string? ClientToken { get; set; }
 
     /// <summary>令牌过期时间。</summary>

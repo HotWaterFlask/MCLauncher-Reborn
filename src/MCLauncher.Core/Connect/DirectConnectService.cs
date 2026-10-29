@@ -629,7 +629,20 @@ public sealed class DirectConnectService : IDisposable
         }
 
         session.Monitor.Cancel();
-        session.Forwarder.DisposeAsync().AsTask().GetAwaiter().GetResult();
+
+        // 退出阶段不能无限期等待：转发器最多等 2 秒，超时交给进程回收。
+        try
+        {
+            if (!session.Forwarder.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(2)))
+            {
+                _log.Warn("退出时等待直连转发器关闭超时");
+            }
+        }
+        catch (AggregateException ex)
+        {
+            _log.Warn("退出时关闭直连转发器失败", ex);
+        }
+
         session.Monitor.Dispose();
 
         // 删除映射只是尽力而为，租约到期后路由器会自行回收。

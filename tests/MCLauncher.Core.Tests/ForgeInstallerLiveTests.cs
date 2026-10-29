@@ -8,6 +8,7 @@ namespace MCLauncher.Core.Tests;
 /// Forge 处理器流程的真实验证：下载官方安装器、执行处理器、直装自洽实例。
 /// 会访问外网并下载数十 MB，日常按名称过滤时跳过。
 /// </summary>
+[Trait("Category", "Live")]
 public sealed class ForgeInstallerLiveTests
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(30);

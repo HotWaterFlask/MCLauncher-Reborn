@@ -30,12 +30,70 @@ public sealed class LaunchCommand
     /// <summary>放在 java 命令前面的包装命令。</summary>
     public string? WrapperCommand { get; init; }
 
+    /// <summary>出现在参数里的敏感值（访问令牌）；安全展示时按值替换。</summary>
+    public IReadOnlyList<string> SensitiveValues { get; init; } = Array.Empty<string>();
+
     /// <summary>已替换完变量的完整参数表（不含 java 自身路径）。</summary>
     public IReadOnlyList<string> ToArgumentList() =>
         JvmArguments.Concat(new[] { MainClass }).Concat(GameArguments).ToArray();
 
-    /// <summary>用于日志展示的可读形式。</summary>
+    /// <summary>原始参数的可读形式；只用于开发期排查，<b>不得写入日志</b>。</summary>
     public string ToDisplayString() => "java " + string.Join(' ', ToArgumentList().Select(QuoteIfNeeded));
+
+    /// <summary>
+    /// 用于落盘日志的可读形式：访问令牌等敏感参数只留下参数名或 <c>***</c>。
+    /// 日志经常被用户拿去求助，不能把可冒用的令牌一起带出去。
+    /// </summary>
+    public string ToSafeDisplayString()
+    {
+        var secrets = SensitiveValues.Where(value => value.Length >= 4).ToArray();
+        var redacted = new List<string>();
+        var hideNext = false;
+
+        foreach (var argument in ToArgumentList())
+        {
+            if (hideNext)
+            {
+                hideNext = false;
+                redacted.Add("***");
+                continue;
+            }
+
+            var separator = argument.IndexOf('=');
+            if (separator > 0 && SensitiveArgumentNames.Contains(argument[..separator]))
+            {
+                redacted.Add(argument[..(separator + 1)] + "***");
+                continue;
+            }
+
+            if (SensitiveArgumentNames.Contains(argument))
+            {
+                hideNext = true;
+                redacted.Add(argument);
+                continue;
+            }
+
+            // 旧版 JSON 会把 ${auth_session} 当作位置参数，没有参数名可依，只能按值替换。
+            var value = argument;
+            foreach (var secret in secrets)
+            {
+                value = value.Replace(secret, "***", StringComparison.Ordinal);
+            }
+
+            redacted.Add(value);
+        }
+
+        return "java " + string.Join(' ', redacted.Select(QuoteIfNeeded));
+    }
+
+    /// <summary>需要打码的参数名（命令行里以「参数名 值」或「参数名=值」出现）。</summary>
+    private static readonly HashSet<string> SensitiveArgumentNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "--accessToken",
+        "--authSession",
+        "--clientToken",
+        "--session",
+    };
 
     private static string QuoteIfNeeded(string value) =>
         value.Contains(' ') ? "\"" + value + "\"" : value;
@@ -229,6 +287,10 @@ public sealed class LaunchArgumentBuilder
             Environment = options.EnvironmentVariables ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
             Priority = options.ProcessPriority,
             WrapperCommand = options.WrapperCommand,
+            SensitiveValues = new[] { context.Account.AccessToken }
+                .Where(token => !string.IsNullOrWhiteSpace(token) && token != "0")
+                .Distinct(StringComparer.Ordinal)
+                .ToArray(),
         };
     }
 

@@ -310,10 +310,9 @@ public sealed class SetupViewModel : ViewModelBase
         // 自定义地址：先校验 API 根地址并登记到设置里，再用它登录。
         CustomServerError = string.Empty;
         var url = CustomServerUrl.Trim();
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
-            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        if (!AuthlibAuthService.IsSecureServerUrl(url, out _))
         {
-            CustomServerError = "请输入 http(s) 开头的 API 根地址";
+            CustomServerError = "请输入 https 开头的 API 根地址（本机调试可用 http://localhost）";
             return;
         }
 

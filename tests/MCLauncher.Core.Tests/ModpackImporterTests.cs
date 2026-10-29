@@ -240,4 +240,33 @@ public sealed class ModpackImporterTests
             Assert.True(File.Exists(Path.Combine(instance, "options.txt")));
         }
     }
+
+    [Fact]
+    public async Task Modrinth整合包下载失败会返回失败而不是静默成功()
+    {
+        using var temp = new TempDirectory();
+        var log = new TestLog();
+        using var downloader = new HttpDownloader(log, new FakeHttpHandler("{}", failFirstRequests: 1000));
+        var importer = new ModpackImporter(downloader, new DownloadSourceResolver(log), new ResourceRepository(log), log);
+
+        var archive = temp.File("pack.mrpack");
+        ZipBuilder.Create(archive,
+            ("modrinth.index.json", """
+            {"name":"n","dependencies":{"minecraft":"1.20.4"},
+             "files":[{"path":"mods/a.jar","downloads":["https://cdn.example.com/a.jar"],"fileSize":100}]}
+            """));
+
+        var result = await importer.ImportAsync(new ModpackImportRequest
+        {
+            ArchivePath = archive,
+            GameRoot = temp.Path,
+            InstanceDirectory = temp.File("instance"),
+            DownloadFiles = true,
+        });
+
+        Assert.False(result.Success);
+        Assert.Equal(1, result.Failed);
+        Assert.NotNull(result.Error);
+        Assert.Contains("下载失败", result.Error!);
+    }
 }
