@@ -747,7 +747,8 @@ public sealed class HomeViewModel : ViewModelBase
         _launchBuilder.Clear();
 
         // 启动器窗口行为：保持显示 / 隐藏 / 退出 / 隐藏并等游戏结束后再显示。
-        if (appeared)
+        // 游戏在这 3 秒里已经退出时不再隐藏/关闭，否则会把崩溃诊断界面盖掉。
+        if (appeared && process is not null && !process.HasExited)
         {
             ApplyLauncherVisibility();
         }
@@ -892,6 +893,12 @@ public sealed class HomeViewModel : ViewModelBase
             var postLaunch = _stack.Config.Settings.PostLaunchCommand;
             var commandDirectory = ResolveLaunchDirectory(version);
 
+            // 「隐藏启动器」模式下游戏正常结束后没有界面可看，等结束后命令跑完就退出进程；
+            // 崩溃时保留启动器，让崩溃诊断界面能显示出来。
+            var exitAfterGame = crash is null
+                && _windowHiddenByLaunch
+                && _stack.Config.Settings.LauncherVisibility == LauncherVisibilityMode.Hide;
+
             UiThread.Post(() =>
             {
                 StatusText = crash is null
@@ -926,6 +933,15 @@ public sealed class HomeViewModel : ViewModelBase
                 {
                     _stack.Log.Warn($"执行结束后命令失败：{postLaunch}", ex);
                 }
+            }
+
+            if (exitAfterGame)
+            {
+                UiThread.Post(() =>
+                {
+                    _stack.Log.Info("游戏已结束，按设置退出启动器");
+                    Application.Current?.Shutdown();
+                });
             }
         }
         catch (Exception ex)
