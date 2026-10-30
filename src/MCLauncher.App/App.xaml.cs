@@ -128,15 +128,20 @@ public partial class App : Application
 
             var launcherInfo = new LauncherInfoService(stack.Downloader, log);
 
-            splash.SetStatus("正在获取公告…");
             var noticeTask = launcherInfo.FetchNoticeAsync(startupCts.Token);
-
-            splash.SetStatus("正在检查更新…");
             var updateTask = launcherInfo.CheckUpdateAsync(startupCts.Token);
-
-            splash.SetStatus("正在加载背景图…");
             var backgroundTask = BackgroundPicker.PreloadNetworkAsync(
                 config.Settings, stack.Downloader, log, startupCts.Token);
+
+            // 三个预取并行进行，启动页按实际剩余的阶段刷新文案；
+            // 不能连着调用 SetStatus，那样窗口渲染时只会剩下最后一句「正在准备主界面」。
+            var startupStages = new (string Label, Task Task)[]
+            {
+                ("获取公告", noticeTask),
+                ("检查更新", updateTask),
+                ("加载背景图", backgroundTask),
+            };
+            await TrackStartupStagesAsync(splash, startupStages);
 
             splash.SetStatus("正在准备主界面…");
             await Task.WhenAll(noticeTask, updateTask, backgroundTask);
@@ -193,6 +198,37 @@ public partial class App : Application
 
         base.OnExit(e);
     }
+
+    /// <summary>
+    /// 并行等待启动预取任务，每完成一个阶段就把启动页文案刷新成「还剩哪些阶段」，
+    /// 让用户看到获取公告、检查更新、加载背景图这些真实步骤。
+    /// </summary>
+    private static async Task TrackStartupStagesAsync(
+        SplashWindow splash,
+        IReadOnlyList<(string Label, Task Task)> stages)
+    {
+        var pending = stages.ToList();
+        splash.SetStatus(FormatPendingStages(pending));
+
+        while (pending.Count > 0)
+        {
+            await Task.WhenAny(pending.Select(stage => stage.Task));
+
+            // 几个阶段可能在同一时刻结束，已完成的都从待办里移除。
+            pending.RemoveAll(stage => stage.Task.IsCompleted);
+            if (pending.Count == 0)
+            {
+                break;
+            }
+
+            splash.SetStatus(FormatPendingStages(pending));
+        }
+    }
+
+    private static string FormatPendingStages(IReadOnlyList<(string Label, Task Task)> pending) =>
+        pending.Count == 1
+            ? $"正在{pending[0].Label}…"
+            : $"正在{string.Join("、", pending.Select(stage => stage.Label))}…";
 
     /// <summary>把启动页拿到的公告与更新显示到主界面。</summary>
     private static void ApplyStartupContent(

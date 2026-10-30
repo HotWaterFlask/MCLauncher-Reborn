@@ -183,60 +183,140 @@ public sealed class HttpDownloader : IDisposable
 
         foreach (var candidate in candidates)
         {
-            using var gate = await EnterHostAsync(candidate.Url, ct).ConfigureAwait(false);
-            for (var attempt = 1; attempt <= MaxAttemptsPerCandidate; attempt++)
+            try
             {
-                try
-                {
-                    using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                    timeoutCts.CancelAfter(HeaderTimeout);
-
-                    // 用 ResponseContentRead 而不是 ResponseHeadersRead：
-                    // 前者让上面这个超时把**响应体**也一起覆盖住。
-                    // 用后者的话，只有响应头受超时保护，服务端在响应体中途卡住会让这里永久挂起。
-                    using var response = await _http
-                        .GetAsync(candidate.Url, HttpCompletionOption.ResponseContentRead, timeoutCts.Token)
-                        .ConfigureAwait(false);
-
-                    response.EnsureSuccessStatusCode();
-
-                    var text = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-                    _log.Trace($"已获取 {candidate.SourceName} 文本：{candidate.Url}（{text.Length} 字符）");
-                    return text;
-                }
-                catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
-                {
-                    lastError = ex;
-                    _log.Warn($"获取文本超时（{candidate.SourceName} 第 {attempt}/{MaxAttemptsPerCandidate} 次）：{candidate.Url}");
-                    if (attempt < MaxAttemptsPerCandidate)
-                    {
-                        await Task.Delay(TimeSpan.FromMilliseconds(300 * attempt), ct).ConfigureAwait(false);
-                    }
-                }
-                catch (OperationCanceledException) when (ct.IsCancellationRequested)
-                {
-                    throw;
-                }
-                catch (HttpRequestException ex) when (IsPermanentClientError(ex))
-                {
-                    // 404 / 403 这类客户端错误重试没有意义，直接换下一个候选源。
-                    lastError = ex;
-                    _log.Info($"获取文本失败（{candidate.SourceName}，HTTP {ex.StatusCode}，不再重试）：{candidate.Url}");
-                    break;
-                }
-                catch (Exception ex)
-                {
-                    lastError = ex;
-                    _log.Warn($"获取文本失败（{candidate.SourceName} 第 {attempt}/{MaxAttemptsPerCandidate} 次）：{candidate.Url}", ex);
-                    if (attempt < MaxAttemptsPerCandidate)
-                    {
-                        await Task.Delay(TimeSpan.FromMilliseconds(300 * attempt), ct).ConfigureAwait(false);
-                    }
-                }
+                return await GetStringFromCandidateAsync(candidate, ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                lastError = ex;
             }
         }
 
         throw new HttpRequestException($"所有候选源均获取失败：{DescribeCandidates(candidates)}", lastError);
+    }
+
+    /// <summary>
+    /// 并行请求所有候选源，返回最先成功的一份文本，其余请求立即取消。
+    /// 适合公告这类「必须马上拿到、卡住就换源」的小请求：官方源不通时镜像能立刻补上，
+    /// 不用等官方源超时。
+    /// </summary>
+    public async Task<string> GetStringRaceAsync(
+        IReadOnlyList<DownloadCandidate> candidates,
+        CancellationToken ct = default)
+    {
+        if (candidates.Count == 0)
+        {
+            throw new ArgumentException("至少需要一个候选源", nameof(candidates));
+        }
+
+        using var raceCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var tasks = candidates
+            .Select(candidate => GetStringFromCandidateAsync(candidate, raceCts.Token))
+            .ToList();
+
+        Exception? lastError = null;
+
+        while (tasks.Count > 0)
+        {
+            var finished = await Task.WhenAny(tasks).ConfigureAwait(false);
+            tasks.Remove(finished);
+
+            try
+            {
+                var text = await finished.ConfigureAwait(false);
+                raceCts.Cancel();
+                await IgnoreRemainingAsync(tasks).ConfigureAwait(false);
+                return text;
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                lastError = ex;
+            }
+        }
+
+        throw new HttpRequestException($"所有候选源均获取失败：{DescribeCandidates(candidates)}", lastError);
+    }
+
+    /// <summary>一个候选源的完整获取流程：主机限流 + 最多 <see cref="MaxAttemptsPerCandidate"/> 次重试。</summary>
+    private async Task<string> GetStringFromCandidateAsync(DownloadCandidate candidate, CancellationToken ct)
+    {
+        Exception? lastError = null;
+
+        using var gate = await EnterHostAsync(candidate.Url, ct).ConfigureAwait(false);
+        for (var attempt = 1; attempt <= MaxAttemptsPerCandidate; attempt++)
+        {
+            try
+            {
+                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                timeoutCts.CancelAfter(HeaderTimeout);
+
+                // 用 ResponseContentRead 而不是 ResponseHeadersRead：
+                // 前者让上面这个超时把**响应体**也一起覆盖住。
+                // 用后者的话，只有响应头受超时保护，服务端在响应体中途卡住会让这里永久挂起。
+                using var response = await _http
+                    .GetAsync(candidate.Url, HttpCompletionOption.ResponseContentRead, timeoutCts.Token)
+                    .ConfigureAwait(false);
+
+                response.EnsureSuccessStatusCode();
+
+                var text = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                _log.Trace($"已获取 {candidate.SourceName} 文本：{candidate.Url}（{text.Length} 字符）");
+                return text;
+            }
+            catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
+            {
+                lastError = ex;
+                _log.Warn($"获取文本超时（{candidate.SourceName} 第 {attempt}/{MaxAttemptsPerCandidate} 次）：{candidate.Url}");
+                if (attempt < MaxAttemptsPerCandidate)
+                {
+                    await Task.Delay(TimeSpan.FromMilliseconds(300 * attempt), ct).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (HttpRequestException ex) when (IsPermanentClientError(ex))
+            {
+                // 404 / 403 这类客户端错误重试没有意义，直接放弃这个候选源。
+                lastError = ex;
+                _log.Info($"获取文本失败（{candidate.SourceName}，HTTP {ex.StatusCode}，不再重试）：{candidate.Url}");
+                break;
+            }
+            catch (Exception ex)
+            {
+                lastError = ex;
+                _log.Warn($"获取文本失败（{candidate.SourceName} 第 {attempt}/{MaxAttemptsPerCandidate} 次）：{candidate.Url}", ex);
+                if (attempt < MaxAttemptsPerCandidate)
+                {
+                    await Task.Delay(TimeSpan.FromMilliseconds(300 * attempt), ct).ConfigureAwait(false);
+                }
+            }
+        }
+
+        throw lastError ?? new HttpRequestException($"获取文本失败：{candidate.Url}");
+    }
+
+    /// <summary>已经拿到结果后吸收其余请求的失败/取消，避免留下未观察的异常。</summary>
+    private static async Task IgnoreRemainingAsync(IEnumerable<Task> tasks)
+    {
+        try
+        {
+            await Task.WhenAll(tasks).ConfigureAwait(false);
+        }
+        catch
+        {
+            // 竞速已经结束，剩余候选源的结果不再需要。
+        }
     }
 
     // ---------------------------------------------------------------- 文件下载

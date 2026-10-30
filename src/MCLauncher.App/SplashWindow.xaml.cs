@@ -21,9 +21,17 @@ public partial class SplashWindow : Window
     /// <summary>用户请求跳过启动准备。</summary>
     public event EventHandler? SkipClicked;
 
+    /// <summary>跳过之后保持「正在跳过…」，不让后续阶段文案覆盖它。</summary>
+    private bool _skipRequested;
+
     /// <summary>更新当前阶段文案。</summary>
     public void SetStatus(string text)
     {
+        if (_skipRequested)
+        {
+            return;
+        }
+
         StatusText.Text = text;
     }
 
@@ -31,6 +39,7 @@ public partial class SplashWindow : Window
     {
         SkipButton.IsEnabled = false;
         SetStatus("正在跳过…");
+        _skipRequested = true;
         SkipClicked?.Invoke(this, EventArgs.Empty);
     }
 }
