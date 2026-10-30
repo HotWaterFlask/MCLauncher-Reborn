@@ -71,7 +71,7 @@ public sealed class LauncherUpdate
 
 /// <summary>
 /// 启动器自身的公告与版本检查。数据放在项目仓库里：
-/// 公告读 <c>notice.json</c>（官方 raw + jsDelivr 镜像），更新读 GitHub Releases API。
+/// 公告读 <c>notice.json</c>（官方 raw + jsDelivr 镜像并行竞速，先成功者胜），更新读 GitHub Releases API。
 /// 所有失败都只记日志并返回 null，启动流程不能因为这两个可选项而中断。
 /// </summary>
 public sealed class LauncherInfoService
@@ -111,7 +111,7 @@ public sealed class LauncherInfoService
 
         try
         {
-            var json = await _downloader.GetStringAsync(candidates, ct).ConfigureAwait(false);
+            var json = await _downloader.GetStringRaceAsync(candidates, ct).ConfigureAwait(false);
             using var document = JsonDocument.Parse(json);
             var root = document.RootElement;
 

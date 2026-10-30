@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using MCLauncher.Core.Network;
 using MCLauncher.Core.Services;
@@ -164,6 +165,24 @@ public sealed class LauncherInfoServiceTests
         Assert.Contains("改读 releases.atom", string.Join(" ", log.Lines));
     }
 
+    [Fact]
+    public async Task 公告在官方源卡住时立刻改用镜像()
+    {
+        var log = new TestLog();
+        using var downloader = new HttpDownloader(log, new HangingOfficialHandler(NoticeJson));
+        var service = new LauncherInfoService(downloader, log);
+
+        var started = Stopwatch.StartNew();
+        var notice = await service.FetchNoticeAsync();
+        started.Stop();
+
+        Assert.NotNull(notice);
+        Assert.Equal("维护公告", notice!.Title);
+        Assert.True(
+            started.Elapsed < TimeSpan.FromSeconds(3),
+            $"公告应与镜像并行竞速、立刻返回，实际耗时 {started.Elapsed}");
+    }
+
     /// <summary>API 一律 403（模拟限流），其它地址正常返回 Atom。</summary>
     private sealed class AtomFallbackHandler : HttpMessageHandler
     {
@@ -183,6 +202,30 @@ public sealed class LauncherInfoServiceTests
                 RequestMessage = request,
                 Content = new StringContent(_atom),
             });
+        }
+    }
+
+    /// <summary>官方 raw 一直挂起（模拟被墙），jsDelivr 镜像正常返回内容。</summary>
+    private sealed class HangingOfficialHandler : HttpMessageHandler
+    {
+        private readonly string _content;
+
+        public HangingOfficialHandler(string content) => _content = content;
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            if (request.RequestUri?.Host.Contains("raw.githubusercontent.com") == true)
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                RequestMessage = request,
+                Content = new StringContent(_content),
+            };
         }
     }
 }
