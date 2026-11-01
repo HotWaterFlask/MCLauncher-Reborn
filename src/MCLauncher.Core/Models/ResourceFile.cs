@@ -26,4 +26,13 @@ public sealed class ResourceFile
         Sha1 = file.Sha1,
         FileLength = file.FileLength,
     };
+
+    public static ResourceFile FromModrinth(ModrinthVersionFile file, string? displayName = null) => new()
+    {
+        FileName = file.FileName,
+        DisplayName = displayName,
+        DownloadUrl = file.DownloadUrl,
+        Sha1 = file.Sha1,
+        FileLength = file.Size,
+    };
 }

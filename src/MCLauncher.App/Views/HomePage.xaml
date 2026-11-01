@@ -108,10 +108,10 @@
                           ItemTemplate="{StaticResource DownloadFileRowDarkTemplate}"/>
         </StackPanel>
 
-        <!-- 更新游戏：校验与补全文件的进度弹窗 -->
+        <!-- 更新游戏：先检查本体文件 / 加载器 / 已安装模组，勾选后一键升级 -->
         <Grid Background="#66000000" Panel.ZIndex="30"
               Visibility="{Binding IsUpdateDialogOpen, Converter={StaticResource BoolToVis}}">
-            <Border Width="400" Background="White" CornerRadius="8" Padding="18,16"
+            <Border Width="460" MaxHeight="560" Background="White" CornerRadius="8" Padding="18,16"
                     HorizontalAlignment="Center" VerticalAlignment="Center"
                     BorderBrush="#D8D8D8" BorderThickness="1">
                 <StackPanel>
@@ -119,13 +119,72 @@
                     <TextBlock Text="{Binding SelectedVersion.Display}" Margin="0,4,0,0"
                                FontSize="11" Foreground="#7A7A7A" TextTrimming="CharacterEllipsis"/>
 
-                    <ProgressBar Height="6" Margin="0,14,0,0" Minimum="0" Maximum="1"
-                                 Value="{Binding UpdateProgress, Mode=OneWay}"/>
+                    <TextBlock Text="{Binding UpdateStatus}" Margin="0,12,0,0"
+                               FontSize="12" Foreground="#5A5A5A" TextWrapping="Wrap"/>
+
+                    <!-- 检查结果：可升级项默认全部勾选 -->
+                    <StackPanel Margin="0,10,0,0"
+                                Visibility="{Binding HasUpdateCheckResult, Converter={StaticResource BoolToVis}}">
+                        <Border Background="#F6F7F9" CornerRadius="6" Padding="10,8">
+                            <StackPanel>
+                                <CheckBox Content="游戏本体文件" FontSize="12" FontWeight="SemiBold"
+                                          Foreground="#1A1A1A"
+                                          IsChecked="{Binding IncludeBodyUpdate, Mode=TwoWay}"
+                                          IsEnabled="{Binding HasBodyUpdate}"/>
+                                <TextBlock Text="{Binding BodyUpdateText}" Margin="22,3,0,0"
+                                           FontSize="11.5" Foreground="#6A6A6A" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="#F6F7F9" CornerRadius="6" Padding="10,8" Margin="0,6,0,0">
+                            <StackPanel>
+                                <CheckBox Content="模组加载器" FontSize="12" FontWeight="SemiBold"
+                                          Foreground="#1A1A1A"
+                                          IsChecked="{Binding IncludeLoaderUpdate, Mode=TwoWay}"
+                                          IsEnabled="{Binding HasLoaderUpdate}"/>
+                                <TextBlock Text="{Binding LoaderUpdateText}" Margin="22,3,0,0"
+                                           FontSize="11.5" Foreground="#6A6A6A" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="#F6F7F9" CornerRadius="6" Padding="10,8" Margin="0,6,0,0">
+                            <StackPanel>
+                                <TextBlock Text="已安装模组" FontSize="12" FontWeight="SemiBold"
+                                           Foreground="#1A1A1A"/>
+                                <TextBlock Text="{Binding ModsUpdateText}" Margin="0,3,0,0"
+                                           FontSize="11.5" Foreground="#6A6A6A" TextWrapping="Wrap"/>
+
+                                <ScrollViewer MaxHeight="150" Margin="0,4,0,0"
+                                              VerticalScrollBarVisibility="Auto"
+                                              Visibility="{Binding HasModUpdates, Converter={StaticResource BoolToVis}}">
+                                    <ItemsControl ItemsSource="{Binding ModUpdates}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                          Margin="0,2,0,0">
+                                                    <StackPanel>
+                                                        <TextBlock Text="{Binding Title}" FontSize="11.5"
+                                                                   Foreground="#1A1A1A"
+                                                                   TextTrimming="CharacterEllipsis"/>
+                                                        <TextBlock Text="{Binding VersionText}" FontSize="10.5"
+                                                                   Foreground="#7A7A7A"
+                                                                   TextTrimming="CharacterEllipsis"/>
+                                                    </StackPanel>
+                                                </CheckBox>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <ProgressBar Height="6" Margin="0,12,0,0" Minimum="0" Maximum="1"
+                                 Value="{Binding UpdateProgress, Mode=OneWay}"
+                                 IsIndeterminate="{Binding IsCheckingUpdate}"
+                                 Visibility="{Binding IsUpdateBusy, Converter={StaticResource BoolToVis}}"/>
 
                     <TextBlock Text="{Binding UpdateSpeedText}" Style="{StaticResource SpeedText}"/>
-
-                    <TextBlock Text="{Binding UpdateStatus}" Margin="0,8,0,0"
-                               FontSize="12" Foreground="#5A5A5A" TextWrapping="Wrap"/>
 
                     <ItemsControl ItemsSource="{Binding UpdateFiles}" Margin="0,4,0,0"
                                   ItemTemplate="{StaticResource DownloadFileRowTemplate}"
@@ -146,20 +205,30 @@
                         </TextBlock.Style>
                     </TextBlock>
 
-                    <Button HorizontalAlignment="Right" Margin="0,14,0,0"
-                            Width="76" Height="28" FontSize="12" Content="关闭"
-                            Command="{Binding CloseUpdateDialogCommand}">
-                        <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource SkinButton}">
-                                <Style.Triggers>
-                                    <!-- 补全进行中不允许关闭弹窗 -->
-                                    <DataTrigger Binding="{Binding IsUpdating}" Value="True">
-                                        <Setter Property="IsEnabled" Value="False"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
-                    </Button>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+                        <Button Width="96" Height="28" FontSize="12" Content="一键升级"
+                                Command="{Binding UpgradeCommand}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource SkinButton}"/>
+                            </Button.Style>
+                        </Button>
+                        <Button Width="76" Height="28" FontSize="12" Content="关闭" Margin="8,0,0,0"
+                                Command="{Binding CloseUpdateDialogCommand}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource SkinButton}">
+                                    <Style.Triggers>
+                                        <!-- 检查/升级进行中不允许关闭弹窗 -->
+                                        <DataTrigger Binding="{Binding IsUpdating}" Value="True">
+                                            <Setter Property="IsEnabled" Value="False"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding IsCheckingUpdate}" Value="True">
+                                            <Setter Property="IsEnabled" Value="False"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </StackPanel>
                 </StackPanel>
             </Border>
         </Grid>
@@ -190,7 +259,7 @@
                     Command="{Binding CompleteCommand}"
                     Content="更新游戏"
                     FontSize="13"
-                    ToolTip="校验并补全缺失文件"/>
+                    ToolTip="检查本体文件、加载器与模组并可一键升级"/>
 
             <Button Grid.Row="2" Grid.Column="2"
                     Style="{StaticResource SkinButton}"

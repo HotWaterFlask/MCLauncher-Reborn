@@ -77,6 +77,9 @@ public sealed class ModrinthVersion
 {
     public required string Id { get; init; }
 
+    /// <summary>所属项目 id（用文件哈希反查时也能拿到）。</summary>
+    public string ProjectId { get; init; } = string.Empty;
+
     public string Name { get; init; } = string.Empty;
 
     public string VersionNumber { get; init; } = string.Empty;

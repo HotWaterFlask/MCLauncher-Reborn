@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MCLauncher.Core.Abstractions;
 using MCLauncher.Core.Models;
 using MCLauncher.Core.Utils;
@@ -144,6 +145,38 @@ public sealed class InstanceService
         catch (Exception ex)
         {
             _log.Warn($"原版快照解析失败，已忽略：{path}", ex);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// 从客户端 jar 内嵌的 <c>version.json</c> 读取它对应的游戏版本号。
+    /// 从别处导入的实例没有 <c>inheritsFrom</c>、instance.json 和原版快照，
+    /// 只能靠客户端自带的这份元数据判断原版版本。
+    /// </summary>
+    public string? ReadJarGameVersion(string gameDirectory, string jarId)
+    {
+        var jarPath = VersionRepository.VersionJarPath(gameDirectory, jarId);
+        if (!File.Exists(jarPath))
+        {
+            return null;
+        }
+
+        try
+        {
+            var text = ArchiveUtil.ReadTextEntry(jarPath, "version.json");
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return null;
+            }
+
+            using var document = JsonDocument.Parse(text);
+            var id = document.RootElement.TryGetProperty("id", out var value) ? value.GetString() : null;
+            return string.IsNullOrWhiteSpace(id) ? null : id.Trim();
+        }
+        catch (Exception ex)
+        {
+            _log.Warn($"读取客户端 jar 的游戏版本失败：{jarPath}", ex);
             return null;
         }
     }
@@ -403,6 +436,50 @@ public sealed class InstanceService
     /// <summary>实例目录内保存的原版版本 JSON（用于卸载加载器后还原）。</summary>
     private static string VanillaVersionPath(string gameDirectory, string versionId) =>
         Path.Combine(VersionRepository.VersionDirectory(gameDirectory, versionId), ".mclauncher", "vanilla.json");
+
+    /// <summary>
+    /// 读取实例对应的原版 JSON：优先本地基底目录，基底已被合并删除时读实例里保存的 vanilla.json。
+    /// 原地升级加载器需要用它重新合并出完整版本 JSON。
+    /// </summary>
+    public GameVersionJson? TryLoadBaseVersion(string gameDirectory, string versionId, string baseVersionId)
+    {
+        var baseVersion = _repository.TryLoad(gameDirectory, baseVersionId);
+        if (baseVersion is not null)
+        {
+            return baseVersion;
+        }
+
+        var vanillaPath = VanillaVersionPath(gameDirectory, versionId);
+        return File.Exists(vanillaPath)
+            ? JsonUtil.DeserializeFromFile<GameVersionJson>(vanillaPath)
+            : null;
+    }
+
+    /// <summary>
+    /// 保存实例的原版版本快照，并补上实例配置里缺失的游戏版本号。
+    /// 导入的实例第一次原地升级加载器时用它补齐，之后卸载/再次升级都能直接复用。
+    /// </summary>
+    public void SaveVanillaSnapshot(string gameDirectory, string versionId, GameVersionJson vanillaVersion)
+    {
+        vanillaVersion.InheritsFrom = null;
+        JsonUtil.SerializeToFile(VanillaVersionPath(gameDirectory, versionId), vanillaVersion);
+
+        var config = Load(gameDirectory, versionId);
+        if (string.IsNullOrWhiteSpace(config.GameVersion))
+        {
+            config.GameVersion = vanillaVersion.Id;
+            Save(gameDirectory, versionId, config);
+        }
+    }
+
+    /// <summary>原地升级加载器后更新实例的加载器描述，其它实例配置保持不变。</summary>
+    public void SetLoaderDescription(string gameDirectory, string versionId, string loaderDescription)
+    {
+        var config = Load(gameDirectory, versionId);
+        config.Loaders.Clear();
+        config.Loaders.Add(loaderDescription);
+        Save(gameDirectory, versionId, config);
+    }
 
     /// <summary>
     /// 把继承链合并进实例 JSON，使其不再依赖基底目录；缺少实例 jar 时从基底复制。

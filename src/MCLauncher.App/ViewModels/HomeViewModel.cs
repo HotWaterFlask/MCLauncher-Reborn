@@ -24,6 +24,7 @@ public sealed class HomeViewModel : ViewModelBase
     private readonly LauncherStack _stack;
     private readonly AsyncRelayCommand _launchCommand;
     private readonly AsyncRelayCommand _completeCommand;
+    private readonly AsyncRelayCommand _upgradeCommand;
     private readonly StringBuilder _launchBuilder = new();
     private readonly AvatarService _avatars;
     private readonly DownloadFileRows _launchRows = new();
@@ -47,6 +48,20 @@ public sealed class HomeViewModel : ViewModelBase
     private string _updateResult = string.Empty;
     private bool _hasUpdateResult;
     private bool _updateResultFailed;
+    private bool _isCheckingUpdate;
+    private bool _hasUpdateCheckResult;
+    private string _bodyUpdateText = string.Empty;
+    private bool _hasBodyUpdate;
+    private bool _includeBodyUpdate;
+    private string _loaderUpdateText = string.Empty;
+    private bool _hasLoaderUpdate;
+    private bool _includeLoaderUpdate;
+    private ModLoaderKind? _loaderUpdateKind;
+    private string? _loaderUpdateVersion;
+    private string _modsUpdateText = string.Empty;
+    private bool _hasModUpdates;
+    private readonly ObservableCollection<ModUpdateItem> _modUpdates = new();
+    private GameUpdateCheckRequest? _pendingUpdateRequest;
     private bool _isBusy;
     private string _accountName = "未选择账号";
     private string _accountTypeText = string.Empty;
@@ -65,12 +80,14 @@ public sealed class HomeViewModel : ViewModelBase
         SettingsCommand = new RelayCommand(() => openInstanceSettings(SelectedVersion?.Id));
         OpenAccountsCommand = new RelayCommand(openAccounts);
         RefreshCommand = new RelayCommand(Refresh);
-        CloseUpdateDialogCommand = new RelayCommand(() => IsUpdateDialogOpen = false);
+        CloseUpdateDialogCommand = new RelayCommand(CloseUpdateDialog);
 
         _launchCommand = new AsyncRelayCommand(LaunchAsync, () => !IsBusy && SelectedVersion is not null);
-        _completeCommand = new AsyncRelayCommand(CompleteAsync, () => !IsBusy && SelectedVersion is not null);
+        _completeCommand = new AsyncRelayCommand(OpenUpdateDialogAsync, () => !IsBusy && SelectedVersion is not null);
+        _upgradeCommand = new AsyncRelayCommand(UpgradeAsync, () => CanUpgrade);
         LaunchCommand = _launchCommand;
         CompleteCommand = _completeCommand;
+        UpgradeCommand = _upgradeCommand;
 
         // 游戏 stdout/stderr 在后台线程逐行到达，这里追加到启动面板。
         _stack.LaunchLog.LineAdded += line => UiThread.Post(() => AppendLaunchLine(line));
@@ -173,11 +190,17 @@ public sealed class HomeViewModel : ViewModelBase
         private set => SetProperty(ref _isUpdateDialogOpen, value);
     }
 
-    /// <summary>补全是否仍在进行：进行中不允许关闭弹窗。</summary>
+    /// <summary>升级是否仍在进行：进行中不允许关闭弹窗。</summary>
     public bool IsUpdating
     {
         get => _isUpdating;
-        private set => SetProperty(ref _isUpdating, value);
+        private set
+        {
+            if (SetProperty(ref _isUpdating, value))
+            {
+                RefreshUpgradeState();
+            }
+        }
     }
 
     public double UpdateProgress
@@ -227,6 +250,111 @@ public sealed class HomeViewModel : ViewModelBase
         private set => SetProperty(ref _updateResultFailed, value);
     }
 
+    /// <summary>更新窗口正在检查本体、加载器与模组。</summary>
+    public bool IsCheckingUpdate
+    {
+        get => _isCheckingUpdate;
+        private set
+        {
+            if (SetProperty(ref _isCheckingUpdate, value))
+            {
+                RefreshUpgradeState();
+            }
+        }
+    }
+
+    /// <summary>检查完成后才显示三项检查结果。</summary>
+    public bool HasUpdateCheckResult
+    {
+        get => _hasUpdateCheckResult;
+        private set => SetProperty(ref _hasUpdateCheckResult, value);
+    }
+
+    /// <summary>游戏本体文件检查结果文案。</summary>
+    public string BodyUpdateText
+    {
+        get => _bodyUpdateText;
+        private set => SetProperty(ref _bodyUpdateText, value);
+    }
+
+    public bool HasBodyUpdate
+    {
+        get => _hasBodyUpdate;
+        private set => SetProperty(ref _hasBodyUpdate, value);
+    }
+
+    /// <summary>是否勾选修复缺失或损坏的本体文件。</summary>
+    public bool IncludeBodyUpdate
+    {
+        get => _includeBodyUpdate;
+        set
+        {
+            if (SetProperty(ref _includeBodyUpdate, value))
+            {
+                RefreshUpgradeState();
+            }
+        }
+    }
+
+    /// <summary>模组加载器检查结果文案。</summary>
+    public string LoaderUpdateText
+    {
+        get => _loaderUpdateText;
+        private set => SetProperty(ref _loaderUpdateText, value);
+    }
+
+    public bool HasLoaderUpdate
+    {
+        get => _hasLoaderUpdate;
+        private set => SetProperty(ref _hasLoaderUpdate, value);
+    }
+
+    /// <summary>是否勾选原地升级加载器。</summary>
+    public bool IncludeLoaderUpdate
+    {
+        get => _includeLoaderUpdate;
+        set
+        {
+            if (SetProperty(ref _includeLoaderUpdate, value))
+            {
+                RefreshUpgradeState();
+            }
+        }
+    }
+
+    /// <summary>检查出来的可更新模组，默认全部勾选。</summary>
+    public ObservableCollection<ModUpdateItem> ModUpdates => _modUpdates;
+
+    public string ModsUpdateText
+    {
+        get => _modsUpdateText;
+        private set => SetProperty(ref _modsUpdateText, value);
+    }
+
+    public bool HasModUpdates
+    {
+        get => _hasModUpdates;
+        private set => SetProperty(ref _hasModUpdates, value);
+    }
+
+    /// <summary>至少勾选了一项可升级内容，且当前没有检查/升级在进行。</summary>
+    public bool CanUpgrade =>
+        !IsUpdating
+        && !IsCheckingUpdate
+        && ((_hasBodyUpdate && _includeBodyUpdate)
+            || (_hasLoaderUpdate && _includeLoaderUpdate)
+            || _modUpdates.Any(item => item.IsSelected));
+
+    /// <summary>检查或升级正在进行，进度条显示为不确定状态或实时进度。</summary>
+    public bool IsUpdateBusy => IsUpdating || IsCheckingUpdate;
+
+    private void RefreshUpgradeState()
+    {
+        OnPropertyChanged(nameof(CanUpgrade));
+        OnPropertyChanged(nameof(IsUpdateBusy));
+        _upgradeCommand.RaiseCanExecuteChanged();
+    }
+
     public bool IsBusy
     {
         get => _isBusy;
@@ -252,6 +380,9 @@ public sealed class HomeViewModel : ViewModelBase
 
     /// <summary>关闭「更新游戏」的进度弹窗。</summary>
     public ICommand CloseUpdateDialogCommand { get; }
+
+    /// <summary>一键升级勾选的本体修复 / 加载器 / 模组更新。</summary>
+    public ICommand UpgradeCommand { get; }
 
     /// <summary>点击左上角账号块时切到「账号」页。</summary>
     public ICommand OpenAccountsCommand { get; }
@@ -783,7 +914,11 @@ public sealed class HomeViewModel : ViewModelBase
         return false;
     }
 
-    private async Task CompleteAsync()
+    /// <summary>
+    /// 「更新游戏」：打开窗口后先检查本体文件、加载器与已安装模组，
+    /// 检查结果里可升级的项目默认全部勾选，再点「一键升级」执行。
+    /// </summary>
+    private async Task OpenUpdateDialogAsync()
     {
         var version = SelectedVersion;
         if (version is null)
@@ -791,36 +926,201 @@ public sealed class HomeViewModel : ViewModelBase
             return;
         }
 
-        IsBusy = true;
-        IsUpdating = true;
+        _pendingUpdateRequest = new GameUpdateCheckRequest
+        {
+            GameRoot = _stack.GameRoot,
+            InstanceId = version.Id,
+            InstanceDirectory = _stack.GetInstanceDirectory(
+                version.Id, _stack.IsIsolated(version.Id)),
+            BaseVersionId = version.BaseVersionId,
+            LoaderName = version.HasLoader ? version.LoaderName : null,
+            LoaderVersion = version.LoaderVersion,
+        };
+
+        IsUpdateDialogOpen = true;
+        HasUpdateCheckResult = false;
+        _hasBodyUpdate = false;
+        _hasLoaderUpdate = false;
+        _hasModUpdates = false;
+        _modUpdates.Clear();
+        BodyUpdateText = string.Empty;
+        LoaderUpdateText = string.Empty;
+        ModsUpdateText = string.Empty;
         UpdateProgress = 0;
         UpdateSpeedText = string.Empty;
         _updateRows.Clear();
-        UpdateStatus = "正在校验文件…";
         UpdateResult = string.Empty;
         UpdateResultFailed = false;
-        IsUpdateDialogOpen = true;
+        UpdateStatus = "正在检查更新…";
+        IsCheckingUpdate = true;
+        IsBusy = true;
 
         try
         {
-            var report = await _stack.CompleteVersionAsync(
-                version.Id,
-                new Progress<InstallProgress>(OnUpdateProgress));
+            var result = await _stack.GameUpdates.CheckAsync(
+                _pendingUpdateRequest,
+                _stack.Config.Settings.DefaultContentSource,
+                new Progress<string>(message => UpdateStatus = message));
 
-            UpdateProgress = 1;
-            UpdateStatus = report.Success ? "校验完成" : "校验结束，仍有文件未能补全";
-            UpdateResultFailed = !report.Success;
-            UpdateResult = report.Success
-                ? $"补全完成：新下载 {report.Downloaded} 个，跳过 {report.Skipped} 个"
-                : $"补全失败：{report.Failed} 个文件未能下载";
-            StatusText = UpdateResult;
+            ApplyUpdateCheckResult(result);
+            UpdateStatus = "检查完成，勾选要升级的项目后点「一键升级」。";
         }
         catch (Exception ex)
         {
-            _stack.Log.Error($"补全 {version.Id} 失败", ex);
-            UpdateStatus = "校验中断";
+            _stack.Log.Error($"检查 {version.Id} 的更新失败", ex);
+            UpdateStatus = "检查失败：" + ex.Message;
+        }
+        finally
+        {
+            IsCheckingUpdate = false;
+            IsBusy = false;
+        }
+    }
+
+    private void ApplyUpdateCheckResult(GameUpdateCheckResult result)
+    {
+        HasBodyUpdate = result.Body.MissingCount > 0;
+        BodyUpdateText = HasBodyUpdate
+            ? $"发现 {result.Body.MissingCount} 个缺失或损坏的文件，可一键修复"
+            : "文件完整，无需修复";
+        IncludeBodyUpdate = HasBodyUpdate;
+
+        var loader = result.Loader;
+        HasLoaderUpdate = loader.HasUpdate;
+        _loaderUpdateKind = loader.Kind;
+        _loaderUpdateVersion = loader.LatestVersion;
+
+        var loaderText = string.IsNullOrWhiteSpace(loader.CurrentVersion)
+            ? loader.Name
+            : $"{loader.Name} {loader.CurrentVersion}";
+        LoaderUpdateText = loader.HasUpdate
+            ? $"已安装 {loaderText}，可升级到 {loader.LatestVersion}"
+            : string.Equals(loader.Name, "原版", StringComparison.Ordinal)
+                ? "当前为原版，没有可自动升级的加载器"
+                : string.IsNullOrWhiteSpace(loader.UnavailableReason)
+                    ? $"已安装 {loaderText}，已是最新"
+                    : $"已安装 {loaderText}，{loader.UnavailableReason}";
+        IncludeLoaderUpdate = HasLoaderUpdate;
+
+        _modUpdates.Clear();
+        foreach (var update in result.Mods.Updates)
+        {
+            _modUpdates.Add(new ModUpdateItem(update, RefreshUpgradeState));
+        }
+
+        HasModUpdates = _modUpdates.Count > 0;
+        ModsUpdateText = result.ModsCheckFailed
+            ? "模组检查失败，可稍后重新检查"
+            : result.Mods.Checked == 0
+                ? "没有安装模组"
+                : result.Mods.Updates.Count == 0
+                    ? $"检查 {result.Mods.Checked} 个模组，全部已是最新"
+                    : $"检查 {result.Mods.Checked} 个模组，{result.Mods.Updates.Count} 个可更新";
+
+        HasUpdateCheckResult = true;
+        RefreshUpgradeState();
+    }
+
+    /// <summary>依次执行勾选的本体修复、加载器原地升级与模组更新。</summary>
+    private async Task UpgradeAsync()
+    {
+        var request = _pendingUpdateRequest;
+        if (request is null || !CanUpgrade)
+        {
+            return;
+        }
+
+        var progress = new Progress<InstallProgress>(OnUpdateProgress);
+        var completed = new List<string>();
+        var failures = new List<string>();
+
+        IsUpdating = true;
+        IsBusy = true;
+        UpdateProgress = 0;
+        UpdateSpeedText = string.Empty;
+        _updateRows.Clear();
+        UpdateResult = string.Empty;
+        UpdateResultFailed = false;
+
+        try
+        {
+            if (_hasBodyUpdate && IncludeBodyUpdate)
+            {
+                UpdateStatus = "正在修复游戏本体文件…";
+                var report = await _stack.GameUpdates.RepairBodyAsync(
+                    request, _stack.BuildInstallOptions(), progress);
+
+                if (report.Success)
+                {
+                    completed.Add($"本体文件修复 {report.Downloaded} 个");
+                }
+                else
+                {
+                    failures.Add($"本体仍有 {report.Failed} 个文件未能下载");
+                }
+            }
+
+            if (_hasLoaderUpdate && IncludeLoaderUpdate
+                && _loaderUpdateKind is { } kind && _loaderUpdateVersion is { } targetVersion)
+            {
+                var loaderName = ModLoaderService.DisplayName(kind);
+                UpdateStatus = $"正在原地升级 {loaderName} 到 {targetVersion}…";
+                await _stack.GameUpdates.UpgradeLoaderAsync(
+                    request, kind, targetVersion, _stack.BuildInstallOptions(), progress);
+
+                completed.Add($"{loaderName} 已升级到 {targetVersion}");
+            }
+
+            var selectedMods = _modUpdates
+                .Where(item => item.IsSelected)
+                .Select(item => item.Update)
+                .ToList();
+
+            if (selectedMods.Count > 0)
+            {
+                UpdateStatus = $"正在更新 {selectedMods.Count} 个模组…";
+                var succeeded = await _stack.GameUpdates.UpgradeModsAsync(
+                    request.InstanceDirectory, selectedMods, progress);
+
+                completed.Add($"模组更新 {succeeded}/{selectedMods.Count} 个");
+
+                if (succeeded < selectedMods.Count)
+                {
+                    failures.Add($"{selectedMods.Count - succeeded} 个模组更新失败");
+                }
+            }
+
+            UpdateProgress = 1;
+            UpdateSpeedText = string.Empty;
+            UpdateResultFailed = failures.Count > 0;
+            UpdateResult = failures.Count > 0
+                ? "部分升级失败：" + string.Join("；", failures)
+                : completed.Count == 0
+                    ? "没有勾选可升级的项目。"
+                    : "升级完成：" + string.Join("；", completed);
+            StatusText = UpdateResult;
+
+            if (failures.Count == 0)
+            {
+                HasUpdateCheckResult = false;
+                _hasBodyUpdate = false;
+                _hasLoaderUpdate = false;
+                _hasModUpdates = false;
+                _modUpdates.Clear();
+                BodyUpdateText = string.Empty;
+                LoaderUpdateText = string.Empty;
+                ModsUpdateText = string.Empty;
+                RefreshUpgradeState();
+            }
+
+            _stack.RaiseChanged();
+        }
+        catch (Exception ex)
+        {
+            _stack.Log.Error($"升级 {request.InstanceId} 失败", ex);
+            UpdateStatus = "升级中断";
             UpdateResultFailed = true;
-            UpdateResult = "补全失败：" + ex.Message;
+            UpdateResult = "升级失败：" + ex.Message;
             StatusText = UpdateResult;
         }
         finally
@@ -830,6 +1130,16 @@ public sealed class HomeViewModel : ViewModelBase
             IsUpdating = false;
             IsBusy = false;
         }
+    }
+
+    private void CloseUpdateDialog()
+    {
+        if (IsUpdating || IsCheckingUpdate)
+        {
+            return;
+        }
+
+        IsUpdateDialogOpen = false;
     }
 
     /// <summary>「更新游戏」弹窗里的进度：阶段、数量与百分比。</summary>
@@ -1045,6 +1355,39 @@ public sealed class HomeViewModel : ViewModelBase
         {
             _stack.Log.Warn($"打开游戏目录失败：{folder}", ex);
             StatusText = "打开目录失败：" + ex.Message;
+        }
+    }
+}
+
+/// <summary>「更新游戏」窗口里的一条模组更新，默认勾选。</summary>
+public sealed class ModUpdateItem : ViewModelBase
+{
+    private readonly Action _onSelectionChanged;
+    private bool _isSelected = true;
+
+    public ModUpdateItem(ResourceUpdateInfo update, Action onSelectionChanged)
+    {
+        Update = update;
+        _onSelectionChanged = onSelectionChanged;
+    }
+
+    public ResourceUpdateInfo Update { get; }
+
+    public string Title => Update.Resource.Title;
+
+    public string VersionText =>
+        $"{Update.CurrentVersionText ?? "未知版本"} → {Update.LatestVersionText}";
+
+    /// <summary>是否在「一键升级」时更新这个模组。</summary>
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set
+        {
+            if (SetProperty(ref _isSelected, value))
+            {
+                _onSelectionChanged();
+            }
         }
     }
 }

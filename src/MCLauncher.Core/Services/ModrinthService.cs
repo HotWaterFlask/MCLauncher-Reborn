@@ -166,6 +166,46 @@ public sealed class ModrinthService
         return PickBestFile(versions, kind, loaderName);
     }
 
+    /// <summary>
+    /// 用 SHA-1 批量反查本地文件对应的 Modrinth 版本（更新检查用）。
+    /// 返回 <c>sha1 → 版本</c>；没有命中的文件不会出现在结果里。
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, ModrinthVersion>> MatchHashesAsync(
+        IReadOnlyCollection<string> hashes,
+        CancellationToken ct)
+    {
+        var result = new Dictionary<string, ModrinthVersion>(StringComparer.OrdinalIgnoreCase);
+        if (hashes.Count == 0)
+        {
+            return result;
+        }
+
+        foreach (var batch in hashes.Chunk(100))
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var body = JsonSerializer.Serialize(
+                new { hashes = batch, algorithm = "sha1" },
+                JsonUtil.Options);
+
+            var json = await SendAsync($"{BaseUrl}/version_files", ct, HttpMethod.Post, body)
+                .ConfigureAwait(false);
+
+            var response = JsonUtil.Deserialize<Dictionary<string, VersionDto>>(json);
+            if (response is null)
+            {
+                continue;
+            }
+
+            foreach (var (hash, dto) in response)
+            {
+                result[hash] = ToVersion(dto);
+            }
+        }
+
+        return result;
+    }
+
     /// <summary>获取项目详情（详情页头部使用）。</summary>
     public async Task<ResourceProjectSummary> GetProjectAsync(string idOrSlug, CancellationToken ct)
     {
@@ -254,6 +294,16 @@ public sealed class ModrinthService
         ResourceKind kind,
         string? loaderName)
     {
+        var version = PickBestVersion(versions, kind, loaderName);
+        return version is null ? null : ToResourceFile(version, kind);
+    }
+
+    /// <summary>挑出最合适的版本对象（更新检查还需要它的发布时间和 id 做比较）。</summary>
+    public static ModrinthVersion? PickBestVersion(
+        IReadOnlyList<ModrinthVersion> versions,
+        ResourceKind kind,
+        string? loaderName)
+    {
         if (versions.Count == 0)
         {
             return null;
@@ -287,18 +337,22 @@ public sealed class ModrinthService
         }
 
         var ordered = pool.OrderByDescending(version => version.PublishedAt).ToList();
-        var chosen = ordered.FirstOrDefault(version => version.IsRelease)
-                     ?? ordered.FirstOrDefault(version =>
-                         string.Equals(version.VersionType, "beta", StringComparison.OrdinalIgnoreCase))
-                     ?? ordered[0];
+        return ordered.FirstOrDefault(version => version.IsRelease)
+               ?? ordered.FirstOrDefault(version =>
+                   string.Equals(version.VersionType, "beta", StringComparison.OrdinalIgnoreCase))
+               ?? ordered[0];
+    }
 
-        var file = PickFile(chosen, kind);
+    /// <summary>把版本里合适的文件转成下载服务通用的文件描述。</summary>
+    public static ResourceFile? ToResourceFile(ModrinthVersion version, ResourceKind kind)
+    {
+        var file = PickFile(version, kind);
         return file is null
             ? null
             : new ResourceFile
             {
                 FileName = file.FileName,
-                DisplayName = string.IsNullOrWhiteSpace(chosen.Name) ? chosen.VersionNumber : chosen.Name,
+                DisplayName = string.IsNullOrWhiteSpace(version.Name) ? version.VersionNumber : version.Name,
                 DownloadUrl = file.DownloadUrl,
                 Sha1 = file.Sha1,
                 FileLength = file.Size,
@@ -376,6 +430,7 @@ public sealed class ModrinthService
     private static ModrinthVersion ToVersion(VersionDto dto) => new()
     {
         Id = dto.Id ?? string.Empty,
+        ProjectId = dto.ProjectId ?? string.Empty,
         Name = dto.Name ?? string.Empty,
         VersionNumber = dto.VersionNumber ?? string.Empty,
         VersionType = dto.VersionType ?? string.Empty,
@@ -537,6 +592,9 @@ public sealed class ModrinthService
     {
         [JsonPropertyName("id")]
         public string? Id { get; set; }
+
+        [JsonPropertyName("project_id")]
+        public string? ProjectId { get; set; }
 
         [JsonPropertyName("name")]
         public string? Name { get; set; }

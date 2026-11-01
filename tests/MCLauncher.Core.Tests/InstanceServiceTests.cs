@@ -137,6 +137,51 @@ public sealed class InstanceServiceTests
     }
 
     [Fact]
+    public void 基底被合并删除后仍能读到原版版本()
+    {
+        using var temp = new TempDirectory();
+        var instances = Create(out var repository);
+
+        repository.Save(temp.Path, JsonUtil.Deserialize<GameVersionJson>(
+            """{"id":"26.3","mainClass":"net.minecraft.client.main.Main","libraries":[{"name":"base:a:1"}]}""")!);
+        WriteBaseJar(temp, "26.3");
+        repository.Save(temp.Path, JsonUtil.Deserialize<GameVersionJson>(
+            """{"id":"fabric-loader-0.20.1-26.3","inheritsFrom":"26.3"}""")!);
+
+        instances.AdoptLoaderVersion(
+            temp.Path, "fabric-loader-0.20.1-26.3", "Fabric26.3", "26.3", "Fabric 0.20.1",
+            "Fabric26.3", isolated: true, deleteBaseVersion: true);
+
+        var vanilla = instances.TryLoadBaseVersion(temp.Path, "Fabric26.3", "26.3");
+
+        Assert.NotNull(vanilla);
+        Assert.Equal("26.3", vanilla!.Id);
+        Assert.Equal("net.minecraft.client.main.Main", vanilla.MainClass);
+    }
+
+    [Fact]
+    public void 原地升级加载器只更新加载器描述()
+    {
+        using var temp = new TempDirectory();
+        var instances = Create(out var repository);
+
+        repository.Save(temp.Path, JsonUtil.Deserialize<GameVersionJson>("""{"id":"Forge26.3"}""")!);
+        instances.Save(temp.Path, "Forge26.3", new InstanceConfig
+        {
+            DisplayName = "我的整合实例",
+            GameVersion = "26.3",
+            Loaders = { "Forge 47.1.0" },
+        });
+
+        instances.SetLoaderDescription(temp.Path, "Forge26.3", "Forge 47.2.0");
+
+        var config = instances.Load(temp.Path, "Forge26.3");
+        Assert.Equal("我的整合实例", config.DisplayName);
+        Assert.Equal("26.3", config.GameVersion);
+        Assert.Equal(new[] { "Forge 47.2.0" }, config.Loaders);
+    }
+
+    [Fact]
     public void 创建原版实例时也会合并成单个目录()
     {
         using var temp = new TempDirectory();
@@ -369,6 +414,35 @@ public sealed class InstanceServiceTests
 
         Assert.Equal("26.3", instances.ReadVanillaVersionId(temp.Path, "Fabric26.3"));
         Assert.Null(instances.ReadVanillaVersionId(temp.Path, "不存在"));
+    }
+
+    [Fact]
+    public void 从客户端jar读取导入实例的游戏版本()
+    {
+        using var temp = new TempDirectory();
+        var instances = Create(out var repository);
+
+        repository.Save(temp.Path, JsonUtil.Deserialize<GameVersionJson>(
+            """{"id":"Eternal","jar":"Eternal","mainClass":"net.fabricmc.KnotClient"}""")!);
+        var jarPath = VersionRepository.VersionJarPath(temp.Path, "Eternal");
+        Directory.CreateDirectory(Path.GetDirectoryName(jarPath)!);
+        ZipBuilder.Create(jarPath, ("version.json", """{"id":"26.3","name":"26.3"}"""));
+
+        Assert.Equal("26.3", instances.ReadJarGameVersion(temp.Path, "Eternal"));
+    }
+
+    [Fact]
+    public void 客户端jar没有版本信息时返回空()
+    {
+        using var temp = new TempDirectory();
+        var instances = Create(out var repository);
+
+        var jarPath = VersionRepository.VersionJarPath(temp.Path, "Eternal");
+        Directory.CreateDirectory(Path.GetDirectoryName(jarPath)!);
+        ZipBuilder.Create(jarPath, ("META-INF/MANIFEST.MF", "Manifest-Version: 1.0"));
+
+        Assert.Null(instances.ReadJarGameVersion(temp.Path, "Eternal"));
+        Assert.Null(instances.ReadJarGameVersion(temp.Path, "不存在"));
     }
 
     private static void WriteBaseJar(TempDirectory temp, string versionId)

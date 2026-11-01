@@ -124,6 +124,9 @@ public sealed class LauncherStack : IDisposable
 
     public required ResourceUpdateService ResourceUpdates { get; init; }
 
+    /// <summary>「更新游戏」的检查与升级（本体、加载器、模组）。</summary>
+    public required GameUpdateService GameUpdates { get; init; }
+
     /// <summary>好友直连房间。</summary>
     public required DirectConnectService DirectConnect { get; init; }
 
@@ -183,6 +186,14 @@ public sealed class LauncherStack : IDisposable
         var modpacks = new ModpackImporter(downloader, resolver, resources, log);
         var curseForge = new CurseForgeService(
             downloader, resolver, config.ResolveCurseForgeApiKey(), log);
+        var modrinth = new ModrinthService(downloader, resolver, log);
+        var instances = new InstanceService(repository, log);
+        var modLoaders = new ModLoaderService(downloader, repository, installer, forgeInstaller, log);
+        var resourceDownloads = new ResourceDownloadService(downloader, resolver, log);
+        var resourceUpdates = new ResourceUpdateService(curseForge, modrinth, log);
+        var gameUpdates = new GameUpdateService(
+            installer, modLoaders, instances, repository, manifests, resources,
+            resourceUpdates, resourceDownloads, log);
 
         return new LauncherStack
         {
@@ -201,8 +212,8 @@ public sealed class LauncherStack : IDisposable
             Launcher = launcher,
             LaunchService = new GameLaunchService(
                 repository, installer, java, argumentBuilder, launcher, authlibAuth, authlibInjector, log),
-            Instances = new InstanceService(repository, log),
-            ModLoaders = new ModLoaderService(downloader, repository, installer, forgeInstaller, log),
+            Instances = instances,
+            ModLoaders = modLoaders,
             MicrosoftAuth = new MicrosoftAuthService(downloader, config, log),
             AuthlibAuth = authlibAuth,
             AuthlibInjector = authlibInjector,
@@ -211,9 +222,10 @@ public sealed class LauncherStack : IDisposable
             Resources = resources,
             ServerList = new ServerListService(log),
             CurseForge = curseForge,
-            Modrinth = new ModrinthService(downloader, resolver, log),
-            ResourceDownloads = new ResourceDownloadService(downloader, resolver, log),
-            ResourceUpdates = new ResourceUpdateService(curseForge, log),
+            Modrinth = modrinth,
+            ResourceDownloads = resourceDownloads,
+            ResourceUpdates = resourceUpdates,
+            GameUpdates = gameUpdates,
             DirectConnect = new DirectConnectService(log),
             Frp = new FrpService(log, config.ConfigDirectory, downloader),
             Terracotta = new TerracottaService(log, config.ConfigDirectory),
@@ -363,8 +375,8 @@ public sealed class LauncherStack : IDisposable
     }
 
     /// <summary>
-    /// 解析实例对应的原版版本：继承字段 → 实例配置 → 原版快照。
-    /// 都取不到时返回 null（纯原版实例改名后没有留下版本号），不要退回实例 id。
+    /// 解析实例对应的原版版本：继承字段 → 实例配置 → 原版快照 → 客户端 jar 里的 version.json。
+    /// 都没有时返回 null（极老的客户端 jar 不带这份元数据），不要退回实例 id。
     /// </summary>
     private string? ResolveBaseVersionId(
         string gameRoot, GameVersionJson json, InstanceConfig config, string id)
@@ -379,7 +391,10 @@ public sealed class LauncherStack : IDisposable
             return config.GameVersion.Trim();
         }
 
-        return Instances.ReadVanillaVersionId(gameRoot, id);
+        var vanilla = Instances.ReadVanillaVersionId(gameRoot, id);
+        return !string.IsNullOrWhiteSpace(vanilla)
+            ? vanilla
+            : Instances.ReadJarGameVersion(gameRoot, json.Jar ?? id);
     }
 
     /// <summary>从版本 id 推断加载器类型（仅用于界面展示，不影响安装/启动逻辑）。</summary>

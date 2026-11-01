@@ -88,10 +88,10 @@ public sealed class ResourceRowItem : ViewModelBase
 
     public bool HasIcon => Icon is not null;
 
-    private CurseForgeFile? _updateFile;
+    private ResourceFile? _updateFile;
     private string? _updateVersionText;
 
-    public CurseForgeFile? UpdateFile => _updateFile;
+    public ResourceFile? UpdateFile => _updateFile;
 
     public bool UpdateAvailable => _updateFile is not null;
 
@@ -151,6 +151,42 @@ public sealed class ResourceRowItem : ViewModelBase
     }
 }
 
+/// <summary>「检查更新」弹窗里的一条可更新资源，默认勾选。</summary>
+public sealed class ResourceUpdateItem : ViewModelBase
+{
+    private readonly Action _onSelectionChanged;
+    private bool _isSelected = true;
+
+    public ResourceUpdateItem(ResourceUpdateInfo update, Action onSelectionChanged)
+    {
+        Update = update;
+        _onSelectionChanged = onSelectionChanged;
+    }
+
+    public ResourceUpdateInfo Update { get; }
+
+    public string Title => Update.Resource.Title;
+
+    public string VersionText =>
+        $"{Update.CurrentVersionText ?? "当前版本未知"} → {Update.LatestVersionText}";
+
+    /// <summary>这条更新是从哪个站点匹配到的。</summary>
+    public string SourceText => Update.Source == ResourceSource.Modrinth ? "Modrinth" : "CurseForge";
+
+    /// <summary>是否在「更新选中」时更新这个资源。</summary>
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set
+        {
+            if (SetProperty(ref _isSelected, value))
+            {
+                _onSelectionChanged();
+            }
+        }
+    }
+}
+
 /// <summary>
 /// 实例管理页：按实例管理模组、资源包、光影包、世界与原理图。
 /// 列表来自 <see cref="ResourceRepository"/>，启用/禁用沿用改后缀的约定。
@@ -163,6 +199,7 @@ public sealed class InstanceManageViewModel : ViewModelBase
     private readonly AsyncRelayCommand _refreshCommand;
     private readonly AsyncRelayCommand _addCommand;
     private readonly AsyncRelayCommand _checkUpdatesCommand;
+    private readonly AsyncRelayCommand _applyUpdatesCommand;
 
     private InstalledVersionInfo? _instance;
     private string _instanceId = string.Empty;
@@ -182,6 +219,16 @@ public sealed class InstanceManageViewModel : ViewModelBase
     private bool _isBusy;
     private bool _isDownloading;
     private bool _isCheckingUpdates;
+    private bool _isUpdateDialogOpen;
+    private bool _isApplyingUpdates;
+    private bool _hasUpdateCheckResult;
+    private bool _hasUpdateResult;
+    private bool _updateResultFailed;
+    private string _updateDialogStatus = string.Empty;
+    private string _updateResultText = string.Empty;
+    private double _updateProgress;
+    private string _updateSpeedText = string.Empty;
+    private readonly ObservableCollection<ResourceUpdateItem> _updateItems = new();
     private int _scanVersion;
     private IReadOnlyDictionary<string, ResourceUpdateInfo> _updatesByPath =
         new Dictionary<string, ResourceUpdateInfo>(StringComparer.OrdinalIgnoreCase);
@@ -244,8 +291,12 @@ public sealed class InstanceManageViewModel : ViewModelBase
         AddCommand = _addCommand;
         _checkUpdatesCommand = new AsyncRelayCommand(
             CheckUpdatesAsync,
-            () => !IsBusy && !IsCheckingUpdates && SupportsUpdate);
+            () => !IsBusy && !IsCheckingUpdates && !IsApplyingUpdates && SupportsUpdate);
         CheckUpdatesCommand = _checkUpdatesCommand;
+
+        _applyUpdatesCommand = new AsyncRelayCommand(ApplyUpdatesAsync, () => CanApplyUpdates);
+        ApplyUpdatesCommand = _applyUpdatesCommand;
+        CloseUpdateDialogCommand = new RelayCommand(CloseUpdateDialog);
 
         OpenFolderCommand = new RelayCommand(OpenFolder);
         DeleteCommand = new RelayCommand<ResourceRowItem>(DeleteResource);
@@ -306,6 +357,13 @@ public sealed class InstanceManageViewModel : ViewModelBase
 
             OnPropertyChanged(nameof(AddButtonText));
             OnPropertyChanged(nameof(EmptyHint));
+            OnPropertyChanged(nameof(UpdateDialogSubtitle));
+
+            // 切换页签时旧页签的检查结果已经失效，直接收起弹窗。
+            if (!IsCheckingUpdates && !IsApplyingUpdates)
+            {
+                IsUpdateDialogOpen = false;
+            }
 
             if (value is null)
             {
@@ -431,9 +489,93 @@ public sealed class InstanceManageViewModel : ViewModelBase
         {
             if (SetProperty(ref _isCheckingUpdates, value))
             {
-                _checkUpdatesCommand.RaiseCanExecuteChanged();
+                RefreshUpdateState();
             }
         }
+    }
+
+    /// <summary>「检查更新」弹窗是否打开。</summary>
+    public bool IsUpdateDialogOpen
+    {
+        get => _isUpdateDialogOpen;
+        private set => SetProperty(ref _isUpdateDialogOpen, value);
+    }
+
+    /// <summary>弹窗副标题：实例名 + 当前管理的资源类别。</summary>
+    public string UpdateDialogSubtitle =>
+        $"{InstanceDisplay} · {SelectedTab?.ShortName ?? "资源"}";
+
+    public string UpdateDialogStatus
+    {
+        get => _updateDialogStatus;
+        private set => SetProperty(ref _updateDialogStatus, value);
+    }
+
+    /// <summary>检查完成（或失败）后才显示结果区域。</summary>
+    public bool HasUpdateCheckResult
+    {
+        get => _hasUpdateCheckResult;
+        private set => SetProperty(ref _hasUpdateCheckResult, value);
+    }
+
+    /// <summary>弹窗里列出的可更新资源，默认全部勾选。</summary>
+    public ObservableCollection<ResourceUpdateItem> UpdateItems => _updateItems;
+
+    public bool IsApplyingUpdates
+    {
+        get => _isApplyingUpdates;
+        private set
+        {
+            if (SetProperty(ref _isApplyingUpdates, value))
+            {
+                RefreshUpdateState();
+            }
+        }
+    }
+
+    /// <summary>检查或更新正在进行。</summary>
+    public bool IsUpdateBusy => IsCheckingUpdates || IsApplyingUpdates;
+
+    public double UpdateProgress
+    {
+        get => _updateProgress;
+        private set => SetProperty(ref _updateProgress, value);
+    }
+
+    public string UpdateSpeedText
+    {
+        get => _updateSpeedText;
+        private set => SetProperty(ref _updateSpeedText, value);
+    }
+
+    public string UpdateResultText
+    {
+        get => _updateResultText;
+        private set => SetProperty(ref _updateResultText, value);
+    }
+
+    public bool HasUpdateResult
+    {
+        get => _hasUpdateResult;
+        private set => SetProperty(ref _hasUpdateResult, value);
+    }
+
+    public bool UpdateResultFailed
+    {
+        get => _updateResultFailed;
+        private set => SetProperty(ref _updateResultFailed, value);
+    }
+
+    /// <summary>至少勾选了一个可更新资源，且当前没有检查 / 更新在进行。</summary>
+    public bool CanApplyUpdates =>
+        !IsApplyingUpdates && !IsCheckingUpdates && _updateItems.Any(item => item.IsSelected);
+
+    private void RefreshUpdateState()
+    {
+        OnPropertyChanged(nameof(CanApplyUpdates));
+        OnPropertyChanged(nameof(IsUpdateBusy));
+        _applyUpdatesCommand.RaiseCanExecuteChanged();
+        _checkUpdatesCommand.RaiseCanExecuteChanged();
     }
 
     public string AddButtonText => SelectedTab?.Kind switch
@@ -488,6 +630,11 @@ public sealed class InstanceManageViewModel : ViewModelBase
 
     public ICommand CheckUpdatesCommand { get; }
 
+    /// <summary>在「检查更新」弹窗里更新勾选的资源。</summary>
+    public ICommand ApplyUpdatesCommand { get; }
+
+    public ICommand CloseUpdateDialogCommand { get; }
+
     // ---------------------------------------------------------------- 显示实例
 
     /// <summary>由实例列表的「管理」进入时调用，默认显示资源列表。</summary>
@@ -504,10 +651,12 @@ public sealed class InstanceManageViewModel : ViewModelBase
         InstanceDisplay = _instance?.Display ?? versionId;
         OnPropertyChanged(nameof(InstanceSubtitle));
         OnPropertyChanged(nameof(InstanceDirectory));
+        OnPropertyChanged(nameof(UpdateDialogSubtitle));
 
         if (changed)
         {
             Download.Close();
+            ResetUpdateDialogState();
             _updatesByPath = new Dictionary<string, ResourceUpdateInfo>(StringComparer.OrdinalIgnoreCase);
             SearchText = string.Empty;
             _selectedTab = Tabs[0];
@@ -603,6 +752,7 @@ public sealed class InstanceManageViewModel : ViewModelBase
         InstanceDisplay = _instance?.Display ?? _instanceId;
         OnPropertyChanged(nameof(InstanceSubtitle));
         OnPropertyChanged(nameof(InstanceDirectory));
+        OnPropertyChanged(nameof(UpdateDialogSubtitle));
 
         if (_selectedTab is { IsServer: true })
         {
@@ -722,52 +872,196 @@ public sealed class InstanceManageViewModel : ViewModelBase
 
     // ---------------------------------------------------------------- 检查更新
 
+    /// <summary>
+    /// 打开「检查更新」弹窗：先按设置的默认下载源检查（Modrinth / CurseForge，另一个源兜底），
+    /// 再把可更新项列出来并默认全部勾选，等玩家点「更新选中」后才真正下载。
+    /// </summary>
     private async Task CheckUpdatesAsync()
     {
         var tab = SelectedTab;
         if (_instanceId.Length == 0
             || tab?.Kind is not ResourceKind kind
             || !CurseForgeService.SupportsUpdate(kind)
-            || IsCheckingUpdates)
+            || IsCheckingUpdates
+            || IsApplyingUpdates)
         {
             return;
         }
 
-        IsCheckingUpdates = true;
-        StatusText = "正在检查更新…";
         _updatesByPath = new Dictionary<string, ResourceUpdateInfo>(StringComparer.OrdinalIgnoreCase);
         ApplyFilter();
+        ResetUpdateDialogState();
+        IsUpdateDialogOpen = true;
+        UpdateDialogStatus = "正在检查更新…";
+        StatusText = UpdateDialogStatus;
+        IsCheckingUpdates = true;
 
         try
         {
-            var progress = new Progress<string>(message => StatusText = message);
+            var progress = new Progress<string>(message =>
+            {
+                UpdateDialogStatus = message;
+                StatusText = message;
+            });
+
             var result = await _stack.ResourceUpdates.CheckAsync(
                 _allResources,
                 _instance?.VersionText,
                 _instance?.LoaderName,
+                _stack.Config.Settings.DefaultContentSource,
                 progress,
                 CancellationToken.None);
+
+            // 检查期间玩家切走了页签，结果属于旧页签，直接丢弃并收起弹窗。
+            if (SelectedTab?.Kind != kind)
+            {
+                IsUpdateDialogOpen = false;
+                return;
+            }
 
             _updatesByPath = result.Updates.ToDictionary(
                 update => update.Resource.FilePath,
                 StringComparer.OrdinalIgnoreCase);
             ApplyFilter();
 
-            StatusText = result.Checked == 0
+            foreach (var update in result.Updates)
+            {
+                _updateItems.Add(new ResourceUpdateItem(update, RefreshUpdateState));
+            }
+
+            HasUpdateCheckResult = true;
+            UpdateDialogStatus = result.Checked == 0
                 ? "当前列表里没有可检查的程序文件。"
                 : result.Updates.Count == 0
                     ? $"已是最新：检查 {result.Checked} 个，匹配到 {result.Matched} 个。"
-                    : $"发现 {result.Updates.Count} 个可更新（检查 {result.Checked} 个，匹配 {result.Matched} 个）。";
+                    : $"发现 {result.Updates.Count} 个可更新（检查 {result.Checked} 个，匹配 {result.Matched} 个），已默认勾选。";
+            StatusText = UpdateDialogStatus;
+            RefreshUpdateState();
         }
         catch (Exception ex)
         {
             _stack.Log.Error("检查资源更新失败", ex);
-            StatusText = "检查更新失败：" + ex.Message;
+            UpdateDialogStatus = "检查失败：" + ex.Message;
+            StatusText = UpdateDialogStatus;
         }
         finally
         {
             IsCheckingUpdates = false;
         }
+    }
+
+    /// <summary>更新弹窗里勾选的资源；成功的会替换原文件，失败项留在结果说明里。</summary>
+    private async Task ApplyUpdatesAsync()
+    {
+        var selected = _updateItems
+            .Where(item => item.IsSelected)
+            .Select(item => item.Update)
+            .ToList();
+
+        if (selected.Count == 0 || IsApplyingUpdates || IsCheckingUpdates || _instanceId.Length == 0)
+        {
+            return;
+        }
+
+        IsApplyingUpdates = true;
+        IsBusy = true;
+        IsDownloading = true;
+        UpdateProgress = 0;
+        UpdateSpeedText = string.Empty;
+        HasUpdateResult = false;
+        UpdateResultText = string.Empty;
+        UpdateResultFailed = false;
+        _downloadRows.Clear();
+
+        var succeeded = 0;
+        var failures = new List<string>();
+
+        var progress = new Progress<InstallProgress>(value =>
+        {
+            UpdateProgress = value.Fraction;
+            UpdateSpeedText = InstallFileItem.FormatSpeed(value.BytesPerSecond);
+            UpdateDialogStatus = value.Total > 0
+                ? $"{value.Stage} {value.Completed}/{value.Total}"
+                : value.Stage;
+            StatusText = UpdateDialogStatus;
+            _downloadRows.Update(value.ActiveFiles);
+        });
+
+        try
+        {
+            foreach (var update in selected)
+            {
+                var result = await _stack.ResourceDownloads.DownloadAsync(
+                    new ResourceDownloadRequest
+                    {
+                        Kind = update.Resource.Kind,
+                        File = update.File,
+                        InstanceDirectory = _instanceDirectory,
+                        ReplacePath = update.Resource.FilePath,
+                    },
+                    progress,
+                    CancellationToken.None);
+
+                if (result.Success)
+                {
+                    succeeded++;
+                    _stack.Log.Info($"更新资源 {update.Resource.Title} → {update.File.FileName}");
+                }
+                else
+                {
+                    failures.Add($"{update.Resource.Title}：{result.Error ?? "下载失败"}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _stack.Log.Error("更新资源失败", ex);
+            failures.Add(ex.Message);
+        }
+        finally
+        {
+            IsApplyingUpdates = false;
+            IsBusy = false;
+            IsDownloading = false;
+            UpdateSpeedText = string.Empty;
+            _downloadRows.Clear();
+        }
+
+        _updatesByPath = new Dictionary<string, ResourceUpdateInfo>(StringComparer.OrdinalIgnoreCase);
+        _updateItems.Clear();
+        HasUpdateCheckResult = false;
+        HasUpdateResult = true;
+        UpdateResultFailed = failures.Count > 0;
+        UpdateResultText = failures.Count > 0
+            ? $"已更新 {succeeded}/{selected.Count} 个；失败：{string.Join("；", failures)}"
+            : $"已更新 {succeeded} 个。";
+        UpdateDialogStatus = UpdateResultFailed ? "部分资源更新失败。" : "更新完成。";
+        StatusText = UpdateDialogStatus;
+
+        await RefreshAsync();
+    }
+
+    private void CloseUpdateDialog()
+    {
+        if (IsCheckingUpdates || IsApplyingUpdates)
+        {
+            return;
+        }
+
+        IsUpdateDialogOpen = false;
+    }
+
+    private void ResetUpdateDialogState()
+    {
+        _updateItems.Clear();
+        HasUpdateCheckResult = false;
+        HasUpdateResult = false;
+        UpdateResultText = string.Empty;
+        UpdateResultFailed = false;
+        UpdateDialogStatus = string.Empty;
+        UpdateProgress = 0;
+        UpdateSpeedText = string.Empty;
+        RefreshUpdateState();
     }
 
     private async Task UpdateResourceAsync(ResourceRowItem? row)
@@ -800,7 +1094,7 @@ public sealed class InstanceManageViewModel : ViewModelBase
                 new ResourceDownloadRequest
                 {
                     Kind = row.Kind,
-                    File = ResourceFile.FromCurseForge(file),
+                    File = file,
                     InstanceDirectory = _instanceDirectory,
                     ReplacePath = row.Resource.FilePath,
                 },

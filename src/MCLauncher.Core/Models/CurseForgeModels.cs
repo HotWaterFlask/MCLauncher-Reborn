@@ -137,7 +137,11 @@ public sealed class ResourceUpdateInfo
 {
     public required LocalResource Resource { get; init; }
 
-    public required CurseForgeFile File { get; init; }
+    /// <summary>可下载的新文件（来自 CurseForge 或 Modrinth）。</summary>
+    public required ResourceFile File { get; init; }
+
+    /// <summary>匹配到该更新的资源站。</summary>
+    public ResourceSource Source { get; init; } = ResourceSource.CurseForge;
 
     public string? CurrentVersionText { get; init; }
 

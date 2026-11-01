@@ -253,7 +253,7 @@
                                 Command="{Binding CheckUpdatesCommand}"
                                 Width="80" Height="26" FontSize="12" Margin="6,0,0,0"
                                 Content="检查更新"
-                                ToolTip="用 CurseForge 指纹匹配本地文件，查找可更新版本"
+                                ToolTip="按设置的附加内容默认下载源检查 Modrinth / CurseForge，列出可更新项"
                                 Visibility="{Binding SupportsUpdate, Converter={StaticResource BoolToVis}}"/>
 
                         <Button Grid.Column="4" Style="{StaticResource SkinButton}"
@@ -457,6 +457,95 @@
                              Background="#F7F8FA" BorderBrush="#E2E6EC" BorderThickness="1"
                              Padding="8" FontSize="12" FontFamily="Microsoft YaHei UI, Segoe UI"/>
                 </DockPanel>
+            </Border>
+        </Grid>
+
+        <!-- ===== 检查更新弹窗：检查完成后列出可更新项（默认勾选）===== -->
+        <Grid Grid.RowSpan="2" Background="#66000000" Panel.ZIndex="25"
+              Visibility="{Binding IsUpdateDialogOpen, Converter={StaticResource BoolToVis}}">
+            <Border Width="480" MaxHeight="560" Background="White" CornerRadius="8" Padding="18,16"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    BorderBrush="#D8D8D8" BorderThickness="1">
+                <StackPanel>
+                    <TextBlock Text="检查更新" FontSize="15" FontWeight="SemiBold" Foreground="#1A1A1A"/>
+                    <TextBlock Text="{Binding UpdateDialogSubtitle}" Margin="0,4,0,0"
+                               FontSize="11" Foreground="#7A7A7A" TextTrimming="CharacterEllipsis"/>
+
+                    <TextBlock Text="{Binding UpdateDialogStatus}" Margin="0,12,0,0"
+                               FontSize="12" Foreground="#5A5A5A" TextWrapping="Wrap"/>
+
+                    <ScrollViewer MaxHeight="280" Margin="0,10,0,0"
+                                  VerticalScrollBarVisibility="Auto"
+                                  Visibility="{Binding HasUpdateCheckResult, Converter={StaticResource BoolToVis}}">
+                        <ItemsControl ItemsSource="{Binding UpdateItems}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="#F6F7F9" CornerRadius="6" Padding="10,8" Margin="0,0,0,6">
+                                        <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                  VerticalAlignment="Center">
+                                            <StackPanel Margin="2,0,0,0">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="SemiBold"
+                                                               Foreground="#1A1A1A" TextTrimming="CharacterEllipsis"
+                                                               MaxWidth="300"/>
+                                                    <Border Background="#E8EEF7" CornerRadius="3" Padding="5,1"
+                                                            Margin="8,0,0,0" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding SourceText}" FontSize="10"
+                                                                   Foreground="#3F628E"/>
+                                                    </Border>
+                                                </StackPanel>
+                                                <TextBlock Text="{Binding VersionText}" Margin="0,3,0,0"
+                                                           FontSize="10.5" Foreground="#7A7A7A"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                            </StackPanel>
+                                        </CheckBox>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+
+                    <ProgressBar Height="6" Margin="0,12,0,0" Minimum="0" Maximum="1"
+                                 Value="{Binding UpdateProgress, Mode=OneWay}"
+                                 IsIndeterminate="{Binding IsCheckingUpdates}"
+                                 Visibility="{Binding IsUpdateBusy, Converter={StaticResource BoolToVis}}"/>
+
+                    <TextBlock Text="{Binding UpdateSpeedText}" Style="{StaticResource SpeedText}"/>
+
+                    <TextBlock Text="{Binding UpdateResultText}" Margin="0,6,0,0"
+                               FontSize="12" TextWrapping="Wrap"
+                               Visibility="{Binding HasUpdateResult, Converter={StaticResource BoolToVis}}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="#2F6FB6"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding UpdateResultFailed}" Value="True">
+                                        <Setter Property="Foreground" Value="#C0392B"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+                        <Button Width="96" Height="28" FontSize="12" Content="更新选中"
+                                Style="{StaticResource SkinButton}"
+                                Command="{Binding ApplyUpdatesCommand}"/>
+                        <Button Width="76" Height="28" FontSize="12" Content="关闭" Margin="8,0,0,0"
+                                Command="{Binding CloseUpdateDialogCommand}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource SkinButton}">
+                                    <Style.Triggers>
+                                        <!-- 检查 / 更新进行中不允许关闭弹窗 -->
+                                        <DataTrigger Binding="{Binding IsUpdateBusy}" Value="True">
+                                            <Setter Property="IsEnabled" Value="False"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </StackPanel>
+                </StackPanel>
             </Border>
         </Grid>
 
